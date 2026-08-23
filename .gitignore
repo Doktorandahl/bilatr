@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+inst/stan/*.o
+inst/stan/bilatr_dirmult_irt
+inst/doc

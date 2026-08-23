@@ -1,0 +1,169 @@
+---
+title: "Panel estimation across multiple dyads with bilatr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Panel estimation across multiple dyads with bilatr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = requireNamespace("cmdstanr", quietly = TRUE) &&
+    tryCatch({ cmdstanr::cmdstan_path(); TRUE }, error = function(e) FALSE)
+)
+```
+
+This vignette walks through fitting `bilatr`'s dyadic IRT model across
+**multiple dyads at once**, with hierarchical partial pooling on process
+noise, the dispersion parameter `phi`, and the initial latent state
+`theta0`. For a single dyad, see `vignette("dyad-time-series")`; the
+data-prep and extraction steps are the same, only the fitting call and
+the presence of pooling differ.
+
+## 1. Data prep
+
+As in the single-dyad case, a real workflow starts from raw event data
+recoded via [recode_cameo()]. Here we simulate a small panel of six
+dyads so the example is self-contained:
+
+```{r}
+library(bilatr)
+library(dplyr)
+
+set.seed(42)
+countries <- c("USA", "CHN", "RUS", "IRN")
+dyad_pairs <- expand.grid(a1 = countries, a2 = countries, stringsAsFactors = FALSE) %>%
+  filter(a1 != a2)
+
+n_events <- 3000
+dates <- format(
+  sample(seq(as.Date("2015-01-01"), as.Date("2019-12-31"), by = "day"), n_events, replace = TRUE),
+  "%Y%m%d"
+)
+pair_idx <- sample(nrow(dyad_pairs), n_events, replace = TRUE)
+events <- tibble::tibble(
+  Actor1CountryCode = dyad_pairs$a1[pair_idx],
+  Actor2CountryCode = dyad_pairs$a2[pair_idx],
+  SQLDATE = as.integer(dates),
+  EventCode = sample(cameo_lookup$CAMEOEVENTCODE, n_events, replace = TRUE)
+)
+events <- recode_cameo(events, code_col = "EventCode")
+```
+
+## 2. Assemble Stan data
+
+The call is identical in shape to the single-dyad case; `D` will simply
+be greater than 1 because the input spans multiple dyads. Panel-sized
+data is where `reduce_sum` chunking matters: `chunk_size` sets how many
+dyads' worth of likelihood evaluation each `reduce_sum` task covers.
+This project's own benchmarking found `chunk_size = 600` with 16 threads
+Pareto-optimal for panel-sized data; for a small illustrative panel like
+this one, a small `chunk_size` (or even 1) is fine.
+
+```{r}
+stan_data <- assemble_stan_data(
+  events,
+  years = 2015:2019,
+  resolution = "yearly",
+  grouping_var = "PentaClass",
+  reference_category = 0,
+  reference_hostile = 4,
+  min_n_events = 1,
+  chunk_size = 4
+)
+stan_data$D # multiple dyads
+```
+
+Setting `weighted = "all"` instead would additionally downweight
+high-volume dyads/periods and upweight rare action classes, useful when
+a handful of very active dyads would otherwise dominate the likelihood.
+`weighted` also accepts single components or `"-"`-separated
+combinations (e.g. `"dyad"`, `"dyad-period"`) if you only want some of
+the three reweighting schemes computed, leaving the others at 1s:
+
+```{r, eval = FALSE}
+stan_data_weighted <- assemble_stan_data(
+  events,
+  years = 2015:2019,
+  resolution = "yearly",
+  grouping_var = "PentaClass",
+  reference_category = 0,
+  reference_hostile = 4,
+  weighted = "all"
+)
+
+# only downweight high-volume dyads, leave period/action weights at 1s
+stan_data_dyad_weighted <- assemble_stan_data(
+  events,
+  years = 2015:2019,
+  resolution = "yearly",
+  grouping_var = "PentaClass",
+  reference_category = 0,
+  reference_hostile = 4,
+  weighted = "dyad"
+)
+```
+
+## 3. Fit
+
+[fit_panel()] checks that `stan_data$D >= 2` and defaults
+`threads_per_chain = 16` (tune this and `chunk_size` together for your
+hardware; see [fit_panel()]'s documentation). As in the single-dyad
+vignette, this example uses a short run to build quickly.
+
+```{r, results = "hide"}
+fit <- fit_panel(
+  stan_data,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  iter_warmup = 300,
+  iter_sampling = 300,
+  seed = 1,
+  opt_level = 1
+)
+```
+
+## 4. Extract
+
+The extraction functions work identically to the single-dyad case, now
+returning one trajectory per dyad:
+
+```{r}
+theta <- extract_theta(fit, stan_data)
+theta %>% count(dyad) # one row per dyad-period, D dyads
+
+extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
+```
+
+The hierarchical pooling shows up in the dyad-level parameters, e.g.
+`phi` (one value per dyad, pooled toward `mu_log_phi`/`sigma_log_phi`)
+and `theta0` (pooled toward `mu_theta0`/`sigma_theta0`):
+
+```{r}
+fit$summary(variables = c("phi", "theta0", "mu_log_phi", "sigma_log_phi", "mu_theta0", "sigma_theta0"))
+```
+
+## 5. Diagnose
+
+Convergence diagnostics work the same way as for a single dyad, but with
+a panel it's worth checking whether any *specific* dyads are poorly
+identified (e.g. very low event counts) rather than only looking at
+global summaries:
+
+```{r}
+fit$diagnostic_summary()
+
+theta %>%
+  group_by(dyad) %>%
+  summarise(mean_ess_proxy = mean(`95%` - `5%`)) %>%
+  arrange(desc(mean_ess_proxy))
+```
+
+Dyads with unusually wide posterior intervals relative to the rest of
+the panel are the ones most likely to need more data, a higher
+`min_n_events` cutoff, or closer inspection of their raw event counts
+before trusting their `theta` trajectory.

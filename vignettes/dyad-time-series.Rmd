@@ -1,0 +1,155 @@
+---
+title: "Single-dyad time series with bilatr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Single-dyad time series with bilatr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = requireNamespace("cmdstanr", quietly = TRUE) &&
+    tryCatch({ cmdstanr::cmdstan_path(); TRUE }, error = function(e) FALSE)
+)
+```
+
+This vignette walks through fitting `bilatr`'s dyadic IRT model to a
+**single dyad's** event time series: data prep, fitting, posterior
+extraction, and basic convergence diagnostics. For fitting across many
+dyads at once with hierarchical pooling, see `vignette("panel-model")`.
+
+## 1. Data prep
+
+In a real workflow you'd start from raw GDELT or ICEWS event data:
+
+```{r, eval = FALSE}
+library(bilatr)
+
+# one CAMEO-coded event file
+events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+events <- recode_cameo(events)
+```
+
+For this vignette we simulate a small, self-contained event set for one
+dyad so the example runs without a network connection or a local GDELT
+archive:
+
+```{r}
+library(bilatr)
+library(dplyr)
+
+set.seed(42)
+n_events <- 400
+dates <- format(
+  sample(seq(as.Date("2015-01-01"), as.Date("2019-12-31"), by = "day"), n_events, replace = TRUE),
+  "%Y%m%d"
+)
+events <- tibble::tibble(
+  Actor1CountryCode = "USA",
+  Actor2CountryCode = "CHN",
+  SQLDATE = as.integer(dates),
+  EventCode = sample(cameo_lookup$CAMEOEVENTCODE, n_events, replace = TRUE)
+)
+events <- recode_cameo(events, code_col = "EventCode")
+```
+
+`recode_cameo()` attaches `QuadClass`, `PentaClass`, and
+`PentaClass_modified` from the package's built-in [cameo_lookup] table
+(no external CAMEO reference package required).
+
+## 2. Assemble Stan data
+
+[assemble_stan_data()] aggregates events to dyad-period action-class
+counts and packages them for the model. `reference_category` and
+`reference_hostile` anchor the model's identification: the first should
+be a low-conflict/neutral action class, the last should be the most
+conflictual. Here we use PentaClass 0 (verbal cooperation) and 4
+(the most severe conflict class).
+
+```{r}
+stan_data <- assemble_stan_data(
+  events,
+  years = 2015:2019,
+  resolution = "yearly",
+  grouping_var = "PentaClass",
+  reference_category = 0,
+  reference_hostile = 4,
+  min_n_events = 1
+)
+stan_data$D # a single dyad
+stan_data$T # number of years
+stan_data$A # number of action classes
+```
+
+Leaving `dyad_weight`/`period_weight`/`action_weight` unset (as above)
+defaults them to vectors of 1s, i.e. the model's base, unweighted form.
+
+## 3. Fit
+
+[fit_dyad_ts()] checks that `stan_data$D == 1` and fits the model with
+`threads_per_chain = 1` by default (reduce_sum has nothing to chunk
+across when there's only one dyad). The example below uses a short
+warmup/sampling run so the vignette builds quickly; real analyses should
+use `iter_warmup`/`iter_sampling` in the low thousands and check the
+diagnostics below before trusting the result.
+
+```{r, results = "hide"}
+fit <- fit_dyad_ts(
+  stan_data,
+  chains = 2,
+  parallel_chains = 2,
+  iter_warmup = 300,
+  iter_sampling = 300,
+  seed = 1,
+  opt_level = 1
+)
+```
+
+## 4. Extract
+
+[extract_theta()] reattaches human-readable dyad identifiers to the
+posterior summary of the latent conflict trajectory:
+
+```{r}
+theta <- extract_theta(fit, stan_data)
+theta
+```
+
+[extract_alpha()] and [extract_mu_intercept()] extract the action-type
+discrimination and intercept parameters, optionally labeled with the
+event-class values used to build `stan_data`:
+
+```{r}
+extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
+extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
+```
+
+Note `alpha[1] = 1` and `mu_intercept[1] = 0` exactly: these are the
+model's fixed identification anchors, not estimated quantities.
+
+## 5. Diagnose
+
+`cmdstanr`'s default posterior summary already includes R-hat and both
+bulk and tail effective sample size; check these before drawing
+conclusions from `theta`:
+
+```{r}
+fit$summary(variables = c("alpha", "mu_intercept", "phi", "process_noise"))
+```
+
+Look for `rhat` close to 1 (below ~1.01) and `ess_bulk`/`ess_tail` in the
+hundreds or more per chain. `fit$diagnostic_summary()` reports any
+divergent transitions or tree-depth saturation, which for a real fit
+should be zero or reported here:
+
+```{r}
+fit$diagnostic_summary()
+```
+
+If ESS is low or R-hat is elevated, the usual fixes are more sampling
+iterations, tighter priors informed by domain knowledge, or (for
+single-dyad fits especially, since there's no cross-dyad pooling to help
+identify `theta0`/`phi`) more data.
