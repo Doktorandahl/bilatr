@@ -1,7 +1,11 @@
 Package: bilatr
 Title: Hierarchical Dynamic IRT Models for Dyadic Conflict Trajectories
 Version: 0.1.0
-Authors@R: person("David", "Randahl", email = "david.randahl@fhs.se", role = c("aut", "cre"))
+Authors@R: c(
+    person("David", "Randahl", , "david.randahl@fhs.se", role = c("aut", "cre")),
+    person("Magnus", "Lundgren", role = "aut"),
+    person("Carl", "Vikberg", role = "aut")
+  )
 Description: Fits a hierarchical Bayesian dynamic item-response-theory-style
     model to dyadic event data (GDELT/ICEWS, CAMEO-coded) in order to
     estimate latent conflict trajectories. Action types discriminate
@@ -39,6 +43,6 @@ Suggests:
 Additional_repositories: https://mc-stan.org/r-packages/
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/randahl/bilatr
-BugReports: https://github.com/randahl/bilatr/issues
+URL: https://github.com/doktorandahl/bilatr
+BugReports: https://github.com/doktorandahl/bilatr/issues
 LazyData: true

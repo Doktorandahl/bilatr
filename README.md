@@ -44,7 +44,7 @@ devtools::install(".")
 Or, once pushed to GitHub:
 
 ```r
-pak::pak("randahl/bilatr")
+pak::pak("doktorandahl/bilatr")
 ```
 
 ## Quick start

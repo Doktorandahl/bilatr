@@ -32,7 +32,7 @@ fit_dyad_ts_dev <- function(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
-  opt_level = 3,
+  opt_level = 2,
   output_dir = NULL,
   stan_model = .BILATR_DEFAULT_MODEL,
   ...
@@ -40,15 +40,25 @@ fit_dyad_ts_dev <- function(
   .resolve_stan_model(stan_model)
   if (stan_data$D != 1) {
     stop(
-      "fit_dyad_ts_dev() expects a single-dyad stan_data (D == 1), got D = ", stan_data$D, ". ",
+      "fit_dyad_ts_dev() expects a single-dyad stan_data (D == 1), got D = ",
+      stan_data$D,
+      ". ",
       "Use fit_panel_dev() for multiple dyads.",
       call. = FALSE
     )
   }
   fit_bilatr(
-    stan_data, chains, parallel_chains, threads_per_chain,
-    iter_warmup, iter_sampling, seed, opt_level, output_dir,
-    stan_model = stan_model, ...
+    stan_data,
+    chains,
+    parallel_chains,
+    threads_per_chain,
+    iter_warmup,
+    iter_sampling,
+    seed,
+    opt_level,
+    output_dir,
+    stan_model = stan_model,
+    ...
   )
 }
 
@@ -82,14 +92,24 @@ fit_panel_dev <- function(
   .resolve_stan_model(stan_model)
   if (stan_data$D < 2) {
     stop(
-      "fit_panel_dev() expects multiple dyads (D >= 2), got D = ", stan_data$D, ". ",
+      "fit_panel_dev() expects multiple dyads (D >= 2), got D = ",
+      stan_data$D,
+      ". ",
       "Use fit_dyad_ts_dev() for a single dyad.",
       call. = FALSE
     )
   }
   fit_bilatr(
-    stan_data, chains, parallel_chains, threads_per_chain,
-    iter_warmup, iter_sampling, seed, opt_level, output_dir,
-    stan_model = stan_model, ...
+    stan_data,
+    chains,
+    parallel_chains,
+    threads_per_chain,
+    iter_warmup,
+    iter_sampling,
+    seed,
+    opt_level,
+    output_dir,
+    stan_model = stan_model,
+    ...
   )
 }

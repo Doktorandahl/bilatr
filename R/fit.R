@@ -17,11 +17,18 @@
 #' @param force_recompile If `TRUE`, bypass the cache and rebuild.
 #' @return A `CmdStanModel` object.
 #' @keywords internal
-.compile_stan_model <- function(stan_model, opt_level, force_recompile = FALSE) {
+.compile_stan_model <- function(
+  stan_model,
+  opt_level,
+  force_recompile = FALSE
+) {
   stan_file <- .resolve_stan_model(stan_model)
   cache_key <- paste(stan_file, opt_level, sep = "::")
 
-  if (!force_recompile && exists(cache_key, envir = .bilatr_model_cache, inherits = FALSE)) {
+  if (
+    !force_recompile &&
+      exists(cache_key, envir = .bilatr_model_cache, inherits = FALSE)
+  ) {
     return(get(cache_key, envir = .bilatr_model_cache, inherits = FALSE))
   }
 
@@ -185,21 +192,31 @@ fit_dyad_ts <- function(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
-  opt_level = 3,
+  opt_level = 2,
   output_dir = NULL,
   ...
 ) {
   if (stan_data$D != 1) {
     stop(
-      "fit_dyad_ts() expects a single-dyad stan_data (D == 1), got D = ", stan_data$D, ". ",
+      "fit_dyad_ts() expects a single-dyad stan_data (D == 1), got D = ",
+      stan_data$D,
+      ". ",
       "Use fit_panel() for multiple dyads.",
       call. = FALSE
     )
   }
   fit_bilatr(
-    stan_data, chains, parallel_chains, threads_per_chain,
-    iter_warmup, iter_sampling, seed, opt_level, output_dir,
-    stan_model = .BILATR_DEFAULT_MODEL, ...
+    stan_data,
+    chains,
+    parallel_chains,
+    threads_per_chain,
+    iter_warmup,
+    iter_sampling,
+    seed,
+    opt_level,
+    output_dir,
+    stan_model = .BILATR_DEFAULT_MODEL,
+    ...
   )
 }
 
@@ -252,14 +269,24 @@ fit_panel <- function(
 ) {
   if (stan_data$D < 2) {
     stop(
-      "fit_panel() expects multiple dyads (D >= 2), got D = ", stan_data$D, ". ",
+      "fit_panel() expects multiple dyads (D >= 2), got D = ",
+      stan_data$D,
+      ". ",
       "Use fit_dyad_ts() for a single dyad.",
       call. = FALSE
     )
   }
   fit_bilatr(
-    stan_data, chains, parallel_chains, threads_per_chain,
-    iter_warmup, iter_sampling, seed, opt_level, output_dir,
-    stan_model = .BILATR_DEFAULT_MODEL, ...
+    stan_data,
+    chains,
+    parallel_chains,
+    threads_per_chain,
+    iter_warmup,
+    iter_sampling,
+    seed,
+    opt_level,
+    output_dir,
+    stan_model = .BILATR_DEFAULT_MODEL,
+    ...
   )
 }
