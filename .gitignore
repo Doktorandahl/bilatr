@@ -2,6 +2,16 @@
 .Rhistory
 .RData
 .Ruserdata
-inst/stan/*.o
-inst/stan/bilatr_dirmult_irt
 inst/doc
+
+# Reference source this package was built from; not part of the package.
+original_code/
+
+# Compiled Stan model binaries and build artifacts: keep only the .stan
+# sources under inst/stan/, exclude everything else (extensionless
+# executables, *.o, *.hpp, *.d, etc.), regardless of which model it's for.
+inst/stan/*
+!inst/stan/*.stan
+
+# Local analysis/run scripts, not part of the package.
+runscripts/

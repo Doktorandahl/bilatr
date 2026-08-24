@@ -1,5 +1,6 @@
 ^LICENSE\.md$
 ^original_code$
 ^data-raw$
+^runscripts$
 ^\.Rproj\.user$
 ^.*\.Rproj$
