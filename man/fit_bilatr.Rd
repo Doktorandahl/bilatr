@@ -3,7 +3,7 @@
 \name{fit_bilatr}
 \alias{fit_bilatr}
 \title{Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-counterparts in R/fit-dev.R}
+counterparts in R/fit_dev.R}
 \usage{
 fit_bilatr(
   stan_data,
@@ -21,6 +21,6 @@ fit_bilatr(
 }
 \description{
 Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-counterparts in R/fit-dev.R
+counterparts in R/fit_dev.R
 }
 \keyword{internal}

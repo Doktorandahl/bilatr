@@ -6,7 +6,7 @@
 # development; those always fit the stable model and are unaffected by
 # whatever gets registered here.
 #
-# New Stan model variants are registered in R/model-registry.R
+# New Stan model variants are registered in R/model_registry.R
 # (.bilatr_stan_models); once registered there, they're immediately
 # fittable by name via fit_dyad_ts_dev()/fit_panel_dev().
 
@@ -17,7 +17,7 @@
 #'
 #' @inheritParams fit_dyad_ts
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
-#'   (see `R/model-registry.R`). Currently registered: `"stable"` (the
+#'   (see `R/model_registry.R`). Currently registered: `"stable"` (the
 #'   default used by the exported [fit_dyad_ts()]) and `"phi_logn"`
 #'   (experimental: per-dyad-period `phi` as a function of centered
 #'   log event count). Unrecognized names error immediately, before any
@@ -69,7 +69,7 @@ fit_dyad_ts_dev <- function(
 #'
 #' @inheritParams fit_panel
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
-#'   (see `R/model-registry.R`). Currently registered: `"stable"` (the
+#'   (see `R/model_registry.R`). Currently registered: `"stable"` (the
 #'   default used by the exported [fit_panel()]) and `"phi_logn"`
 #'   (experimental: per-dyad-period `phi` as a function of centered
 #'   log event count). Unrecognized names error immediately, before any

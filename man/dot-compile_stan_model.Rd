@@ -20,7 +20,7 @@ A \code{CmdStanModel} object.
 \description{
 Shared compilation path for both the exported \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}
 (always the stable model) and the internal \verb{_dev} fitters (any
-registered model; see \code{R/model-registry.R}). Compiled \code{CmdStanModel}
+registered model; see \code{R/model_registry.R}). Compiled \code{CmdStanModel}
 objects are cached in \code{.bilatr_model_cache} by resolved file path and
 \code{opt_level}, so repeated calls (e.g. across dev iterations) don't pay
 \code{cmdstanr}'s own hash-checking/Makefile overhead every time.

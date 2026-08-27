@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 This vignette walks through fitting `bilatr`'s dyadic IRT model to a
 **single dyad's** event time series: data prep, fitting, posterior
 extraction, and basic convergence diagnostics. For fitting across many
-dyads at once with hierarchical pooling, see `vignette("panel-model")`.
+dyads at once with hierarchical pooling, see `vignette("panel_model")`.
 
 ## 1. Data prep
 

@@ -12,7 +12,7 @@ fit_dyad_ts(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
-  opt_level = 3,
+  opt_level = 2,
   output_dir = NULL,
   ...
 )

@@ -6,7 +6,7 @@
 #'
 #' Shared compilation path for both the exported [compile_bilatr_model()]
 #' (always the stable model) and the internal `_dev` fitters (any
-#' registered model; see `R/model-registry.R`). Compiled `CmdStanModel`
+#' registered model; see `R/model_registry.R`). Compiled `CmdStanModel`
 #' objects are cached in `.bilatr_model_cache` by resolved file path and
 #' `opt_level`, so repeated calls (e.g. across dev iterations) don't pay
 #' `cmdstanr`'s own hash-checking/Makefile overhead every time.
@@ -113,7 +113,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 }
 
 #' Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-#' counterparts in R/fit-dev.R
+#' counterparts in R/fit_dev.R
 #' @keywords internal
 fit_bilatr <- function(
   stan_data,

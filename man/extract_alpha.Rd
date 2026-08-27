@@ -28,7 +28,7 @@ Pulls posterior summaries of the action-type discrimination parameters
 \code{alpha} out of a fitted model. \code{alpha[1]} is fixed at 1 (the model's
 scale reference) and the last element is the negative, known-hostile
 anchor; see the package's identification notes in
-\code{vignette("dyad-time-series")}.
+\code{vignette("dyad_time_series")}.
 }
 \examples{
 \dontrun{

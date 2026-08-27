@@ -1,0 +1,193 @@
+---
+title: "Triaging convergence diagnostics with diagnose_convergence()"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Triaging convergence diagnostics with diagnose_convergence()}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = requireNamespace("cmdstanr", quietly = TRUE) &&
+    tryCatch({ cmdstanr::cmdstan_path(); TRUE }, error = function(e) FALSE)
+)
+```
+
+## Why tiered triage
+
+In a `bilatr` panel fit, dyads vary enormously in how much data they
+contribute: some have hundreds of observed periods, others just a
+handful. A sparse dyad's own latent trajectory (`theta`) is *expected*
+to have a wide, poorly-identified posterior -- that's not a bug, it's
+what little data looks like. Reading `fit$summary()` or
+`fit$diagnostic_summary()` directly makes it easy to either drown in
+that expected noise, or (worse) miss a real problem in a global/shared
+parameter because it's buried among thousands of noisy per-dyad-period
+rows.
+
+[diagnose_convergence()] addresses this by classifying every monitored
+quantity into one of three tiers before applying Rhat/ESS thresholds:
+
+* **Tier 1 -- global/shared parameters** (`alpha`, `mu_intercept`,
+  `mu_theta0`, `sigma_theta0`, `mu_log_phi`, `sigma_log_phi`,
+  `mu_log_noise`, `sigma_log_noise`, and `lp__`). These affect the whole
+  model, so any issue here is always reported in full, never summarized
+  away.
+* **Tier 2 -- per-dyad hierarchical parameters** (`phi`, `process_noise`,
+  `theta0`, and their non-centered/raw counterparts). These are screened
+  against how much data (`n_dt`) each dyad has, flagging dyads whose
+  diagnostics are worse than a smooth degradation-with-sparsity trend
+  would predict -- i.e. genuine outliers, not just the sparsest dyads.
+* **Tier 3 -- per-dyad-period latent states** (`theta`, `theta_raw`).
+  These are the noisiest by design, so they're reported only as
+  per-dyad aggregate statistics (e.g. minimum ESS along a dyad's path),
+  never flooding the console with one row per dyad-period.
+
+## A panel with very uneven sparsity
+
+We simulate a small panel where dyad activity spans two orders of
+magnitude, to make the tiering concrete:
+
+```{r}
+library(bilatr)
+library(dplyr)
+
+set.seed(42)
+countries <- c("USA", "CHN", "RUS", "IRN", "PRK", "ISR")
+dyad_pairs <- expand.grid(a1 = countries, a2 = countries, stringsAsFactors = FALSE) %>%
+  filter(a1 != a2) %>%
+  slice(1:8)
+
+# very uneven event counts per dyad: some dyads get a handful of events,
+# others hundreds.
+n_events_per_dyad <- c(400, 350, 300, 250, 15, 10, 8, 5)
+events <- purrr::map2_dfr(seq_len(nrow(dyad_pairs)), n_events_per_dyad, function(i, n) {
+  dates <- format(
+    sample(seq(as.Date("2015-01-01"), as.Date("2019-12-31"), by = "day"), n, replace = TRUE),
+    "%Y%m%d"
+  )
+  tibble::tibble(
+    Actor1CountryCode = dyad_pairs$a1[i],
+    Actor2CountryCode = dyad_pairs$a2[i],
+    SQLDATE = as.integer(dates),
+    EventCode = sample(cameo_lookup$CAMEOEVENTCODE, n, replace = TRUE)
+  )
+})
+events <- recode_cameo(events, code_col = "EventCode")
+
+stan_data <- assemble_stan_data(
+  events,
+  years = 2015:2019,
+  resolution = "yearly",
+  grouping_var = "PentaClass",
+  reference_category = 0,
+  reference_hostile = 4,
+  min_n_events = 1,
+  chunk_size = 4
+)
+stan_data$D
+```
+
+```{r, results = "hide"}
+fit <- fit_panel(
+  stan_data,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  iter_warmup = 300,
+  iter_sampling = 300,
+  seed = 1,
+  opt_level = 1
+)
+```
+
+As in the other vignettes, this run is deliberately short (and the event
+data purely random, with no real signal for the model to recover) so
+the vignette builds quickly. That means it's a poor fit in an absolute
+sense -- don't be surprised to see Tier 1 flags below that a longer,
+real run wouldn't show. That's still a useful illustration: on a real
+fit, any Tier 1 flag is exactly the kind of thing this tool is meant to
+surface loudly rather than let it get lost among per-dyad noise.
+
+## Running the triage
+
+`diagnose_convergence()` needs `n_dt`: the total observation count per
+dyad, keyed by the same dyad index (1..D) used inside the Stan model.
+Here we derive it directly from the `Y` array already assembled by
+[assemble_stan_data()]:
+
+```{r}
+n_dt <- tibble::tibble(
+  dyad_id = seq_len(stan_data$D),
+  n_dt = apply(stan_data$Y, 1, sum)
+)
+n_dt
+
+diag <- diagnose_convergence(fit, n_dt = n_dt)
+diag
+```
+
+The printed report separates concerns by tier: Tier 1 issues (if any)
+are always shown in full; Tier 2 shows a compact per-dyad table sorted
+so any dyad flagged as "worse than expected for its `n_dt`" appears
+first; Tier 3 collapses to one-line aggregate statistics.
+
+## Working with the pieces directly
+
+`diag` is a plain list (class `bilatr_diagnostics`) with `tier1`,
+`tier2`, `tier3`, and `summary` elements, so you can filter or
+join further as needed:
+
+```{r}
+# any global/shared parameter that failed to converge:
+dplyr::filter(diag$tier1, flagged)
+
+# dyads whose per-dyad parameters look worse than their n_dt would predict:
+dplyr::filter(diag$tier2, worse_than_expected)
+
+# headline counts:
+diag$summary
+```
+
+## Computing only some tiers
+
+`tiers` (default `1:3`) restricts which tier(s) are computed at all --
+useful since Tier 3 typically dwarfs the other two in the number of
+monitored quantities (one per dyad-period), so computing Rhat/ESS for
+it is the most expensive part of a call. A quick check of just the
+global/shared parameters, with no `n_dt` needed at all since Tier 1 has
+no per-dyad structure to join against it, looks like:
+
+```{r}
+diagnose_convergence(fit, tiers = 1)
+```
+
+`diag$tier2`/`diag$tier3` are `NULL` (not empty tibbles) for any tier
+left out of `tiers`, so `is.null(diag$tier3)` distinguishes "not
+computed" from "computed, nothing to report".
+
+## Tuning thresholds
+
+`rhat_threshold` (default `1.01`) and `ess_threshold` (default `400`,
+applied to both `ess_bulk` and `ess_tail`) follow Vehtari et al. (2021)
+and can be tightened or loosened:
+
+```{r, eval = FALSE}
+diagnose_convergence(fit, n_dt = n_dt, rhat_threshold = 1.05, ess_threshold = 100)
+```
+
+## On the "worse than expected" flag
+
+The Tier 2/3 outlier flag is deliberately simple: dyads are grouped
+into `n_dt` quantile brackets, and a dyad is flagged when its ESS falls
+more than 1.5 times the interquartile range below its own bracket's
+median (the standard Tukey outlier rule). This means a very sparse
+dyad with a wide, low-ESS posterior is *not* flagged as long as its
+peers at similar sparsity look about the same -- only a dyad that
+stands out *relative to equally-sparse peers* is surfaced, which is
+the actual failure mode worth investigating (e.g. a data or
+identification issue specific to that dyad, rather than sparsity
+alone).

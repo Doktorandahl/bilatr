@@ -2,7 +2,7 @@
 #
 # Exported functions (fit_dyad_ts(), fit_panel(), compile_bilatr_model())
 # always resolve `.BILATR_DEFAULT_MODEL` and never expose model choice to
-# callers. The `_dev` variants in R/fit-dev.R accept a `stan_model` name
+# callers. The `_dev` variants in R/fit_dev.R accept a `stan_model` name
 # and resolve it here, for use during model development only.
 #
 # To register a new model variant: add an entry below (the `file` must

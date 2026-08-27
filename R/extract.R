@@ -47,7 +47,7 @@ extract_theta <- function(fit, stan_data, probs = c(0.05, 0.5, 0.95)) {
 #' `alpha` out of a fitted model. `alpha[1]` is fixed at 1 (the model's
 #' scale reference) and the last element is the negative, known-hostile
 #' anchor; see the package's identification notes in
-#' `vignette("dyad-time-series")`.
+#' `vignette("dyad_time_series")`.
 #'
 #' @inheritParams extract_theta
 #' @param event_classes Optional character vector of event-class labels,

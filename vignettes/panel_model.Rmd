@@ -19,7 +19,7 @@ knitr::opts_chunk$set(
 This vignette walks through fitting `bilatr`'s dyadic IRT model across
 **multiple dyads at once**, with hierarchical partial pooling on process
 noise, the dispersion parameter `phi`, and the initial latent state
-`theta0`. For a single dyad, see `vignette("dyad-time-series")`; the
+`theta0`. For a single dyad, see `vignette("dyad_time_series")`; the
 data-prep and extraction steps are the same, only the fitting call and
 the presence of pooling differ.
 
@@ -149,21 +149,28 @@ fit$summary(variables = c("phi", "theta0", "mu_log_phi", "sigma_log_phi", "mu_th
 
 ## 5. Diagnose
 
-Convergence diagnostics work the same way as for a single dyad, but with
-a panel it's worth checking whether any *specific* dyads are poorly
-identified (e.g. very low event counts) rather than only looking at
-global summaries:
+With a panel, it's worth checking whether any *specific* dyads are
+poorly identified (e.g. very low event counts) rather than only
+looking at global summaries -- but also making sure that expected noise
+in sparse dyads' own `theta` trajectories doesn't bury a real problem
+in a shared/global parameter. [diagnose_convergence()] triages
+`fit$summary()` by parameter tier for exactly this reason; see
+`vignette("diagnostics")` for a full walkthrough. Briefly:
 
 ```{r}
 fit$diagnostic_summary()
 
-theta %>%
-  group_by(dyad) %>%
-  summarise(mean_ess_proxy = mean(`95%` - `5%`)) %>%
-  arrange(desc(mean_ess_proxy))
+n_dt <- tibble::tibble(
+  dyad_id = seq_len(stan_data$D),
+  n_dt = apply(stan_data$Y, 1, sum)
+)
+diagnose_convergence(fit, n_dt = n_dt)
 ```
 
-Dyads with unusually wide posterior intervals relative to the rest of
-the panel are the ones most likely to need more data, a higher
-`min_n_events` cutoff, or closer inspection of their raw event counts
-before trusting their `theta` trajectory.
+Dyads flagged as worse than expected for their `n_dt` (Tier 2) or with
+low minimum `theta` ESS concentrated at low `n_dt` (Tier 3) are the
+ones most likely to need more data, a higher `min_n_events` cutoff, or
+closer inspection of their raw event counts before trusting their
+`theta` trajectory. Any Tier 1 issue, by contrast, is a global problem
+and should be investigated regardless of any individual dyad's
+sparsity.
