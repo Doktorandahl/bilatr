@@ -14,7 +14,8 @@ A data frame with \code{Actor1Type1Code}, \code{Actor2Type1Code}, \code{n},
 and \code{date} (the file's date stamp).
 }
 \description{
-Diagnostic helper for tuning \code{\link[=relevant_actors]{relevant_actors()}} on new data: counts
+Diagnostic helper for tuning \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}'s
+\code{relevant_actors} argument on new data: counts
 how often each \code{Actor1Type1Code} x \code{Actor2Type1Code} combination occurs
 among cross-country dyadic events in a raw GDELT export.
 }

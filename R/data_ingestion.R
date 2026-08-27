@@ -26,14 +26,6 @@ get_gdelt_column_names <- function() {
   )
 }
 
-#' Actor-type codes treated as "relevant" state/security actors in GDELT
-#'
-#' @return A character vector of GDELT actor-type codes.
-#' @keywords internal
-relevant_actors <- function() {
-  c("GOV", "MIL", "SPY")
-}
-
 #' Actor-sector name fragments treated as "relevant" state/security
 #' actors in ICEWS
 #'
@@ -108,13 +100,17 @@ gdelt_export_url <- function(date, local_folder, type) {
 #'
 #' Reads a raw GDELT export zip (as downloaded by
 #' [download_gdelt_raw_zip()]), and filters to cross-country dyadic events
-#' where both actors are state/security actors (per [relevant_actors()]).
+#' where both actors are state/security actors (per `relevant_actors`).
 #' Retains event-level records (one row per event) rather than
 #' aggregating, so the result can be recoded via [recode_cameo()] and fed
 #' to [grouped_events_to_dyad_period()] for any CAMEO-derived grouping
 #' variable.
 #'
 #' @param file Path to a raw GDELT export zip file.
+#' @param relevant_actors Character vector of GDELT actor-type codes
+#'   identifying relevant (state/security) actors. Defaults to `c("GOV",
+#'   "MIL", "SPY")`; see [get_actor_combos()] for a diagnostic helper to
+#'   tune this on new data.
 #' @return A data frame of event-level records, filtered to relevant
 #'   cross-country dyadic events.
 #' @examples
@@ -129,9 +125,7 @@ gdelt_export_url <- function(date, local_folder, type) {
 #' )
 #' }
 #' @export
-extract_all_relevant_gdelt <- function(file) {
-  rel_act <- relevant_actors()
-
+extract_all_relevant_gdelt <- function(file, relevant_actors = c("GOV", "MIL", "SPY")) {
   raw <- readr::read_delim(
     unz(file, unzip(file, list = TRUE)$Name[1]),
     num_threads = 1,
@@ -144,14 +138,15 @@ extract_all_relevant_gdelt <- function(file) {
     dplyr::filter(
       !is.na(Actor1CountryCode) & !is.na(Actor2CountryCode),
       Actor1CountryCode != Actor2CountryCode,
-      (Actor1Type1Code %in% rel_act | Actor1Type2Code %in% rel_act | Actor1Type3Code %in% rel_act) &
-        (Actor2Type1Code %in% rel_act | Actor2Type2Code %in% rel_act | Actor2Type3Code %in% rel_act)
+      (Actor1Type1Code %in% relevant_actors | Actor1Type2Code %in% relevant_actors | Actor1Type3Code %in% relevant_actors) &
+        (Actor2Type1Code %in% relevant_actors | Actor2Type2Code %in% relevant_actors | Actor2Type3Code %in% relevant_actors)
     )
 }
 
 #' Count actor-type-code combinations in a raw GDELT file
 #'
-#' Diagnostic helper for tuning [relevant_actors()] on new data: counts
+#' Diagnostic helper for tuning [extract_all_relevant_gdelt()]'s
+#' `relevant_actors` argument on new data: counts
 #' how often each `Actor1Type1Code` x `Actor2Type1Code` combination occurs
 #' among cross-country dyadic events in a raw GDELT export.
 #'

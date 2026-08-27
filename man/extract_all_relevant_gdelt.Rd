@@ -4,10 +4,14 @@
 \alias{extract_all_relevant_gdelt}
 \title{Read and filter a raw GDELT zip to relevant dyadic events}
 \usage{
-extract_all_relevant_gdelt(file)
+extract_all_relevant_gdelt(file, relevant_actors = c("GOV", "MIL", "SPY"))
 }
 \arguments{
 \item{file}{Path to a raw GDELT export zip file.}
+
+\item{relevant_actors}{Character vector of GDELT actor-type codes
+identifying relevant (state/security) actors. Defaults to \code{c("GOV", "MIL", "SPY")}; see \code{\link[=get_actor_combos]{get_actor_combos()}} for a diagnostic helper to
+tune this on new data.}
 }
 \value{
 A data frame of event-level records, filtered to relevant
@@ -16,7 +20,7 @@ cross-country dyadic events.
 \description{
 Reads a raw GDELT export zip (as downloaded by
 \code{\link[=download_gdelt_raw_zip]{download_gdelt_raw_zip()}}), and filters to cross-country dyadic events
-where both actors are state/security actors (per \code{\link[=relevant_actors]{relevant_actors()}}).
+where both actors are state/security actors (per \code{relevant_actors}).
 Retains event-level records (one row per event) rather than
 aggregating, so the result can be recoded via \code{\link[=recode_cameo]{recode_cameo()}} and fed
 to \code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}} for any CAMEO-derived grouping

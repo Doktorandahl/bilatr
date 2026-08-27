@@ -21,6 +21,13 @@
 
 ## Internal
 
+* Removed the internal `relevant_actors()` helper; its value (`c("GOV",
+  "MIL", "SPY")`) is now the default for a new `relevant_actors`
+  argument on [extract_all_relevant_gdelt()], matching how
+  [ingest_icews()] already exposes its own actor filter via
+  `relevant_sectors`. Backward compatible (existing calls with no
+  argument are unaffected); callers can now override which GDELT
+  actor-type codes count as "relevant" without editing package code.
 * Renamed all kebab-case source, test, and vignette files to snake_case
   (e.g. `R/model-registry.R` -> `R/model_registry.R`,
   `vignettes/panel-model.Rmd` -> `vignettes/panel_model.Rmd`) for
