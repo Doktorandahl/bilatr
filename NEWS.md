@@ -1,3 +1,8 @@
+
+# bilatr 0.2.2
+
+* Added two new experimental models
+
 # bilatr 0.2.0
 
 ## New features

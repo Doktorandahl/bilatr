@@ -21,6 +21,14 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
+  # All four current variants (stable, phi_logn, and their non-centered
+  # process_noise reparameterizations) must be registered and compile
+  # cleanly at -O1.
+  expect_true(
+    all(c("stable", "phi_logn", "stable_ncproc", "phi_logn_ncproc") %in%
+      names(.bilatr_stan_models))
+  )
+
   for (name in names(.bilatr_stan_models)) {
     mod <- .compile_stan_model(name, opt_level = 1)
     expect_s3_class(mod, "CmdStanModel")

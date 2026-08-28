@@ -22,6 +22,16 @@
     file = "bilatr_phi_logn.stan",
     description = "Experimental: phi modeled as a function of centered log(n_dt), per-dyad-period rather than per-dyad constant.",
     status = "experimental"
+  ),
+  stable_ncproc = list(
+    file = "bilatr_dirmult_irt_ncproc.stan",
+    description = "Experimental: stable model with the per-dyad process_noise lognormal hierarchy sampled in non-centered form (to break the process_noise funnel); all other math identical to 'stable'.",
+    status = "experimental"
+  ),
+  phi_logn_ncproc = list(
+    file = "bilatr_phi_logn_ncproc.stan",
+    description = "Experimental: phi_logn model with the per-dyad process_noise lognormal hierarchy also sampled in non-centered form (on top of its existing non-centered log_phi0 hierarchy); all other math identical to 'phi_logn'.",
+    status = "experimental"
   )
 )
 
