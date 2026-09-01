@@ -8,7 +8,6 @@ test_that("assemble_stan_data produces correctly shaped D x T x A arrays with 1s
     resolution = "yearly",
     grouping_var = "PentaClass",
     reference_category = 0,
-    reference_hostile = 4,
     min_n_events = 1
   )
 

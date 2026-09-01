@@ -1,6 +1,8 @@
-test_that("the registry contains the stable and phi_logn models", {
-  expect_true(all(c("stable", "phi_logn") %in% names(.bilatr_stan_models)))
+test_that("the registry contains exactly the stable and phi_logn models", {
+  expect_setequal(names(.bilatr_stan_models), c("stable", "phi_logn"))
   expect_identical(.BILATR_DEFAULT_MODEL, "stable")
+  # the transitional "_ncproc" entries were retired in 0.3.0
+  expect_false(any(c("stable_ncproc", "phi_logn_ncproc") %in% names(.bilatr_stan_models)))
 })
 
 test_that(".resolve_stan_model() resolves valid names to existing files", {

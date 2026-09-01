@@ -66,7 +66,7 @@ will not speed up sampling for a single-dyad fit).
 stan_data <- assemble_stan_data(
   dplyr::filter(events, dyad == "USA_CHN"),
   years = 2015:2020, resolution = "yearly", grouping_var = "PentaClass",
-  reference_category = 0, reference_hostile = 4
+  reference_category = 0
 )
 fit <- fit_dyad_ts(stan_data, chains = 4, iter_sampling = 1000)
 }

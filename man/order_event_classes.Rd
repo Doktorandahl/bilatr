@@ -2,30 +2,23 @@
 % Please edit documentation in R/dyad_period.R
 \name{order_event_classes}
 \alias{order_event_classes}
-\title{Order event classes with reference categories at the ends}
+\title{Order event classes with the reference category first}
 \usage{
-order_event_classes(
-  classes,
-  reference_category = NULL,
-  reference_hostile = NULL
-)
+order_event_classes(classes, reference_category = NULL)
 }
 \arguments{
 \item{classes}{Vector of observed event-class values.}
 
 \item{reference_category}{Value to place first, or \code{NULL}.}
-
-\item{reference_hostile}{Value to place last, or \code{NULL}.}
 }
 \value{
 Character vector of unique classes in anchor order.
 }
 \description{
-Puts \code{reference_category} first (if supplied and present) and
-\code{reference_hostile} last (if supplied and present), with all other
-classes sorted alphabetically in between. This ordering is what
-implements the model's identification constraints on the R side:
-\code{alpha[1] = 1} anchors on the first column and \code{alpha[A]} anchors
-(with a forced-negative sign) on the last.
+Puts \code{reference_category} first (if supplied and present), with all other
+classes sorted alphabetically after it. This ordering is what implements
+the model's identification constraint on the R side: \code{alpha[1] = 1}
+anchors on the first column. All remaining \code{alpha[2:A]} are freely
+estimated.
 }
 \keyword{internal}

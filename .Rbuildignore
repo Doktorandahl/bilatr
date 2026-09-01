@@ -2,5 +2,6 @@
 ^original_code$
 ^data-raw$
 ^runscripts$
+^inst/stan/legacy$
 ^\.Rproj\.user$
 ^.*\.Rproj$

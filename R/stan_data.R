@@ -110,11 +110,9 @@ parse_weighted_arg <- function(weighted) {
 #' @param directed If `TRUE` (default), dyads are directed; if `FALSE`,
 #'   actor order is ignored.
 #' @param reference_category Value of `grouping_var` to anchor as the
-#'   model's scale/neutral reference (`alpha[1] = 1`). Should typically be
-#'   a low-conflict/cooperative class.
-#' @param reference_hostile Value of `grouping_var` to anchor as the
-#'   model's known-hostile action (`alpha[A]`, forced negative). Should
-#'   typically be the most conflictual class.
+#'   model's scale/sign reference (`alpha[1] = 1`). Should typically be
+#'   a low-conflict/cooperative class. Every other action class's
+#'   discrimination (`alpha[2:A]`) is freely estimated.
 #' @param min_n_events Minimum total events for a dyad to be retained.
 #' @param weighted `FALSE` (default), or a single string naming which
 #'   default reweighting scheme(s) to compute via
@@ -156,16 +154,14 @@ parse_weighted_arg <- function(weighted) {
 #'   events,
 #'   resolution = "yearly",
 #'   grouping_var = "PentaClass",
-#'   reference_category = 0,
-#'   reference_hostile = 4
+#'   reference_category = 0
 #' )
 #' stan_data <- assemble_stan_data(
 #'   events,
 #'   years = 2015:2020,
 #'   resolution = "yearly",
 #'   grouping_var = "PentaClass",
-#'   reference_category = 0,
-#'   reference_hostile = 4
+#'   reference_category = 0
 #' )
 #'
 #' # compute default dyad- and period-level reweighting, but leave
@@ -176,7 +172,6 @@ parse_weighted_arg <- function(weighted) {
 #'   resolution = "yearly",
 #'   grouping_var = "PentaClass",
 #'   reference_category = 0,
-#'   reference_hostile = 4,
 #'   weighted = "dyad-period"
 #' )
 #'
@@ -187,7 +182,6 @@ parse_weighted_arg <- function(weighted) {
 #'   resolution = "yearly",
 #'   grouping_var = "PentaClass",
 #'   reference_category = 0,
-#'   reference_hostile = 4,
 #'   weighted = "all"
 #' )
 #' }
@@ -199,7 +193,6 @@ assemble_stan_data <- function(
   grouping_var,
   directed = TRUE,
   reference_category = NULL,
-  reference_hostile = NULL,
   min_n_events = 1,
   weighted = FALSE,
   dyad_weight = NULL,
@@ -214,8 +207,7 @@ assemble_stan_data <- function(
     resolution = resolution,
     grouping_var = grouping_var,
     directed = directed,
-    reference_category = reference_category,
-    reference_hostile = reference_hostile
+    reference_category = reference_category
   )
   agg <- fill_dyad_period_skeleton(agg, years, resolution)
 

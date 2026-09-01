@@ -47,3 +47,17 @@ test_that("bilatr_init_fn() initializes phi for the stable model and log_phi0_ra
   expect_true(all(c("log_phi0_raw", "beta_logn") %in% names(phi_logn_init)))
   expect_length(phi_logn_init$log_phi0_raw, stan_data$D)
 })
+
+test_that("bilatr_init_fn() matches the current parameterization (non-centered process noise, free alpha)", {
+  stan_data <- list(D = 2, T = 3, A = 4)
+  init <- bilatr_init_fn(stan_data, stan_model = "stable")()
+
+  # process_noise is non-centered: log_process_noise_raw, not process_noise
+  expect_true("log_process_noise_raw" %in% names(init))
+  expect_false("process_noise" %in% names(init))
+  expect_length(init$log_process_noise_raw, stan_data$D)
+
+  # alpha[A] is freely estimated: no alpha_hostile, alpha_raw has length A - 1
+  expect_false("alpha_hostile" %in% names(init))
+  expect_length(init$alpha_raw, stan_data$A - 1)
+})

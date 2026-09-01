@@ -63,11 +63,11 @@ events <- recode_cameo(events, code_col = "EventCode")
 ## 2. Assemble Stan data
 
 [assemble_stan_data()] aggregates events to dyad-period action-class
-counts and packages them for the model. `reference_category` and
-`reference_hostile` anchor the model's identification: the first should
-be a low-conflict/neutral action class, the last should be the most
-conflictual. Here we use PentaClass 0 (verbal cooperation) and 4
-(the most severe conflict class).
+counts and packages them for the model. `reference_category` anchors the
+model's identification (`alpha[1] = 1`, the discrimination scale/sign
+reference) and should be a low-conflict/neutral action class; here we use
+PentaClass 0 (verbal cooperation). Every other action class's
+discrimination is freely estimated.
 
 ```{r}
 stan_data <- assemble_stan_data(
@@ -76,7 +76,6 @@ stan_data <- assemble_stan_data(
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0,
-  reference_hostile = 4,
   min_n_events = 1
 )
 stan_data$D # a single dyad

@@ -21,13 +21,10 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # All four current variants (stable, phi_logn, and their non-centered
-  # process_noise reparameterizations) must be registered and compile
-  # cleanly at -O1.
-  expect_true(
-    all(c("stable", "phi_logn", "stable_ncproc", "phi_logn_ncproc") %in%
-      names(.bilatr_stan_models))
-  )
+  # The two current models both compile cleanly at -O1. The transitional
+  # "_ncproc" entries were retired in 0.3.0 (their non-centered
+  # process_noise reparameterization is now baked into stable/phi_logn).
+  expect_setequal(names(.bilatr_stan_models), c("stable", "phi_logn"))
 
   for (name in names(.bilatr_stan_models)) {
     mod <- .compile_stan_model(name, opt_level = 1)
@@ -66,14 +63,13 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
     mu_theta0 = 0.1,
     sigma_theta0 = 0.4,
     z_theta0 = stats::rnorm(D, 0, 0.3),
-    process_noise = rep(0.25, D),
+    log_process_noise_raw = stats::rnorm(D, 0, 0.3),
     mu_log_noise = log(0.2),
     sigma_log_noise = 0.3,
     phi = c(1.2, 0.9),
     mu_log_phi = 0.05,
     sigma_log_phi = 0.4,
-    alpha_raw = stats::rnorm(A - 2, 0, 0.3),
-    alpha_hostile = 0.6
+    alpha_raw = stats::rnorm(A - 1, 0, 0.3)
   )
 
   mod <- cmdstanr::cmdstan_model(

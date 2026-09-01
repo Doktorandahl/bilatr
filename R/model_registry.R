@@ -15,25 +15,30 @@
 .bilatr_stan_models <- list(
   stable = list(
     file = "bilatr_dirmult_irt.stan",
-    description = "Consolidated model (base + optional dyad/period/action weighting); per-dyad constant phi.",
+    description = paste(
+      "Consolidated model (base + optional dyad/period/action weighting);",
+      "per-dyad constant phi; non-centered process_noise hierarchy;",
+      "alpha[1] fixed to 1, all other alpha freely estimated."
+    ),
     status = "stable"
   ),
   phi_logn = list(
     file = "bilatr_phi_logn.stan",
-    description = "Experimental: phi modeled as a function of centered log(n_dt), per-dyad-period rather than per-dyad constant.",
-    status = "experimental"
-  ),
-  stable_ncproc = list(
-    file = "bilatr_dirmult_irt_ncproc.stan",
-    description = "Experimental: stable model with the per-dyad process_noise lognormal hierarchy sampled in non-centered form (to break the process_noise funnel); all other math identical to 'stable'.",
-    status = "experimental"
-  ),
-  phi_logn_ncproc = list(
-    file = "bilatr_phi_logn_ncproc.stan",
-    description = "Experimental: phi_logn model with the per-dyad process_noise lognormal hierarchy also sampled in non-centered form (on top of its existing non-centered log_phi0 hierarchy); all other math identical to 'phi_logn'.",
+    description = paste(
+      "Experimental: phi modeled as a function of centered log(n_dt),",
+      "per-dyad-period rather than per-dyad constant; non-centered",
+      "process_noise and log_phi0 hierarchies; alpha[1] fixed to 1, all",
+      "other alpha freely estimated."
+    ),
     status = "experimental"
   )
 )
+
+# Historical note: the pre-0.3.0 "stable"/"phi_logn" models (centered
+# process_noise hierarchy, hostile-anchored alpha[A]) and the transitional
+# "stable_ncproc"/"phi_logn_ncproc" experimental entries were retired in
+# 0.3.0. The centered sources are kept under inst/stan/legacy/ (gitignored)
+# for reference only and are not registered.
 
 .BILATR_DEFAULT_MODEL <- "stable"
 

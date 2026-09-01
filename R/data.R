@@ -21,7 +21,17 @@
 #'   \item{PentaClass_modified}{Integer, 0-4. As PentaClass, but low-
 #'     intensity verbal cooperation (Goldstein score <= 1) is folded into
 #'     class 0, useful as a near-neutral reference category.}
+#'   \item{EventRootCode2}{Character. A coarser regrouping of the CAMEO
+#'     root codes (root 04 split three ways; roots 09/14/15/18/20 folded
+#'     into related roots); see [assign_eventrootcode2()].}
+#'   \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
+#'     used as the bilatr model's default grouping; see
+#'     [assign_bilatr_class()].}
+#'   \item{BilatrClassName}{Character. Human-readable label for
+#'     `BilatrClass`; see [bilatr_class_name()].}
 #' }
 #' @source GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
-#'   (1992), "A Conflict-Cooperation Scale for WEIS Events Data".
+#'   (1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
+#'   `EventRootCode2` / `BilatrClass` regrouping follows this project's
+#'   established GDELT pipeline (`original_code/cameo_df.csv`).
 "cameo_lookup"

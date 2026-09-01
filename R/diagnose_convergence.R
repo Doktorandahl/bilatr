@@ -6,7 +6,7 @@
 #' `alpha`.
 #' @keywords internal
 .bilatr_tier1_names <- c(
-  "alpha", "alpha_raw", "alpha_hostile", "mu_intercept", "mu_intercept_raw",
+  "alpha", "alpha_raw", "mu_intercept", "mu_intercept_raw",
   "mu_theta0", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
   "beta_logn", "lp__"

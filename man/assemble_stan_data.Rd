@@ -11,7 +11,6 @@ assemble_stan_data(
   grouping_var,
   directed = TRUE,
   reference_category = NULL,
-  reference_hostile = NULL,
   min_n_events = 1,
   weighted = FALSE,
   dyad_weight = NULL,
@@ -36,12 +35,9 @@ assemble_stan_data(
 actor order is ignored.}
 
 \item{reference_category}{Value of \code{grouping_var} to anchor as the
-model's scale/neutral reference (\code{alpha[1] = 1}). Should typically be
-a low-conflict/cooperative class.}
-
-\item{reference_hostile}{Value of \code{grouping_var} to anchor as the
-model's known-hostile action (\code{alpha[A]}, forced negative). Should
-typically be the most conflictual class.}
+model's scale/sign reference (\code{alpha[1] = 1}). Should typically be
+a low-conflict/cooperative class. Every other action class's
+discrimination (\code{alpha[2:A]}) is freely estimated.}
 
 \item{min_n_events}{Minimum total events for a dyad to be retained.}
 
@@ -102,16 +98,14 @@ agg <- grouped_events_to_dyad_period(
   events,
   resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  reference_hostile = 4
+  reference_category = 0
 )
 stan_data <- assemble_stan_data(
   events,
   years = 2015:2020,
   resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  reference_hostile = 4
+  reference_category = 0
 )
 
 # compute default dyad- and period-level reweighting, but leave
@@ -122,7 +116,6 @@ stan_data_dp <- assemble_stan_data(
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0,
-  reference_hostile = 4,
   weighted = "dyad-period"
 )
 
@@ -133,7 +126,6 @@ stan_data_all <- assemble_stan_data(
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0,
-  reference_hostile = 4,
   weighted = "all"
 )
 }

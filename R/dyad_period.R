@@ -22,24 +22,22 @@ validate_reference_class <- function(value, classes, arg_name) {
   value
 }
 
-#' Order event classes with reference categories at the ends
+#' Order event classes with the reference category first
 #'
-#' Puts `reference_category` first (if supplied and present) and
-#' `reference_hostile` last (if supplied and present), with all other
-#' classes sorted alphabetically in between. This ordering is what
-#' implements the model's identification constraints on the R side:
-#' `alpha[1] = 1` anchors on the first column and `alpha[A]` anchors
-#' (with a forced-negative sign) on the last.
+#' Puts `reference_category` first (if supplied and present), with all other
+#' classes sorted alphabetically after it. This ordering is what implements
+#' the model's identification constraint on the R side: `alpha[1] = 1`
+#' anchors on the first column. All remaining `alpha[2:A]` are freely
+#' estimated.
 #'
 #' @param classes Vector of observed event-class values.
 #' @param reference_category Value to place first, or `NULL`.
-#' @param reference_hostile Value to place last, or `NULL`.
 #' @return Character vector of unique classes in anchor order.
 #' @keywords internal
-order_event_classes <- function(classes, reference_category = NULL, reference_hostile = NULL) {
+order_event_classes <- function(classes, reference_category = NULL) {
   classes <- sort(unique(as.character(classes)))
-  middle <- setdiff(classes, c(reference_category, reference_hostile))
-  c(reference_category, middle, reference_hostile)
+  middle <- setdiff(classes, reference_category)
+  c(reference_category, middle)
 }
 
 #' Aggregate CAMEO-coded events to dyad-period class counts
@@ -60,15 +58,12 @@ order_event_classes <- function(classes, reference_category = NULL, reference_ho
 #'   (actor1 -> actor2); if `FALSE`, actor order is ignored and dyads are
 #'   collapsed to an unordered pair.
 #' @param reference_category Value of `grouping_var` to place first in
-#'   the class ordering (the model's scale-reference / neutral action).
-#'   If `NULL` or not present in the data, ignored with a warning.
-#' @param reference_hostile Value of `grouping_var` to place last in the
-#'   class ordering (the model's known-hostile anchor). If `NULL` or not
-#'   present in the data, ignored with a warning.
+#'   the class ordering (the model's scale-reference / neutral action,
+#'   `alpha[1] = 1`). If `NULL` or not present in the data, ignored with a
+#'   warning. All other action classes' discrimination is freely estimated.
 #' @return A data frame with columns `dyad`, `year` (and `month` if
 #'   `resolution = "monthly"`), one `EventClass_<value>` column per
-#'   observed class (ordered per `reference_category`/`reference_hostile`),
-#'   and `total_events`.
+#'   observed class (ordered per `reference_category`), and `total_events`.
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -77,8 +72,7 @@ order_event_classes <- function(classes, reference_category = NULL, reference_ho
 #'   events,
 #'   resolution = "yearly",
 #'   grouping_var = "PentaClass",
-#'   reference_category = 0,
-#'   reference_hostile = 4
+#'   reference_category = 0
 #' )
 #' }
 #' @export
@@ -87,8 +81,7 @@ grouped_events_to_dyad_period <- function(
   resolution = c("monthly", "yearly"),
   grouping_var,
   directed = TRUE,
-  reference_category = NULL,
-  reference_hostile = NULL
+  reference_category = NULL
 ) {
   resolution <- match.arg(resolution)
 
@@ -110,9 +103,8 @@ grouped_events_to_dyad_period <- function(
     )
 
   reference_category <- validate_reference_class(reference_category, data$event_type, "reference_category")
-  reference_hostile <- validate_reference_class(reference_hostile, data$event_type, "reference_hostile")
 
-  class_order <- order_event_classes(data$event_type, reference_category, reference_hostile)
+  class_order <- order_event_classes(data$event_type, reference_category)
   group_cols <- c("dyad", "year", if (resolution == "monthly") "month")
   column_order <- c(group_cols, paste0("EventClass_", class_order), "total_events")
 

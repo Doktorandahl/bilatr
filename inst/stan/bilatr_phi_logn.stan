@@ -1,23 +1,30 @@
 // bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories.
 //
-// Variant: phi (Dirichlet-multinomial concentration) is now a per-dyad-period
-// quantity, modeled as log(phi[d,t]) = log_phi0[d] + beta_logn * centered_log_n[d,t],
-// where log_phi0[d] retains the original per-dyad hierarchical structure
-// (mu_log_phi, sigma_log_phi) and beta_logn is a single global slope capturing
-// how overdispersion scales with observed count magnitude. Setting beta_logn's
-// posterior near 0 recovers the original per-dyad-constant-phi model.
+// The experimental model. phi (Dirichlet-multinomial concentration) is a
+// per-dyad-period quantity, modeled as
+// log(phi[d,t]) = log_phi0[d] + beta_logn * centered_log_n[d,t], where
+// log_phi0[d] retains the per-dyad hierarchical structure (mu_log_phi,
+// sigma_log_phi) and beta_logn is a single global slope capturing how
+// overdispersion scales with observed count magnitude. Setting beta_logn's
+// posterior near 0 recovers the per-dyad-constant-phi stable model.
+//
+// Both the per-dyad process_noise hierarchy and the log_phi0 hierarchy are
+// sampled in non-centered form (log_process_noise_raw / log_phi0_raw ~
+// std_normal(), with the constrained quantities built in transformed
+// parameters), to keep mu_log_noise / sigma_log_noise / mu_log_phi /
+// sigma_log_phi out of a funnel. The pre-0.3.0 centered version is kept
+// under inst/stan/legacy/ for reference.
 //
 // dyad_weight / period_weight / action_weight retain their previous role and
 // are unaffected by this change; setting all three to 1s plus beta_logn's
-// prior alone does NOT recover the exact old model bit-for-bit (phi is now
-// time-varying via log_phi0 + beta_logn*0 at the mean), but is equivalent in
-// spirit and nests it as beta_logn -> 0.
+// prior alone does NOT recover the exact stable model bit-for-bit (phi is
+// now time-varying via log_phi0 + beta_logn*0 at the mean), but is
+// equivalent in spirit and nests it as beta_logn -> 0.
 //
 // Identification:
-//   - alpha[1]  = 1  (scale reference, neutral action)
+//   - alpha[1]  = 1  (scale/sign reference, neutral action); alpha[2:A] are
+//     all freely estimated (no known-hostile anchor)
 //   - mu_intercept[1] = 0  (softmax level-shift reference)
-//   - alpha[A]  = -alpha_hostile, alpha_hostile > 0 (known hostile action
-//     anchors the negative end of the discrimination scale)
 //   - theta0 is fully hierarchical (mu_theta0, sigma_theta0), not supplied
 //     as data
 //   - no dyad-specific intercept: cross-dyad level differences are forced
@@ -97,7 +104,7 @@ parameters {
   vector[D] z_theta0;
 
   // Hierarchical process/dispersion parameters
-  vector<lower=0>[D] process_noise;
+  vector[D] log_process_noise_raw;  // non-centered: process_noise built in TP
   real mu_log_noise;
   real<lower=0> sigma_log_noise;
 
@@ -107,15 +114,13 @@ parameters {
   real<lower=0> sigma_log_phi;
   real beta_logn;                   // NEW: slope of log(phi) on centered log(n)
 
-  // Global discrimination parameters
-  vector[A - 2] alpha_raw;
-  real<lower=0> alpha_hostile;      // known positive, used as negative anchor
+  // Global discrimination parameters (alpha[1] fixed to 1; the rest free)
+  vector[A - 1] alpha_raw;
 }
 transformed parameters {
   vector[A] alpha;
   alpha[1] = 1;
-  alpha[A] = -alpha_hostile;
-  for (i in 2:(A - 1)) {
+  for (i in 2:A) {
     alpha[i] = alpha_raw[i - 1];
   }
 
@@ -129,6 +134,10 @@ transformed parameters {
   for (d in 1:D) {
     theta0[d] = mu_theta0 + sigma_theta0 * z_theta0[d];
   }
+
+  // Per-dyad process noise (non-centered lognormal hierarchy)
+  vector<lower=0>[D] process_noise =
+    exp(mu_log_noise + sigma_log_noise * log_process_noise_raw);
 
   array[D, T] real theta;
   for (d in 1:D) {
@@ -156,7 +165,7 @@ model {
   // hyperpriors for pooling (lognormal hierarchy)
   mu_log_noise ~ normal(log(0.2), 0.5);
   sigma_log_noise ~ normal(0, 0.5);
-  process_noise ~ lognormal(mu_log_noise, sigma_log_noise);
+  log_process_noise_raw ~ std_normal();
 
   mu_log_phi ~ normal(0, 1);
   sigma_log_phi ~ normal(0, 1);
@@ -177,7 +186,6 @@ model {
   mu_intercept_raw ~ std_normal();
 
   alpha_raw ~ std_normal();
-  alpha_hostile ~ normal(0, 1);
 
   // likelihood, chunked via reduce_sum
   array[D] int dyad_seq = linspaced_int_array(D, 1, D);

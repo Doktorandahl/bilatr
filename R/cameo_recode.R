@@ -47,20 +47,144 @@ assign_penta <- function(root, quad) {
   )
 }
 
-#' Recode a data frame of CAMEO event codes to quad/penta classes
+#' Regroup a CAMEO event code into the bilatr "EventRootCode2" scheme
+#'
+#' `EventRootCode2` is a coarser regrouping of the 20 CAMEO root codes
+#' used by this project, motivated by how the underlying event types
+#' behave in dyadic conflict data:
+#'
+#' \itemize{
+#'   \item Root 04 ("Consult") is *split* by the kind of consultation:
+#'     bare `04`/`040` stay `"040"`; meeting/visiting/phoning
+#'     (`041`-`044`) become `"044"`; mediating/negotiating (`045`-`046`)
+#'     become `"046"`.
+#'   \item Root 09 ("Investigate") is folded into 10 ("Demand") -> `"10"`.
+#'   \item Roots 14 ("Protest") and 15 ("Exhibit Force Posture") are
+#'     folded into 13 ("Threaten") -> `"13"`.
+#'   \item Roots 18 ("Assault") and 20 ("Use Unconventional Mass
+#'     Violence") are folded into 19 ("Fight") -> `"19"`.
+#'   \item Every other root code maps to itself.
+#' }
+#'
+#' @param code Character or numeric vector of CAMEO event codes (e.g.
+#'   `"0211"`, `"19"`).
+#' @return Character vector of `EventRootCode2` values.
+#' @keywords internal
+assign_eventrootcode2 <- function(code) {
+  code <- stringr::str_pad(as.character(code), width = 2, pad = "0")
+  root <- get_root(code)
+  sub3 <- stringr::str_sub(code, 1, 3)
+  dplyr::case_when(
+    root == "04" & sub3 %in% c("041", "042", "043", "044") ~ "044",
+    root == "04" & sub3 %in% c("045", "046") ~ "046",
+    root == "04" ~ "040",
+    root == "09" ~ "10",
+    root %in% c("14", "15") ~ "13",
+    root %in% c("18", "20") ~ "19",
+    TRUE ~ root
+  )
+}
+
+#' Human-readable label for a bilatr event class
+#'
+#' @param class Integer vector of `BilatrClass` values (0-10).
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 0-10.
+#' @keywords internal
+bilatr_class_name <- function(class) {
+  names <- c(
+    "0"  = "Neutral / low-intensity statement",
+    "1"  = "Express intent to cooperate",
+    "2"  = "Consult: meet, discuss, or visit",
+    "3"  = "Consult: negotiate or mediate",
+    "4"  = "Engage in diplomatic cooperation",
+    "5"  = "Engage in material cooperation or provide aid",
+    "6"  = "Yield",
+    "7"  = "Investigate, demand, reject, or reduce relations",
+    "8"  = "Disapprove",
+    "9"  = "Threaten or coerce",
+    "10" = "Assault, fight, or mass violence"
+  )
+  unname(names[as.character(class)])
+}
+
+#' Assign the bilatr event class from a CAMEO event code
+#'
+#' `BilatrClass` is an 11-level (0-10) collapse of the CAMEO taxonomy
+#' used as the default action-class scheme for the bilatr model. It is
+#' mostly a function of [assign_eventrootcode2()] (see that function for
+#' the root regrouping and [bilatr_class_name()] for the level labels),
+#' with a handful of per-code refinements where a specific event type
+#' fits a different class than its regrouped root:
+#'
+#' \itemize{
+#'   \item `016` "Deny responsibility" -> 8 (Disapprove).
+#'   \item `018` "Make empathetic comment" -> 4 (diplomatic cooperation).
+#'   \item `019` "Express accord" -> 1 (express intent to cooperate).
+#'   \item Appeals for political reform / to yield (`024*`, `025*`) ->
+#'     0 (neutral statement).
+#'   \item Appeals to others to meet / settle / mediate (`026`, `027`,
+#'     `028`) -> 3 (consult: negotiate or mediate).
+#'   \item `041` "Discuss by telephone" -> 0 (neutral statement).
+#' }
+#'
+#' @param code Character or numeric vector of CAMEO event codes.
+#' @param eventrootcode2 Character vector of `EventRootCode2` values, as
+#'   returned by [assign_eventrootcode2()]. Defaults to computing it from
+#'   `code`.
+#' @return Integer vector of `BilatrClass` values (0-10), `NA` for
+#'   unrecognized codes.
+#' @keywords internal
+assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(code)) {
+  code <- stringr::str_pad(as.character(code), width = 2, pad = "0")
+  dplyr::case_when(
+    code == "016" ~ 8L,
+    code == "018" ~ 4L,
+    code == "019" ~ 1L,
+    stringr::str_starts(code, "024") ~ 0L,
+    stringr::str_starts(code, "025") ~ 0L,
+    code %in% c("026", "027", "028") ~ 3L,
+    code == "041" ~ 0L,
+    eventrootcode2 == "01" ~ 0L,
+    eventrootcode2 == "02" ~ 1L,
+    eventrootcode2 == "03" ~ 1L,
+    eventrootcode2 == "040" ~ 0L,
+    eventrootcode2 == "044" ~ 2L,
+    eventrootcode2 == "046" ~ 3L,
+    eventrootcode2 == "05" ~ 4L,
+    eventrootcode2 == "06" ~ 5L,
+    eventrootcode2 == "07" ~ 5L,
+    eventrootcode2 == "08" ~ 6L,
+    eventrootcode2 == "10" ~ 7L,
+    eventrootcode2 == "11" ~ 8L,
+    eventrootcode2 == "12" ~ 7L,
+    eventrootcode2 == "13" ~ 9L,
+    eventrootcode2 == "16" ~ 7L,
+    eventrootcode2 == "17" ~ 9L,
+    eventrootcode2 == "19" ~ 10L,
+    TRUE ~ NA_integer_
+  )
+}
+
+#' Recode a data frame of CAMEO event codes to quad/penta/bilatr classes
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
-#' attach `QuadClass`, `PentaClass`, and `PentaClass_modified` columns.
+#' attach `QuadClass`, `PentaClass`, `PentaClass_modified`,
+#' `EventRootCode2`, `BilatrClass`, and `BilatrClassName` columns.
 #' `PentaClass_modified` folds low-intensity verbal cooperation (Goldstein
 #' score <= 1) into its own class, which can be useful as a near-neutral
-#' reference category.
+#' reference category. `EventRootCode2` (see [assign_eventrootcode2()]) is
+#' a coarser regrouping of the CAMEO root codes, and `BilatrClass` /
+#' `BilatrClassName` (see [assign_bilatr_class()]) is the 11-level action
+#' scheme used as the model's default.
 #'
 #' @param data A data frame containing a CAMEO event code column.
 #' @param code_col Name of the column in `data` holding CAMEO event codes
 #'   (as a string). Defaults to `"EventCode"`, matching the raw GDELT
 #'   column name.
-#' @return `data` with `QuadClass`, `PentaClass`, `PentaClass_modified`,
-#'   `GoldsteinScore`, and `CAMEOLabel` columns attached.
+#' @return `data` with `CAMEOLabel`, `GoldsteinScore`, `QuadClass`,
+#'   `PentaClass`, `PentaClass_modified`, `EventRootCode2`, `BilatrClass`,
+#'   and `BilatrClassName` columns attached.
 #' @examples
 #' \dontrun{
 #' events <- data.frame(EventCode = c("01", "190", "0862"))

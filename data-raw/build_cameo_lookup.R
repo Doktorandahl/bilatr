@@ -1,10 +1,13 @@
 # Builds the `cameo_lookup` package data object: one row per CAMEO event
-# code, with its Goldstein score, human-readable label, root code, and
-# QuadClass/PentaClass recoding. Source values are taken verbatim from the
+# code, with its Goldstein score, human-readable label, and the
+# QuadClass / PentaClass / PentaClass_modified / EventRootCode2 /
+# BilatrClass recodings. Source values are taken verbatim from the
 # project's existing CAMEO/Goldstein reference table (O'Brien 2010 scale;
-# quad/penta breakpoints as previously used in this project's GDELT
-# pipeline). Re-run this script (and `devtools::document()`) whenever the
-# lookup table needs to change; end users should not need to re-run it.
+# quad/penta breakpoints and the EventRootCode2/BilatrClass regrouping as
+# previously used in this project's GDELT pipeline, see
+# original_code/cameo_df.csv). Re-run this script (and
+# `devtools::document()`) whenever the lookup table needs to change; end
+# users should not need to re-run it.
 
 library(dplyr)
 library(stringr)
@@ -471,7 +474,10 @@ cameo_lookup <- cameo_label %>%
       GoldsteinScore <= 1 & QuadClass == 1,
       0L,
       PentaClass
-    )
+    ),
+    EventRootCode2 = assign_eventrootcode2(CAMEOEVENTCODE),
+    BilatrClass = assign_bilatr_class(CAMEOEVENTCODE, EventRootCode2),
+    BilatrClassName = bilatr_class_name(BilatrClass)
   ) %>%
   select(-root) %>%
   select(CAMEOEVENTCODE, CAMEOLabel, everything()) %>%

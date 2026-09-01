@@ -69,7 +69,7 @@ size and hardware rather than one in isolation.
 \dontrun{
 stan_data <- assemble_stan_data(
   events, years = 2015:2020, resolution = "yearly", grouping_var = "PentaClass",
-  reference_category = 0, reference_hostile = 4, chunk_size = 600
+  reference_category = 0, chunk_size = 600
 )
 fit <- fit_panel(stan_data, chains = 4, threads_per_chain = 16, iter_sampling = 1000)
 }

@@ -9,8 +9,7 @@ grouped_events_to_dyad_period(
   resolution = c("monthly", "yearly"),
   grouping_var,
   directed = TRUE,
-  reference_category = NULL,
-  reference_hostile = NULL
+  reference_category = NULL
 )
 }
 \arguments{
@@ -28,18 +27,14 @@ named by \code{grouping_var}.}
 collapsed to an unordered pair.}
 
 \item{reference_category}{Value of \code{grouping_var} to place first in
-the class ordering (the model's scale-reference / neutral action).
-If \code{NULL} or not present in the data, ignored with a warning.}
-
-\item{reference_hostile}{Value of \code{grouping_var} to place last in the
-class ordering (the model's known-hostile anchor). If \code{NULL} or not
-present in the data, ignored with a warning.}
+the class ordering (the model's scale-reference / neutral action,
+\code{alpha[1] = 1}). If \code{NULL} or not present in the data, ignored with a
+warning. All other action classes' discrimination is freely estimated.}
 }
 \value{
 A data frame with columns \code{dyad}, \code{year} (and \code{month} if
 \code{resolution = "monthly"}), one \verb{EventClass_<value>} column per
-observed class (ordered per \code{reference_category}/\code{reference_hostile}),
-and \code{total_events}.
+observed class (ordered per \code{reference_category}), and \code{total_events}.
 }
 \description{
 Collapses event-level data (as produced by \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}
@@ -56,8 +51,7 @@ grouped_events_to_dyad_period(
   events,
   resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  reference_hostile = 4
+  reference_category = 0
 )
 }
 }

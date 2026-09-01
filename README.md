@@ -62,15 +62,14 @@ events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
 events <- recode_cameo(events)
 
 # --- 2. Assemble Stan data ---------------------------------------------
-# reference_category anchors the model's scale/neutral action (alpha[1] = 1);
-# reference_hostile anchors the known-hostile end (alpha[A], forced negative).
+# reference_category anchors the model's scale/sign reference (alpha[1] = 1);
+# every other action class's discrimination (alpha[2:A]) is freely estimated.
 stan_data <- assemble_stan_data(
   events,
   years = 2015:2020,
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0, # verbal cooperation
-  reference_hostile = 4,  # most severe conflict class
   min_n_events = 10
 )
 
@@ -101,16 +100,17 @@ to read the convergence diagnostics.
   Dirichlet-multinomial, with concentration `phi[d] * softmax(alpha .*
   theta[d,t] - mu_intercept)` (optionally rescaled by
   `dyad_weight`/`period_weight`/`action_weight`, all default to 1s).
-- **Identification**: `alpha[1] = 1` and `mu_intercept[1] = 0` are fixed
-  reference points; a known hostile action class anchors the negative
-  end of `alpha`. There is no dyad-specific intercept — cross-dyad level
-  differences are absorbed into the global `mu_intercept`, which is what
-  keeps `theta` comparable across dyads.
+- **Identification**: `alpha[1] = 1` and `mu_intercept[1] = 0` are the
+  fixed reference points (discrimination scale/sign, and location); every
+  other `alpha[2:A]` is freely estimated. There is no dyad-specific
+  intercept — cross-dyad level differences are absorbed into the global
+  `mu_intercept`, which is what keeps `theta` comparable across dyads.
 - **Dynamics**: `theta` follows a random walk per dyad, starting from a
   fully hierarchical `theta0` (`mu_theta0`, `sigma_theta0`), not a
   fixed or data-supplied prior.
 - **Pooling** (panel mode only): process noise, `phi`, and `theta0` are
-  partially pooled across dyads via lognormal/normal hyperpriors.
+  partially pooled across dyads via lognormal/normal hyperpriors; the
+  `process_noise` hierarchy is sampled non-centered.
 
 One Stan program (`inst/stan/bilatr_dirmult_irt.stan`) covers both
 estimation modes and all reweighting configurations — see

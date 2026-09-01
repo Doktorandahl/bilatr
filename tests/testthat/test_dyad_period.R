@@ -1,9 +1,9 @@
-test_that("order_event_classes places reference_category first and reference_hostile last", {
+test_that("order_event_classes places reference_category first, rest sorted after it", {
   expect_equal(
-    order_event_classes(c("3", "1", "0", "2", "4"), reference_category = "0", reference_hostile = "4"),
-    c("0", "1", "2", "3", "4")
+    order_event_classes(c("3", "1", "0", "2", "4"), reference_category = "2"),
+    c("2", "0", "1", "3", "4")
   )
-  # falls back to plain sort when references are absent
+  # falls back to plain sort when no reference is supplied
   expect_equal(order_event_classes(c("b", "a", "c")), c("a", "b", "c"))
 })
 
@@ -23,8 +23,7 @@ test_that("grouped_events_to_dyad_period produces one row per dyad-year with cor
     resolution = "yearly",
     grouping_var = "PentaClass",
     directed = TRUE,
-    reference_category = 0,
-    reference_hostile = 4
+    reference_category = 0
   )
 
   expect_true(all(c("dyad", "year", "total_events") %in% names(agg)))

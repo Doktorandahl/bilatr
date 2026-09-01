@@ -16,10 +16,12 @@ A zero-argument function suitable for \code{cmdstanr}'s \code{init}
 argument.
 }
 \description{
-\code{stan_model == "stable"} (the default, used by the exported fitters)
-initializes the per-dyad-constant \code{phi}. Other registered models may
-need different/additional init fields for parameters not present in
-the stable model; \code{"phi_logn"} initializes \code{log_phi0_raw}/\code{beta_logn}
-instead of \code{phi} (which isn't a free parameter in that variant).
+Both registered models share a non-centered \code{process_noise} hierarchy
+(\code{log_process_noise_raw}) and a freely-estimated \code{alpha} (via
+\code{alpha_raw}, length \code{A - 1}). \code{stan_model == "stable"} (the default,
+used by the exported fitters) additionally initializes the
+per-dyad-constant \code{phi}; \code{"phi_logn"} initializes
+\code{log_phi0_raw}/\code{beta_logn} instead of \code{phi} (which isn't a free
+parameter in that variant).
 }
 \keyword{internal}

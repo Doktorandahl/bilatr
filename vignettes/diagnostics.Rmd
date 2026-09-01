@@ -84,7 +84,6 @@ stan_data <- assemble_stan_data(
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0,
-  reference_hostile = 4,
   min_n_events = 1,
   chunk_size = 4
 )

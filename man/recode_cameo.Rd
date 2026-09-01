@@ -2,7 +2,7 @@
 % Please edit documentation in R/cameo_recode.R
 \name{recode_cameo}
 \alias{recode_cameo}
-\title{Recode a data frame of CAMEO event codes to quad/penta classes}
+\title{Recode a data frame of CAMEO event codes to quad/penta/bilatr classes}
 \usage{
 recode_cameo(data, code_col = "EventCode")
 }
@@ -14,15 +14,20 @@ recode_cameo(data, code_col = "EventCode")
 column name.}
 }
 \value{
-\code{data} with \code{QuadClass}, \code{PentaClass}, \code{PentaClass_modified},
-\code{GoldsteinScore}, and \code{CAMEOLabel} columns attached.
+\code{data} with \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass},
+\code{PentaClass}, \code{PentaClass_modified}, \code{EventRootCode2}, \code{BilatrClass},
+and \code{BilatrClassName} columns attached.
 }
 \description{
 Joins \code{data} against the package's built-in \link{cameo_lookup} table to
-attach \code{QuadClass}, \code{PentaClass}, and \code{PentaClass_modified} columns.
+attach \code{QuadClass}, \code{PentaClass}, \code{PentaClass_modified},
+\code{EventRootCode2}, \code{BilatrClass}, and \code{BilatrClassName} columns.
 \code{PentaClass_modified} folds low-intensity verbal cooperation (Goldstein
 score <= 1) into its own class, which can be useful as a near-neutral
-reference category.
+reference category. \code{EventRootCode2} (see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}) is
+a coarser regrouping of the CAMEO root codes, and \code{BilatrClass} /
+\code{BilatrClassName} (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action
+scheme used as the model's default.
 }
 \examples{
 \dontrun{

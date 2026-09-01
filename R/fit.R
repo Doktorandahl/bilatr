@@ -73,11 +73,13 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 
 #' Build an initial-value generator matching a model's parameterization
 #'
-#' `stan_model == "stable"` (the default, used by the exported fitters)
-#' initializes the per-dyad-constant `phi`. Other registered models may
-#' need different/additional init fields for parameters not present in
-#' the stable model; `"phi_logn"` initializes `log_phi0_raw`/`beta_logn`
-#' instead of `phi` (which isn't a free parameter in that variant).
+#' Both registered models share a non-centered `process_noise` hierarchy
+#' (`log_process_noise_raw`) and a freely-estimated `alpha` (via
+#' `alpha_raw`, length `A - 1`). `stan_model == "stable"` (the default,
+#' used by the exported fitters) additionally initializes the
+#' per-dyad-constant `phi`; `"phi_logn"` initializes
+#' `log_phi0_raw`/`beta_logn` instead of `phi` (which isn't a free
+#' parameter in that variant).
 #'
 #' @param stan_data A Stan data list as returned by [assemble_stan_data()].
 #' @param stan_model Name registered in `.bilatr_stan_models`.
@@ -95,9 +97,8 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       sigma_log_noise = 0.3,
       mu_log_phi = 0,
       sigma_log_phi = 0.5,
-      process_noise = rep(0.2, stan_data$D),
-      alpha_raw = rep(0, stan_data$A - 2),
-      alpha_hostile = 0.5,
+      log_process_noise_raw = rep(0, stan_data$D),
+      alpha_raw = rep(0, stan_data$A - 1),
       mu_intercept_raw = rep(0, stan_data$A - 1)
     )
 
@@ -179,7 +180,7 @@ fit_bilatr <- function(
 #' stan_data <- assemble_stan_data(
 #'   dplyr::filter(events, dyad == "USA_CHN"),
 #'   years = 2015:2020, resolution = "yearly", grouping_var = "PentaClass",
-#'   reference_category = 0, reference_hostile = 4
+#'   reference_category = 0
 #' )
 #' fit <- fit_dyad_ts(stan_data, chains = 4, iter_sampling = 1000)
 #' }
@@ -250,7 +251,7 @@ fit_dyad_ts <- function(
 #' \dontrun{
 #' stan_data <- assemble_stan_data(
 #'   events, years = 2015:2020, resolution = "yearly", grouping_var = "PentaClass",
-#'   reference_category = 0, reference_hostile = 4, chunk_size = 600
+#'   reference_category = 0, chunk_size = 600
 #' )
 #' fit <- fit_panel(stan_data, chains = 4, threads_per_chain = 16, iter_sampling = 1000)
 #' }
