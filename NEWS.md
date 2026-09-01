@@ -1,4 +1,20 @@
 
+# bilatr 0.3.1
+
+## Internal
+
+* Added internal helpers for the `reduce_sum` threading benchmark sweep
+  (`R/benchmark.R`, all `@keywords internal`, not exported):
+  `build_reduce_sum_grid()` (sizes a cores × grainsize × replicate grid
+  from a scenario's dyad count), `insert_reduce_sum_profile()` (wraps the
+  model's `reduce_sum` likelihood call in a Stan `profile()` block),
+  `summarise_benchmark()`, `pareto_front()`, and `plot_benchmark()`.
+  Covered by `tests/testthat/test_benchmark.R`. The SLURM sweep that
+  uses them — re-tuning `threads_per_chain` × grainsize for the `stable`
+  model on the politically-relevant vs full dyad sets — lives in
+  `runscripts/benchmark/` (not shipped).
+* `ggplot2` added to `Suggests` (used by `plot_benchmark()`).
+
 # bilatr 0.3.0
 
 ## New features
