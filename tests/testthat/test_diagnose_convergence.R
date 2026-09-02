@@ -43,7 +43,7 @@ make_fake_n_dt <- function() {
 # --- tier classification -----------------------------------------------
 
 test_that(".classify_bilatr_tier assigns Tier 1 by fixed name, regardless of index shape", {
-  out <- .classify_bilatr_tier(c("alpha[1]", "alpha[2]", "mu_theta0", "lp__", "beta_logn"))
+  out <- .classify_bilatr_tier(c("alpha[1]", "alpha[2]", "mu_theta0", "lp__", "mu_log_phi"))
   expect_equal(out$tier, rep(1L, 5))
   expect_true(all(is.na(out$dyad_id)))
 })
@@ -62,17 +62,18 @@ test_that(".classify_bilatr_tier assigns Tier 3 to double-index parameters", {
   expect_equal(out$time_index, c(12L, 1L))
 })
 
-test_that(".classify_bilatr_tier reclassifies phi structurally across model variants", {
+test_that(".classify_bilatr_tier classifies phi structurally by index shape", {
   # stable model: phi is per-dyad (Tier 2).
-  stable <- .classify_bilatr_tier("phi[4]")
-  expect_equal(stable$tier, 2L)
-  expect_equal(stable$dyad_id, 4L)
+  per_dyad <- .classify_bilatr_tier("phi[4]")
+  expect_equal(per_dyad$tier, 2L)
+  expect_equal(per_dyad$dyad_id, 4L)
 
-  # phi_logn model: phi is per-dyad-period (Tier 3), same base name.
-  phi_logn <- .classify_bilatr_tier("phi[4,7]")
-  expect_equal(phi_logn$tier, 3L)
-  expect_equal(phi_logn$dyad_id, 4L)
-  expect_equal(phi_logn$time_index, 7L)
+  # a per-dyad-period phi[d, t] (as a future variant might use) falls to
+  # Tier 3 on the same base name, no special-casing needed.
+  per_dyad_period <- .classify_bilatr_tier("phi[4,7]")
+  expect_equal(per_dyad_period$tier, 3L)
+  expect_equal(per_dyad_period$dyad_id, 4L)
+  expect_equal(per_dyad_period$time_index, 7L)
 })
 
 test_that(".classify_bilatr_tier keeps bracketed non-centered globals in Tier 1, not Tier 2", {

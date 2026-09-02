@@ -29,9 +29,15 @@
 #'     [assign_bilatr_class()].}
 #'   \item{BilatrClassName}{Character. Human-readable label for
 #'     `BilatrClass`; see [bilatr_class_name()].}
+#'   \item{BilatrClass2}{Integer, 0-8. A 9-level coarsening of
+#'     `BilatrClass` that merges levels 7-8 and 9-10; see
+#'     [assign_bilatr_class2()].}
+#'   \item{BilatrClass2Name}{Character. Human-readable label for
+#'     `BilatrClass2`; see [bilatr_class2_name()].}
 #' }
 #' @source GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
 #'   (1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
-#'   `EventRootCode2` / `BilatrClass` regrouping follows this project's
-#'   established GDELT pipeline (`original_code/cameo_df.csv`).
+#'   `EventRootCode2` / `BilatrClass` / `BilatrClass2` regrouping follows
+#'   this project's established GDELT pipeline
+#'   (`original_code/cameo_df.csv`).
 "cameo_lookup"

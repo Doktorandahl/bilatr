@@ -14,20 +14,26 @@ recode_cameo(data, code_col = "EventCode")
 column name.}
 }
 \value{
-\code{data} with \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass},
-\code{PentaClass}, \code{PentaClass_modified}, \code{EventRootCode2}, \code{BilatrClass},
-and \code{BilatrClassName} columns attached.
+\code{data} with the recode columns above attached (minus any that
+were already present).
 }
 \description{
 Joins \code{data} against the package's built-in \link{cameo_lookup} table to
-attach \code{QuadClass}, \code{PentaClass}, \code{PentaClass_modified},
-\code{EventRootCode2}, \code{BilatrClass}, and \code{BilatrClassName} columns.
+attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{PentaClass},
+\code{PentaClass_modified}, \code{EventRootCode2}, \code{BilatrClass},
+\code{BilatrClassName}, \code{BilatrClass2}, and \code{BilatrClass2Name} columns.
 \code{PentaClass_modified} folds low-intensity verbal cooperation (Goldstein
 score <= 1) into its own class, which can be useful as a near-neutral
 reference category. \code{EventRootCode2} (see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}) is
-a coarser regrouping of the CAMEO root codes, and \code{BilatrClass} /
+a coarser regrouping of the CAMEO root codes; \code{BilatrClass} /
 \code{BilatrClassName} (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action
-scheme used as the model's default.
+scheme used as the model's default; \code{BilatrClass2} / \code{BilatrClass2Name}
+(see \code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}) is a 9-level coarsening that merges the
+two adjacent pairs of hostile levels.
+}
+\details{
+Any of these columns that already exist in \code{data} are left as they are
+(not overwritten, no \code{.x}/\code{.y} suffixing), with a warning naming them.
 }
 \examples{
 \dontrun{

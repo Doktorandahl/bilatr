@@ -16,12 +16,11 @@ A zero-argument function suitable for \code{cmdstanr}'s \code{init}
 argument.
 }
 \description{
-Both registered models share a non-centered \code{process_noise} hierarchy
-(\code{log_process_noise_raw}) and a freely-estimated \code{alpha} (via
-\code{alpha_raw}, length \code{A - 1}). \code{stan_model == "stable"} (the default,
-used by the exported fitters) additionally initializes the
-per-dyad-constant \code{phi}; \code{"phi_logn"} initializes
-\code{log_phi0_raw}/\code{beta_logn} instead of \code{phi} (which isn't a free
-parameter in that variant).
+Initial values for the \code{stable} model: a non-centered \code{process_noise}
+hierarchy (\code{log_process_noise_raw}), a freely-estimated \code{alpha} (via
+\code{alpha_raw}, length \code{A - 1}), and the per-dyad-constant \code{phi}. The
+\code{stan_model} argument is retained for the \verb{_dev} fitters should another
+variant be registered again; unrecognised names are rejected upstream
+by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}}.
 }
 \keyword{internal}

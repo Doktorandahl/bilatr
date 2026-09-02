@@ -17,11 +17,11 @@
 #'
 #' @inheritParams fit_dyad_ts
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
-#'   (see `R/model_registry.R`). Currently registered: `"stable"` (the
-#'   default used by the exported [fit_dyad_ts()]) and `"phi_logn"`
-#'   (experimental: per-dyad-period `phi` as a function of centered
-#'   log event count). Unrecognized names error immediately, before any
-#'   compilation is attempted, listing the currently registered options.
+#'   (see `R/model_registry.R`). Currently only `"stable"` is registered
+#'   (also the default used by the exported [fit_dyad_ts()]); the argument
+#'   exists so further variants can be added without a signature change.
+#'   Unrecognized names error immediately, before any compilation is
+#'   attempted, listing the currently registered options.
 #' @return A `CmdStanMCMC` fit object.
 #' @keywords internal
 fit_dyad_ts_dev <- function(
@@ -69,11 +69,11 @@ fit_dyad_ts_dev <- function(
 #'
 #' @inheritParams fit_panel
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
-#'   (see `R/model_registry.R`). Currently registered: `"stable"` (the
-#'   default used by the exported [fit_panel()]) and `"phi_logn"`
-#'   (experimental: per-dyad-period `phi` as a function of centered
-#'   log event count). Unrecognized names error immediately, before any
-#'   compilation is attempted, listing the currently registered options.
+#'   (see `R/model_registry.R`). Currently only `"stable"` is registered
+#'   (also the default used by the exported [fit_panel()]); the argument
+#'   exists so further variants can be added without a signature change.
+#'   Unrecognized names error immediately, before any compilation is
+#'   attempted, listing the currently registered options.
 #' @return A `CmdStanMCMC` fit object.
 #' @keywords internal
 fit_panel_dev <- function(

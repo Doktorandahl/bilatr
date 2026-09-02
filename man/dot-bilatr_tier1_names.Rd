@@ -5,7 +5,7 @@
 \alias{.bilatr_tier1_names}
 \title{Names of Stan parameters treated as global/shared (Tier 1)}
 \format{
-An object of class \code{character} of length 12.
+An object of class \code{character} of length 11.
 }
 \usage{
 .bilatr_tier1_names

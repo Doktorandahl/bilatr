@@ -35,7 +35,7 @@ validate_reference_class <- function(value, classes, arg_name) {
 #' @return Character vector of unique classes in anchor order.
 #' @keywords internal
 order_event_classes <- function(classes, reference_category = NULL) {
-  classes <- sort(unique(as.character(classes)))
+  classes <- stringr::str_sort(unique(as.character(classes)), numeric = TRUE)
   middle <- setdiff(classes, reference_category)
   c(reference_category, middle)
 }

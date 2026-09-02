@@ -9,7 +9,7 @@
   "alpha", "alpha_raw", "mu_intercept", "mu_intercept_raw",
   "mu_theta0", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
-  "beta_logn", "lp__"
+  "lp__"
 )
 
 #' Split a `posterior::summarise_draws()` variable name into base name and
@@ -45,10 +45,10 @@
 #' assumed to be a per-dyad hierarchical parameter (Tier 2, joined on
 #' `d`); two indices (`name[d, t]`) is assumed to be a per-dyad-period
 #' latent state (Tier 3, joined on `d`). This is deliberately structural
-#' rather than a fixed per-parameter name list, so it classifies
-#' consistently across Stan model variants that change a parameter's
-#' shape (e.g. `phi` is per-dyad in the `stable` model but per-dyad-period
-#' in `phi_logn`; see `R/model_registry.R`) without special-casing either.
+#' rather than a fixed per-parameter name list, so a future model variant
+#' that changes a parameter's shape (e.g. makes `phi` per-dyad-period,
+#' `phi[d, t]`, instead of the per-dyad `phi[d]` of the `stable` model) is
+#' still classified consistently without special-casing.
 #' Anything with no brackets that isn't in the Tier 1 name list (should
 #' not occur for the package's own models, but could for a hand-edited
 #' Stan file) is folded into Tier 1 rather than dropped, since its

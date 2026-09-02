@@ -28,13 +28,19 @@ used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}
 \item{BilatrClassName}{Character. Human-readable label for
 \code{BilatrClass}; see \code{\link[=bilatr_class_name]{bilatr_class_name()}}.}
+\item{BilatrClass2}{Integer, 0-8. A 9-level coarsening of
+\code{BilatrClass} that merges levels 7-8 and 9-10; see
+\code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}.}
+\item{BilatrClass2Name}{Character. Human-readable label for
+\code{BilatrClass2}; see \code{\link[=bilatr_class2_name]{bilatr_class2_name()}}.}
 }
 }
 \source{
 GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
 (1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
-\code{EventRootCode2} / \code{BilatrClass} regrouping follows this project's
-established GDELT pipeline (\code{original_code/cameo_df.csv}).
+\code{EventRootCode2} / \code{BilatrClass} / \code{BilatrClass2} regrouping follows
+this project's established GDELT pipeline
+(\code{original_code/cameo_df.csv}).
 }
 \usage{
 cameo_lookup

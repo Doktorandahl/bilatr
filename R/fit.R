@@ -73,13 +73,12 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 
 #' Build an initial-value generator matching a model's parameterization
 #'
-#' Both registered models share a non-centered `process_noise` hierarchy
-#' (`log_process_noise_raw`) and a freely-estimated `alpha` (via
-#' `alpha_raw`, length `A - 1`). `stan_model == "stable"` (the default,
-#' used by the exported fitters) additionally initializes the
-#' per-dyad-constant `phi`; `"phi_logn"` initializes
-#' `log_phi0_raw`/`beta_logn` instead of `phi` (which isn't a free
-#' parameter in that variant).
+#' Initial values for the `stable` model: a non-centered `process_noise`
+#' hierarchy (`log_process_noise_raw`), a freely-estimated `alpha` (via
+#' `alpha_raw`, length `A - 1`), and the per-dyad-constant `phi`. The
+#' `stan_model` argument is retained for the `_dev` fitters should another
+#' variant be registered again; unrecognised names are rejected upstream
+#' by [.resolve_stan_model()].
 #'
 #' @param stan_data A Stan data list as returned by [assemble_stan_data()].
 #' @param stan_model Name registered in `.bilatr_stan_models`.
@@ -88,7 +87,7 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #' @keywords internal
 bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   function() {
-    init <- list(
+    list(
       mu_theta0 = 0,
       sigma_theta0 = 0.5,
       z_theta0 = rep(0, stan_data$D),
@@ -99,17 +98,9 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       sigma_log_phi = 0.5,
       log_process_noise_raw = rep(0, stan_data$D),
       alpha_raw = rep(0, stan_data$A - 1),
-      mu_intercept_raw = rep(0, stan_data$A - 1)
+      mu_intercept_raw = rep(0, stan_data$A - 1),
+      phi = rep(1, stan_data$D)
     )
-
-    if (identical(stan_model, "phi_logn")) {
-      init$log_phi0_raw <- rep(0, stan_data$D)
-      init$beta_logn <- 0
-    } else {
-      init$phi <- rep(1, stan_data$D)
-    }
-
-    init
   }
 }
 

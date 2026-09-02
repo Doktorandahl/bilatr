@@ -21,10 +21,10 @@ how many \verb{[...]} indices it carries: a single index (\code{name[d]}) is
 assumed to be a per-dyad hierarchical parameter (Tier 2, joined on
 \code{d}); two indices (\code{name[d, t]}) is assumed to be a per-dyad-period
 latent state (Tier 3, joined on \code{d}). This is deliberately structural
-rather than a fixed per-parameter name list, so it classifies
-consistently across Stan model variants that change a parameter's
-shape (e.g. \code{phi} is per-dyad in the \code{stable} model but per-dyad-period
-in \code{phi_logn}; see \code{R/model_registry.R}) without special-casing either.
+rather than a fixed per-parameter name list, so a future model variant
+that changes a parameter's shape (e.g. makes \code{phi} per-dyad-period,
+\code{phi[d, t]}, instead of the per-dyad \code{phi[d]} of the \code{stable} model) is
+still classified consistently without special-casing.
 Anything with no brackets that isn't in the Tier 1 name list (should
 not occur for the package's own models, but could for a hand-edited
 Stan file) is folded into Tier 1 rather than dropped, since its

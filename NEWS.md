@@ -1,4 +1,35 @@
 
+# bilatr 0.3.2
+
+## New features
+
+* Added `BilatrClass2`, a 9-level (0-8) coarsening of `BilatrClass` that
+  merges the two adjacent pairs of hostile levels: `BilatrClass` 7
+  ("Investigate, demand, reject, or reduce relations") + 8 ("Disapprove")
+  -> `BilatrClass2` 7 ("Disapprove, demand, reject, or reduce relations"),
+  and `BilatrClass` 9 ("Threaten or coerce") + 10 ("Assault, fight, or
+  mass violence") -> `BilatrClass2` 8 ("Threaten, coerce, or use force").
+  `recode_cameo()` now attaches `BilatrClass2` / `BilatrClass2Name`
+  alongside the other recode columns, `cameo_lookup` gained the two
+  columns, and new internal helpers `assign_bilatr_class2()` /
+  `bilatr_class2_name()` (`R/cameo_recode.R`) encode the mapping.
+
+## Changes
+
+* `recode_cameo()` now checks whether any of the recode columns it would
+  add are already present in `data`; those are left untouched (no more
+  silent `.x`/`.y` suffixing from the join) and a warning names them.
+* Retired the experimental `phi_logn` model. `stable` is now the only
+  entry in the internal model registry; `.resolve_stan_model("phi_logn")`
+  (and `fit_*_dev(stan_model = "phi_logn")`) now error like any other
+  unknown name. Its final source is kept at
+  `inst/stan/legacy/bilatr_phi_logn.stan` (gitignored, not shipped), with
+  the pre-0.3.0 centered version alongside it as
+  `bilatr_phi_logn_pre_0.3.0.stan`. `bilatr_init_fn()` no longer branches
+  on model name (no `log_phi0_raw` / `beta_logn` init), and `beta_logn`
+  was dropped from `diagnose_convergence()`'s Tier 1 name list. The
+  exported fitters were already `stable`-only and are unaffected.
+
 # bilatr 0.3.1
 
 ## Internal

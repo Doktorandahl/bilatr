@@ -108,6 +108,60 @@ bilatr_class_name <- function(class) {
   unname(names[as.character(class)])
 }
 
+#' Human-readable label for a coarsened bilatr event class
+#'
+#' @param class Integer vector of `BilatrClass2` values (0-8).
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 0-8.
+#' @keywords internal
+bilatr_class2_name <- function(class) {
+  names <- c(
+    "0" = "Neutral / low-intensity statement",
+    "1" = "Express intent to cooperate",
+    "2" = "Consult: meet, discuss, or visit",
+    "3" = "Consult: negotiate or mediate",
+    "4" = "Engage in diplomatic cooperation",
+    "5" = "Engage in material cooperation or provide aid",
+    "6" = "Yield",
+    "7" = "Disapprove, demand, reject, or reduce relations",
+    "8" = "Threaten, coerce, or use force"
+  )
+  unname(names[as.character(class)])
+}
+
+#' Coarsen `BilatrClass` into the 9-level `BilatrClass2` scheme
+#'
+#' `BilatrClass2` merges the two adjacent pairs of hostile `BilatrClass`
+#' levels (see [assign_bilatr_class()]) that behave similarly in dyadic
+#' conflict data, giving a 9-level (0-8) scheme:
+#'
+#' \itemize{
+#'   \item `BilatrClass` 0-6 are unchanged (`BilatrClass2` 0-6).
+#'   \item `BilatrClass` 7 ("Investigate, demand, reject, or reduce
+#'     relations") and 8 ("Disapprove") merge into `BilatrClass2` 7
+#'     ("Disapprove, demand, reject, or reduce relations").
+#'   \item `BilatrClass` 9 ("Threaten or coerce") and 10 ("Assault,
+#'     fight, or mass violence") merge into `BilatrClass2` 8 ("Threaten,
+#'     coerce, or use force").
+#' }
+#'
+#' See [bilatr_class2_name()] for the level labels.
+#'
+#' @param bilatr_class Integer vector of `BilatrClass` values (0-10), as
+#'   returned by [assign_bilatr_class()].
+#' @return Integer vector of `BilatrClass2` values (0-8), `NA` where
+#'   `bilatr_class` is `NA` or outside 0-10.
+#' @keywords internal
+assign_bilatr_class2 <- function(bilatr_class) {
+  bilatr_class <- as.integer(bilatr_class)
+  dplyr::case_when(
+    bilatr_class >= 0L & bilatr_class <= 6L ~ bilatr_class,
+    bilatr_class %in% c(7L, 8L) ~ 7L,
+    bilatr_class %in% c(9L, 10L) ~ 8L,
+    TRUE ~ NA_integer_
+  )
+}
+
 #' Assign the bilatr event class from a CAMEO event code
 #'
 #' `BilatrClass` is an 11-level (0-10) collapse of the CAMEO taxonomy
@@ -169,22 +223,27 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' Recode a data frame of CAMEO event codes to quad/penta/bilatr classes
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
-#' attach `QuadClass`, `PentaClass`, `PentaClass_modified`,
-#' `EventRootCode2`, `BilatrClass`, and `BilatrClassName` columns.
+#' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `PentaClass`,
+#' `PentaClass_modified`, `EventRootCode2`, `BilatrClass`,
+#' `BilatrClassName`, `BilatrClass2`, and `BilatrClass2Name` columns.
 #' `PentaClass_modified` folds low-intensity verbal cooperation (Goldstein
 #' score <= 1) into its own class, which can be useful as a near-neutral
 #' reference category. `EventRootCode2` (see [assign_eventrootcode2()]) is
-#' a coarser regrouping of the CAMEO root codes, and `BilatrClass` /
+#' a coarser regrouping of the CAMEO root codes; `BilatrClass` /
 #' `BilatrClassName` (see [assign_bilatr_class()]) is the 11-level action
-#' scheme used as the model's default.
+#' scheme used as the model's default; `BilatrClass2` / `BilatrClass2Name`
+#' (see [assign_bilatr_class2()]) is a 9-level coarsening that merges the
+#' two adjacent pairs of hostile levels.
+#'
+#' Any of these columns that already exist in `data` are left as they are
+#' (not overwritten, no `.x`/`.y` suffixing), with a warning naming them.
 #'
 #' @param data A data frame containing a CAMEO event code column.
 #' @param code_col Name of the column in `data` holding CAMEO event codes
 #'   (as a string). Defaults to `"EventCode"`, matching the raw GDELT
 #'   column name.
-#' @return `data` with `CAMEOLabel`, `GoldsteinScore`, `QuadClass`,
-#'   `PentaClass`, `PentaClass_modified`, `EventRootCode2`, `BilatrClass`,
-#'   and `BilatrClassName` columns attached.
+#' @return `data` with the recode columns above attached (minus any that
+#'   were already present).
 #' @examples
 #' \dontrun{
 #' events <- data.frame(EventCode = c("01", "190", "0862"))
@@ -192,9 +251,25 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' }
 #' @export
 recode_cameo <- function(data, code_col = "EventCode") {
-  data %>%
-    dplyr::left_join(
-      bilatr::cameo_lookup,
-      by = rlang::set_names("CAMEOEVENTCODE", code_col)
+  lookup <- bilatr::cameo_lookup
+
+  already_present <- intersect(
+    setdiff(names(lookup), "CAMEOEVENTCODE"),
+    names(data)
+  )
+  if (length(already_present) > 0) {
+    warning(
+      "recode_cameo(): ", length(already_present),
+      " recode column(s) already present in `data`; leaving them untouched: ",
+      paste(already_present, collapse = ", "), ".",
+      call. = FALSE
     )
+    lookup <- dplyr::select(lookup, -dplyr::all_of(already_present))
+  }
+
+  dplyr::left_join(
+    data,
+    lookup,
+    by = rlang::set_names("CAMEOEVENTCODE", code_col)
+  )
 }

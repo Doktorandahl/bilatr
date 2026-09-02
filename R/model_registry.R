@@ -7,10 +7,10 @@
 #
 # To register a new model variant: add an entry below (the `file` must
 # exist under inst/stan/), and it becomes immediately fittable via
-# fit_dyad_ts_dev()/fit_panel_dev(stan_model = "<name>"). This registry is
-# intentionally general (not hardcoded to exactly two entries) so it can
-# later absorb the planned consolidation of the original pre-bilatr model
-# variants without a redesign.
+# fit_dyad_ts_dev()/fit_panel_dev(stan_model = "<name>"). The registry is
+# intentionally general (not hardcoded to a single entry) so it can later
+# absorb new model variants without a redesign, even though only the
+# `stable` model is currently registered.
 
 .bilatr_stan_models <- list(
   stable = list(
@@ -21,24 +21,19 @@
       "alpha[1] fixed to 1, all other alpha freely estimated."
     ),
     status = "stable"
-  ),
-  phi_logn = list(
-    file = "bilatr_phi_logn.stan",
-    description = paste(
-      "Experimental: phi modeled as a function of centered log(n_dt),",
-      "per-dyad-period rather than per-dyad constant; non-centered",
-      "process_noise and log_phi0 hierarchies; alpha[1] fixed to 1, all",
-      "other alpha freely estimated."
-    ),
-    status = "experimental"
   )
 )
 
-# Historical note: the pre-0.3.0 "stable"/"phi_logn" models (centered
-# process_noise hierarchy, hostile-anchored alpha[A]) and the transitional
-# "stable_ncproc"/"phi_logn_ncproc" experimental entries were retired in
-# 0.3.0. The centered sources are kept under inst/stan/legacy/ (gitignored)
-# for reference only and are not registered.
+# Historical note: several experimental variants were retired to
+# inst/stan/legacy/ (gitignored, kept for local reference only, not
+# registered):
+#   - the pre-0.3.0 centered "stable"/"phi_logn" models (centered
+#     process_noise hierarchy, hostile-anchored alpha[A]) and the
+#     transitional "stable_ncproc"/"phi_logn_ncproc" entries, in 0.3.0;
+#   - "phi_logn" (phi as a function of centered log(n_dt), per-dyad-period
+#     rather than per-dyad constant), in 0.3.2 -- its final source is
+#     inst/stan/legacy/bilatr_phi_logn.stan, the pre-0.3.0 centered one is
+#     bilatr_phi_logn_pre_0.3.0.stan.
 
 .BILATR_DEFAULT_MODEL <- "stable"
 

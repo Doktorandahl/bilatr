@@ -54,13 +54,31 @@ test_that("bilatr_class_name labels the 0-10 classes and NAs anything else", {
   expect_true(is.na(bilatr_class_name(11L)))
 })
 
+test_that("assign_bilatr_class2 merges BilatrClass 7-8 and 9-10, passes 0-6 through", {
+  expect_equal(assign_bilatr_class2(0:10), c(0:6, 7L, 7L, 8L, 8L))
+  expect_true(is.na(assign_bilatr_class2(11L)))
+  expect_true(is.na(assign_bilatr_class2(NA_integer_)))
+})
+
+test_that("bilatr_class2_name labels the 0-8 classes and NAs anything else", {
+  expect_equal(bilatr_class2_name(0L), "Neutral / low-intensity statement")
+  expect_equal(bilatr_class2_name(7L), "Disapprove, demand, reject, or reduce relations")
+  expect_equal(bilatr_class2_name(8L), "Threaten, coerce, or use force")
+  expect_true(is.na(bilatr_class2_name(9L)))
+})
+
 test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$QuadClass)))
   expect_false(any(is.na(cameo_lookup$PentaClass)))
   expect_false(any(is.na(cameo_lookup$EventRootCode2)))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
+  expect_false(any(is.na(cameo_lookup$BilatrClass2)))
+  expect_false(any(is.na(cameo_lookup$BilatrClass2Name)))
   expect_true(all(cameo_lookup$BilatrClass %in% 0:10))
+  expect_true(all(cameo_lookup$BilatrClass2 %in% 0:8))
+  # BilatrClass2 is exactly the documented coarsening of BilatrClass
+  expect_equal(cameo_lookup$BilatrClass2, assign_bilatr_class2(cameo_lookup$BilatrClass))
   expect_false(any(duplicated(cameo_lookup$CAMEOEVENTCODE)))
 })
 
@@ -79,17 +97,46 @@ test_that("recode_cameo attaches QuadClass/PentaClass by joining on a named code
   expect_true(all(c("PentaClass", "PentaClass_modified", "GoldsteinScore") %in% names(out)))
 })
 
-test_that("recode_cameo also attaches EventRootCode2 and BilatrClass/Name", {
+test_that("recode_cameo also attaches EventRootCode2, BilatrClass, and BilatrClass2", {
   events <- tibble::tibble(EventCode = c("044", "190", "180", "093"))
   out <- recode_cameo(events, code_col = "EventCode")
-  expect_true(all(c("EventRootCode2", "BilatrClass", "BilatrClassName") %in% names(out)))
+  expect_true(all(c(
+    "EventRootCode2", "BilatrClass", "BilatrClassName",
+    "BilatrClass2", "BilatrClass2Name"
+  ) %in% names(out)))
   expect_equal(out$EventRootCode2, c("044", "19", "19", "10"))
   expect_equal(out$BilatrClass, c(2L, 10L, 10L, 7L))
   expect_equal(out$BilatrClassName[2], "Assault, fight, or mass violence")
+  expect_equal(out$BilatrClass2, c(2L, 8L, 8L, 7L))
+  expect_equal(out$BilatrClass2Name[2], "Threaten, coerce, or use force")
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {
   events <- tibble::tibble(EventCode = c("044", "not-a-code"))
   out <- recode_cameo(events, code_col = "EventCode")
   expect_equal(out$QuadClass, c(1L, NA_integer_))
+})
+
+test_that("recode_cameo skips recode columns already present in the data, with a warning", {
+  events <- tibble::tibble(
+    EventCode = c("044", "19"),
+    QuadClass = c("keep-me", "and-me"),
+    BilatrClass2 = c(99L, 99L)
+  )
+  expect_warning(
+    out <- recode_cameo(events, code_col = "EventCode"),
+    "already present"
+  )
+  # pre-existing columns are untouched (no .x/.y, values unchanged)
+  expect_equal(out$QuadClass, c("keep-me", "and-me"))
+  expect_equal(out$BilatrClass2, c(99L, 99L))
+  expect_false(any(grepl("\\.(x|y)$", names(out))))
+  # non-clashing columns still attached
+  expect_true(all(c("PentaClass", "BilatrClass", "EventRootCode2") %in% names(out)))
+  expect_equal(out$BilatrClass, c(2L, 10L))
+})
+
+test_that("recode_cameo does not warn when no recode columns pre-exist", {
+  events <- tibble::tibble(EventCode = c("044", "19"))
+  expect_no_warning(recode_cameo(events, code_col = "EventCode"))
 })

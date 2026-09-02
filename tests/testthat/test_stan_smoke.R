@@ -21,10 +21,9 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # The two current models both compile cleanly at -O1. The transitional
-  # "_ncproc" entries were retired in 0.3.0 (their non-centered
-  # process_noise reparameterization is now baked into stable/phi_logn).
-  expect_setequal(names(.bilatr_stan_models), c("stable", "phi_logn"))
+  # Only the `stable` model is registered now (phi_logn was retired to
+  # inst/stan/legacy/ in 0.3.2).
+  expect_setequal(names(.bilatr_stan_models), "stable")
 
   for (name in names(.bilatr_stan_models)) {
     mod <- .compile_stan_model(name, opt_level = 1)
@@ -37,11 +36,11 @@ test_that(".compile_stan_model() caches compiled models by file + opt_level", {
   skip_on_cran()
   skip_on_ci()
 
-  mod1 <- .compile_stan_model("phi_logn", opt_level = 1)
-  mod2 <- .compile_stan_model("phi_logn", opt_level = 1)
+  mod1 <- .compile_stan_model("stable", opt_level = 1)
+  mod2 <- .compile_stan_model("stable", opt_level = 1)
   expect_identical(mod1, mod2)
 
-  mod3 <- .compile_stan_model("phi_logn", opt_level = 1, force_recompile = TRUE)
+  mod3 <- .compile_stan_model("stable", opt_level = 1, force_recompile = TRUE)
   expect_s3_class(mod3, "CmdStanModel")
 })
 
