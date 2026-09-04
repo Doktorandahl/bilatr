@@ -7,10 +7,10 @@
 #
 # To register a new model variant: add an entry below (the `file` must
 # exist under inst/stan/), and it becomes immediately fittable via
-# fit_dyad_ts_dev()/fit_panel_dev(stan_model = "<name>"). The registry is
-# intentionally general (not hardcoded to a single entry) so it can later
-# absorb new model variants without a redesign, even though only the
-# `stable` model is currently registered.
+# fit_dyad_ts_dev()/fit_panel_dev(stan_model = "<name>"). `status` is
+# `"stable"` for the single default model (see .BILATR_DEFAULT_MODEL) or
+# `"experimental"` for anything else; exported functions only ever fit the
+# stable one.
 
 .bilatr_stan_models <- list(
   stable = list(
@@ -21,6 +21,41 @@
       "alpha[1] fixed to 1, all other alpha freely estimated."
     ),
     status = "stable"
+  ),
+  alphanorm = list(
+    file = "bilatr_alphanorm.stan",
+    description = paste(
+      "Experimental: closes the affine ridge in stable's identification by",
+      "hard-pinning location (mu_theta0 removed) and normalizing alpha's",
+      "RMS to 1 (sum_to_zero_vector) instead of pinning alpha[1] = 1.",
+      "process_noise's prior is now a ratio to sigma_theta0, not an",
+      "absolute theta-unit quantity -- see header comment; not yet",
+      "prior-predictive calibrated."
+    ),
+    status = "experimental"
+  ),
+  ou = list(
+    file = "bilatr_ou.stan",
+    description = paste(
+      "Experimental: replaces stable's random-walk theta with an OU/AR(1)",
+      "process with dyad-specific equilibria (mu_dyad) and a global",
+      "persistence rho, giving cross-dyad ordering a restoring force.",
+      "stable's identification (alpha[1] = 1, mu_intercept[1] = 0,",
+      "mu_theta_bar) is left untouched so the comparison isolates the",
+      "dynamics; not yet prior-predictive calibrated."
+    ),
+    status = "experimental"
+  ),
+  alphanorm_ou = list(
+    file = "bilatr_alphanorm_ou.stan",
+    description = paste(
+      "Experimental: combines alphanorm's identification (hard location",
+      "pin, RMS-1 alpha normalization) with ou's OU/AR(1) dynamics.",
+      "sd_stat is relative to sigma_mu, so exp(mu_log_sd_stat) is",
+      "directly the within/between-dyad SD ratio; not yet",
+      "prior-predictive calibrated."
+    ),
+    status = "experimental"
   )
 )
 

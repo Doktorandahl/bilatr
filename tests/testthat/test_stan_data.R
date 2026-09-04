@@ -20,6 +20,38 @@ test_that("assemble_stan_data produces correctly shaped D x T x A arrays with 1s
   expect_equal(attr(sd, "event_classes"), as.character(0:4))
 })
 
+test_that("assemble_stan_data() defaults rho_prior_a/b and compute_log_lik, reproducing current behaviour when unset", {
+  events <- make_fake_events()
+  events <- recode_cameo(events, code_col = "EventCode")
+
+  sd_default <- assemble_stan_data(
+    events,
+    years = 2015:2019,
+    resolution = "yearly",
+    grouping_var = "PentaClass",
+    reference_category = 0,
+    min_n_events = 1
+  )
+  expect_equal(sd_default$rho_prior_a, 8)
+  expect_equal(sd_default$rho_prior_b, 2)
+  expect_equal(sd_default$compute_log_lik, 0)
+
+  sd_custom <- assemble_stan_data(
+    events,
+    years = 2015:2019,
+    resolution = "yearly",
+    grouping_var = "PentaClass",
+    reference_category = 0,
+    min_n_events = 1,
+    rho_prior_a = 3,
+    rho_prior_b = 3,
+    compute_log_lik = 1
+  )
+  expect_equal(sd_custom$rho_prior_a, 3)
+  expect_equal(sd_custom$rho_prior_b, 3)
+  expect_equal(sd_custom$compute_log_lik, 1)
+})
+
 test_that("is_obs matches whether any events were observed in that dyad-period", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")

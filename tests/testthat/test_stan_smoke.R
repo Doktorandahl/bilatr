@@ -21,13 +21,56 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # Only the `stable` model is registered now (phi_logn was retired to
-  # inst/stan/legacy/ in 0.3.2).
-  expect_setequal(names(.bilatr_stan_models), "stable")
+  # `stable` plus the three experimental variants added alongside it
+  # (phi_logn was retired to inst/stan/legacy/ in 0.3.2 and is not
+  # registered).
+  expect_setequal(
+    names(.bilatr_stan_models),
+    c("stable", "alphanorm", "ou", "alphanorm_ou")
+  )
 
   for (name in names(.bilatr_stan_models)) {
     mod <- .compile_stan_model(name, opt_level = 1)
     expect_s3_class(mod, "CmdStanModel")
+  }
+})
+
+test_that("every experimental model runs a short fixed-seed sample on real assembled data without erroring", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  events <- make_fake_events()
+  events <- recode_cameo(events, code_col = "EventCode")
+  stan_data <- assemble_stan_data(
+    events,
+    years = 2015:2019,
+    resolution = "yearly",
+    grouping_var = "PentaClass",
+    reference_category = 0,
+    min_n_events = 1
+  )
+
+  experimental_models <- setdiff(names(.bilatr_stan_models), .BILATR_DEFAULT_MODEL)
+  expect_gt(length(experimental_models), 0)
+
+  for (name in experimental_models) {
+    fit <- suppressWarnings(fit_panel_dev(
+      stan_data,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 25,
+      iter_sampling = 5,
+      seed = 1,
+      opt_level = 1,
+      output_dir = tempdir(),
+      stan_model = name,
+      refresh = 0,
+      show_messages = FALSE
+    ))
+    expect_s3_class(fit, "CmdStanMCMC")
+    expect_equal(posterior::ndraws(fit$draws()), 5)
   }
 })
 

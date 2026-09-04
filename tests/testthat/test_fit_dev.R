@@ -58,3 +58,57 @@ test_that("bilatr_init_fn() matches the current parameterization (non-centered p
   expect_false("alpha_hostile" %in% names(init))
   expect_length(init$alpha_raw, stan_data$A - 1)
 })
+
+test_that(".alpha_raw_sum0_init() sums to exactly 0 and is bounded away from the dot_self()=0 degeneracy", {
+  for (A in c(2, 4, 5, 9)) {
+    v <- .alpha_raw_sum0_init(A)
+    expect_length(v, A)
+    expect_equal(sum(v), 0)
+    expect_gt(sum(v^2), 0)
+  }
+})
+
+test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental variant", {
+  stan_data <- list(D = 3, T = 5, A = 4)
+
+  alphanorm_init <- bilatr_init_fn(stan_data, stan_model = "alphanorm")()
+  expect_setequal(
+    names(alphanorm_init),
+    c(
+      "theta_raw", "mu_intercept", "alpha_raw", "sigma_theta0", "z_theta0",
+      "log_process_noise_raw", "mu_log_noise", "sigma_log_noise", "phi",
+      "mu_log_phi", "sigma_log_phi"
+    )
+  )
+  expect_false("mu_theta0" %in% names(alphanorm_init)) # hard-pinned, removed
+  expect_length(alphanorm_init$mu_intercept, stan_data$A) # sum_to_zero_vector[A], not A - 1
+  expect_length(alphanorm_init$alpha_raw, stan_data$A)
+  expect_equal(sum(alphanorm_init$alpha_raw), 0)
+
+  ou_init <- bilatr_init_fn(stan_data, stan_model = "ou")()
+  expect_setequal(
+    names(ou_init),
+    c(
+      "theta_raw", "mu_intercept_raw", "alpha_raw", "mu_theta_bar", "sigma_mu",
+      "mu_dyad_raw", "rho", "mu_log_sd_stat", "sigma_log_sd_stat",
+      "log_sd_stat_raw", "phi", "mu_log_phi", "sigma_log_phi"
+    )
+  )
+  expect_false("mu_theta0" %in% names(ou_init)) # role taken by mu_theta_bar
+  expect_length(ou_init$mu_intercept_raw, stan_data$A - 1) # identification unchanged from stable
+  expect_length(ou_init$mu_dyad_raw, stan_data$D)
+  expect_true(ou_init$rho > 0 && ou_init$rho < 1)
+
+  alphanorm_ou_init <- bilatr_init_fn(stan_data, stan_model = "alphanorm_ou")()
+  expect_setequal(
+    names(alphanorm_ou_init),
+    c(
+      "theta_raw", "mu_intercept", "alpha_raw", "sigma_mu", "mu_dyad_raw",
+      "rho", "mu_log_sd_stat", "sigma_log_sd_stat", "log_sd_stat_raw", "phi",
+      "mu_log_phi", "sigma_log_phi"
+    )
+  )
+  expect_false(any(c("mu_theta0", "mu_theta_bar") %in% names(alphanorm_ou_init))) # location pinned hard
+  expect_length(alphanorm_ou_init$mu_intercept, stan_data$A)
+  expect_equal(sum(alphanorm_ou_init$alpha_raw), 0)
+})

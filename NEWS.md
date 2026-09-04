@@ -1,4 +1,64 @@
 
+# bilatr 0.3.3
+
+## New features
+
+* Added three EXPERIMENTAL Stan model variants (`R/model_registry.R`,
+  `status = "experimental"`), fittable only via
+  `fit_dyad_ts_dev()`/`fit_panel_dev(stan_model = ...)`; the stable model
+  is unchanged and remains the only one the exported fitters use.
+  * `alphanorm` (`inst/stan/bilatr_alphanorm.stan`) targets the residual
+    affine ridge in stable's identification: with `alpha[1] = 1` and
+    `mu_intercept[1] = 0`, location and scale are only softly pinned, and
+    an affine reparameterization of `theta`/`alpha`/`mu_intercept` leaves
+    the likelihood exactly invariant -- inflating posterior intervals and
+    likely contributing to treedepth pathology. `alphanorm` pins location
+    hard (`mu_theta0` removed) and pins scale on the alpha side instead
+    of theta's (`sum_to_zero_vector` alpha, normalized to RMS 1).
+  * `ou` (`inst/stan/bilatr_ou.stan`) targets the stable model's random
+    walk having no restoring force: cross-dyad SD at t=1 is small
+    relative to a panel's worth of accumulated drift, so any dyad can
+    traverse the entire cross-dyad range within a decade and initial
+    ordering carries little information about later ordering -- this is
+    why dyads that should be clearly separated in level can invert during
+    a temporary detente. `ou` replaces the random walk with an OU/AR(1)
+    process with dyad-specific equilibria and a global persistence `rho`,
+    giving cross-dyad ordering a permanent component.
+  * `alphanorm_ou` (`inst/stan/bilatr_alphanorm_ou.stan`) combines both:
+    `alphanorm`'s identification with `ou`'s dynamics.
+  * All three are new and UNCALIBRATED: several priors carry over from
+    stable with materially changed units/meaning (documented per-model in
+    each `.stan` file's header comment), and none has been checked
+    against prior predictive simulation yet.
+
+## Changes
+
+* `assemble_stan_data()` gained `rho_prior_a`/`rho_prior_b` (default `8`,
+  `2`) and `compute_log_lik` (default `0`) arguments, threaded into the
+  returned data list. Consumed only by the three new experimental
+  variants (`rho_prior_a`/`rho_prior_b` by `ou`/`alphanorm_ou`;
+  `compute_log_lik` gates a per-dyad-period `log_lik` in `generated
+  quantities` for all three, off by default since it is `D x T x` draws);
+  ignored by `stable`, so existing callers are unaffected.
+* `bilatr_init_fn()` now branches on `stan_model` to build
+  parameterization-appropriate inits for each registered model, instead
+  of always returning stable's init list regardless of the argument.
+
+## Internal
+
+* The `reduce_sum` likelihood (`partial_log_lik`) shared by all four
+  registered models is no longer duplicated inline in each `.stan` file.
+  Its single canonical source is
+  `inst/stan/include/partial_log_lik.stanfunctions`;
+  `data-raw/sync_stan_functions.R` splices it into a marker-delimited
+  block in each model file (`R/stan_includes.R`), checked for drift by
+  `tests/testthat/test_stan_includes.R`. This is NOT a Stan `#include`:
+  cmdstanr has a bug (upstream issue
+  [stan-dev/cmdstanr#820](https://github.com/stan-dev/cmdstanr/issues/820),
+  fixed but not yet released) where `#include` resolution breaks at
+  `$sample()`-time whenever the include path contains a space, which
+  bites this project's own `devtools::load_all()` working tree.
+
 # bilatr 0.3.2
 
 ## New features

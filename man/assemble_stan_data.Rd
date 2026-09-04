@@ -16,7 +16,10 @@ assemble_stan_data(
   dyad_weight = NULL,
   period_weight = NULL,
   action_weight = NULL,
-  chunk_size = 100
+  chunk_size = 100,
+  rho_prior_a = 8,
+  rho_prior_b = 2,
+  compute_log_lik = 0
 )
 }
 \arguments{
@@ -71,12 +74,25 @@ panel-sized data; smaller panels or single-dyad fits should use a
 smaller value (down to 1) since chunking overhead outweighs the
 benefit below that scale. See \code{\link[=fit_panel]{fit_panel()}} for the corresponding
 \code{threads_per_chain} argument.}
+
+\item{rho_prior_a, rho_prior_b}{Shape parameters of the
+\code{beta(rho_prior_a, rho_prior_b)} prior on the OU/AR(1) persistence
+parameter \code{rho}, consumed only by the experimental \code{ou}/\code{alphanorm_ou}
+Stan model variants (see \code{R/model_registry.R}); ignored by \code{stable}
+and \code{alphanorm}. Default \verb{8, 2} (weighted toward strong persistence).}
+
+\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed only by
+the three experimental variants, gating a per-dyad-period \code{log_lik}
+in \verb{generated quantities}; left off by default since it is \verb{D x T x}
+draws and file size already scales with dyad count. Ignored by
+\code{stable}.}
 }
 \value{
 A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
 \code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{dyad_weight}, \code{period_weight},
-\code{action_weight}. Also carries a \code{dyad_ids} attribute (the output of
+\code{action_weight}, \code{rho_prior_a}, \code{rho_prior_b}, \code{compute_log_lik}.
+Also carries a \code{dyad_ids} attribute (the output of
 \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to posterior draws;
 see \code{\link[=extract_theta]{extract_theta()}}.
 }

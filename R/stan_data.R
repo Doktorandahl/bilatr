@@ -140,10 +140,21 @@ parse_weighted_arg <- function(weighted) {
 #'   smaller value (down to 1) since chunking overhead outweighs the
 #'   benefit below that scale. See [fit_panel()] for the corresponding
 #'   `threads_per_chain` argument.
+#' @param rho_prior_a,rho_prior_b Shape parameters of the
+#'   `beta(rho_prior_a, rho_prior_b)` prior on the OU/AR(1) persistence
+#'   parameter `rho`, consumed only by the experimental `ou`/`alphanorm_ou`
+#'   Stan model variants (see `R/model_registry.R`); ignored by `stable`
+#'   and `alphanorm`. Default `8, 2` (weighted toward strong persistence).
+#' @param compute_log_lik `0` (default) or `1`. Data flag consumed only by
+#'   the three experimental variants, gating a per-dyad-period `log_lik`
+#'   in `generated quantities`; left off by default since it is `D x T x`
+#'   draws and file size already scales with dyad count. Ignored by
+#'   `stable`.
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `dyad_weight`, `period_weight`,
-#'   `action_weight`. Also carries a `dyad_ids` attribute (the output of
+#'   `action_weight`, `rho_prior_a`, `rho_prior_b`, `compute_log_lik`.
+#'   Also carries a `dyad_ids` attribute (the output of
 #'   [make_dyad_ids()]) for reattaching identifiers to posterior draws;
 #'   see [extract_theta()].
 #' @examples
@@ -198,7 +209,10 @@ assemble_stan_data <- function(
   dyad_weight = NULL,
   period_weight = NULL,
   action_weight = NULL,
-  chunk_size = 100
+  chunk_size = 100,
+  rho_prior_a = 8,
+  rho_prior_b = 2,
+  compute_log_lik = 0
 ) {
   resolution <- match.arg(resolution)
 
@@ -260,7 +274,16 @@ assemble_stan_data <- function(
     Y = events_array,
     dyad_weight = dyad_weight,
     period_weight = period_weight,
-    action_weight = action_weight
+    action_weight = action_weight,
+    # Consumed only by the experimental ou/alphanorm_ou variants
+    # (R/model_registry.R); harmless extra entries for stable/alphanorm,
+    # whose Stan programs don't declare them.
+    rho_prior_a = rho_prior_a,
+    rho_prior_b = rho_prior_b,
+    # Consumed only by the three experimental variants; gates a
+    # per-dyad-period `log_lik` in generated quantities (D x T x draws,
+    # so off by default). Ignored by stable.
+    compute_log_lik = compute_log_lik
   )
 
   attr(stan_data, "dyad_ids") <- make_dyad_ids(

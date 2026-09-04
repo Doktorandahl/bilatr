@@ -16,11 +16,11 @@ A zero-argument function suitable for \code{cmdstanr}'s \code{init}
 argument.
 }
 \description{
-Initial values for the \code{stable} model: a non-centered \code{process_noise}
-hierarchy (\code{log_process_noise_raw}), a freely-estimated \code{alpha} (via
-\code{alpha_raw}, length \code{A - 1}), and the per-dyad-constant \code{phi}. The
-\code{stan_model} argument is retained for the \verb{_dev} fitters should another
-variant be registered again; unrecognised names are rejected upstream
-by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}}.
+Initial values are model-specific: \code{stan_model} selects among the
+registered models' distinct parameter sets (a non-centered
+\code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy,
+\code{alpha[1] = 1} vs. \code{sum_to_zero_vector} alpha normalization, etc.).
+Unrecognised names are rejected upstream by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}}, so
+the \code{stop()} below should be unreachable in practice.
 }
 \keyword{internal}

@@ -46,11 +46,11 @@ chain.}
 \code{NULL} for a temporary directory.}
 
 \item{stan_model}{Name of a model registered in \code{.bilatr_stan_models}
-(see \code{R/model_registry.R}). Currently only \code{"stable"} is registered
-(also the default used by the exported \code{\link[=fit_panel]{fit_panel()}}); the argument
-exists so further variants can be added without a signature change.
-Unrecognized names error immediately, before any compilation is
-attempted, listing the currently registered options.}
+(see \code{R/model_registry.R}): \code{"stable"} (also the default used by the
+exported \code{\link[=fit_panel]{fit_panel()}}) or one of the experimental variants
+(\code{"alphanorm"}, \code{"ou"}, \code{"alphanorm_ou"}). Unrecognized names error
+immediately, before any compilation is attempted, listing the
+currently registered options.}
 
 \item{...}{Additional arguments passed to \code{CmdStanModel$sample()}.}
 }

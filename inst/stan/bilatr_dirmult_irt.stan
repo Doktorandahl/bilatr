@@ -25,7 +25,39 @@
 //   - no dyad-specific intercept: cross-dyad level differences are forced
 //     into theta via the global mu_intercept, keeping theta comparable
 //     across dyads
+//
+// The reduce_sum likelihood (partial_log_lik, below) is shared,
+// byte-for-byte, with the experimental variants under this same registry
+// (R/model_registry.R). Its single canonical source is
+// inst/stan/include/partial_log_lik.stanfunctions; the GENERATED block
+// below is spliced in verbatim by data-raw/sync_stan_functions.R (see
+// R/stan_includes.R for why this isn't a plain Stan #include). It is
+// indifferent to how alpha/mu_intercept/theta are constructed, so edit
+// only the canonical source if the likelihood itself changes -- not for
+// a single variant's identification or dynamics, and never hand-edit the
+// generated block directly.
 functions {
+  // <<< BEGIN GENERATED partial_log_lik (source: inst/stan/include/partial_log_lik.stanfunctions) >>>
+  // Do not hand-edit between these markers -- edit the source file
+  // above and rerun `Rscript data-raw/sync_stan_functions.R`
+  // (checked by tests/testthat/test_stan_includes.R).
+  // Shared reduce_sum likelihood for all bilatr Stan model variants.
+  //
+  // Indifferent to how `alpha` and `mu_intercept` were constructed upstream
+  // (fixed-reference vs. sum-to-zero, static vs. OU-derived theta, ...): it
+  // only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
+  // vectors.
+  //
+  // This is the single canonical source. It is NOT included at compile/
+  // sample time via Stan's `#include` (cmdstanr breaks `#include` resolution
+  // at $sample()-time whenever include_paths contains a space -- see
+  // https://github.com/stan-dev/cmdstanr/issues/820 -- which bites this
+  // project's own devtools::load_all() working tree). Instead,
+  // `data-raw/sync_stan_functions.R` splices this file's contents verbatim
+  // into a marker-delimited block in each registered model's `.stan` file;
+  // see `R/stan_includes.R`. Edit only this file, then rerun the sync
+  // script -- do not hand-edit the generated blocks, and do not fork this
+  // file per variant.
   real partial_log_lik(array[] int slice_d,
                         int start, int end,
                         int T, int A,
@@ -54,6 +86,7 @@ functions {
     }
     return lp;
   }
+  // <<< END GENERATED partial_log_lik >>>
 }
 data {
   int<lower=1> T;                            // number of time points

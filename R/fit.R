@@ -71,14 +71,29 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
   .compile_stan_model(.BILATR_DEFAULT_MODEL, opt_level, force_recompile)
 }
 
+#' A sum-to-zero init vector for `sum_to_zero_vector[A]` alpha parameters
+#'
+#' `alphanorm`/`alphanorm_ou` normalize `alpha_raw` by
+#' `sqrt(A / dot_self(alpha_raw))`, so an all-zero init (otherwise the
+#' natural default) would divide by zero. This returns a small-magnitude,
+#' exactly-sum-to-zero vector instead (centered `1:A`, scaled down), away
+#' from that degeneracy without biasing any particular action class.
+#'
+#' @param A Number of action types.
+#' @return A length-`A` numeric vector summing to exactly 0.
+#' @keywords internal
+.alpha_raw_sum0_init <- function(A) {
+  (seq_len(A) - mean(seq_len(A))) * 0.1
+}
+
 #' Build an initial-value generator matching a model's parameterization
 #'
-#' Initial values for the `stable` model: a non-centered `process_noise`
-#' hierarchy (`log_process_noise_raw`), a freely-estimated `alpha` (via
-#' `alpha_raw`, length `A - 1`), and the per-dyad-constant `phi`. The
-#' `stan_model` argument is retained for the `_dev` fitters should another
-#' variant be registered again; unrecognised names are rejected upstream
-#' by [.resolve_stan_model()].
+#' Initial values are model-specific: `stan_model` selects among the
+#' registered models' distinct parameter sets (a non-centered
+#' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy,
+#' `alpha[1] = 1` vs. `sum_to_zero_vector` alpha normalization, etc.).
+#' Unrecognised names are rejected upstream by [.resolve_stan_model()], so
+#' the `stop()` below should be unreachable in practice.
 #'
 #' @param stan_data A Stan data list as returned by [assemble_stan_data()].
 #' @param stan_model Name registered in `.bilatr_stan_models`.
@@ -86,21 +101,77 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #'   argument.
 #' @keywords internal
 bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
-  function() {
-    list(
+  D <- stan_data$D
+  Tn <- stan_data$T
+  A <- stan_data$A
+
+  init_list <- switch(
+    stan_model,
+    stable = list(
       mu_theta0 = 0,
       sigma_theta0 = 0.5,
-      z_theta0 = rep(0, stan_data$D),
-      theta_raw = matrix(0, stan_data$D, stan_data$T),
+      z_theta0 = rep(0, D),
+      theta_raw = matrix(0, D, Tn),
       mu_log_noise = log(0.2),
       sigma_log_noise = 0.3,
       mu_log_phi = 0,
       sigma_log_phi = 0.5,
-      log_process_noise_raw = rep(0, stan_data$D),
-      alpha_raw = rep(0, stan_data$A - 1),
-      mu_intercept_raw = rep(0, stan_data$A - 1),
-      phi = rep(1, stan_data$D)
+      log_process_noise_raw = rep(0, D),
+      alpha_raw = rep(0, A - 1),
+      mu_intercept_raw = rep(0, A - 1),
+      phi = rep(1, D)
+    ),
+    alphanorm = list(
+      theta_raw = matrix(0, D, Tn),
+      mu_intercept = rep(0, A),
+      alpha_raw = .alpha_raw_sum0_init(A),
+      sigma_theta0 = 0.5,
+      z_theta0 = rep(0, D),
+      log_process_noise_raw = rep(0, D),
+      mu_log_noise = log(0.2),
+      sigma_log_noise = 0.3,
+      phi = rep(1, D),
+      mu_log_phi = 0,
+      sigma_log_phi = 0.5
+    ),
+    ou = list(
+      theta_raw = matrix(0, D, Tn),
+      mu_intercept_raw = rep(0, A - 1),
+      alpha_raw = rep(0, A - 1),
+      mu_theta_bar = 0,
+      sigma_mu = 0.5,
+      mu_dyad_raw = rep(0, D),
+      rho = 0.8,
+      mu_log_sd_stat = log(0.5),
+      sigma_log_sd_stat = 0.3,
+      log_sd_stat_raw = rep(0, D),
+      phi = rep(1, D),
+      mu_log_phi = 0,
+      sigma_log_phi = 0.5
+    ),
+    alphanorm_ou = list(
+      theta_raw = matrix(0, D, Tn),
+      mu_intercept = rep(0, A),
+      alpha_raw = .alpha_raw_sum0_init(A),
+      sigma_mu = 0.5,
+      mu_dyad_raw = rep(0, D),
+      rho = 0.8,
+      mu_log_sd_stat = log(1),
+      sigma_log_sd_stat = 0.3,
+      log_sd_stat_raw = rep(0, D),
+      phi = rep(1, D),
+      mu_log_phi = 0,
+      sigma_log_phi = 0.5
+    ),
+    stop(
+      "bilatr_init_fn(): no init generator registered for stan_model '",
+      stan_model, "'.",
+      call. = FALSE
     )
+  )
+
+  function() {
+    init_list
   }
 }
 

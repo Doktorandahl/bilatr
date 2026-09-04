@@ -1,5 +1,8 @@
-test_that("the registry contains exactly the stable model", {
-  expect_setequal(names(.bilatr_stan_models), "stable")
+test_that("the registry contains stable plus the three experimental variants", {
+  expect_setequal(
+    names(.bilatr_stan_models),
+    c("stable", "alphanorm", "ou", "alphanorm_ou")
+  )
   expect_identical(.BILATR_DEFAULT_MODEL, "stable")
   # retired variants must not be registered
   expect_false(any(
@@ -7,10 +10,22 @@ test_that("the registry contains exactly the stable model", {
   ))
 })
 
+test_that("only stable is status 'stable'; the rest are 'experimental'", {
+  statuses <- vapply(.bilatr_stan_models, function(x) x$status, character(1))
+  expect_identical(statuses[["stable"]], "stable")
+  expect_true(all(
+    statuses[setdiff(names(statuses), "stable")] == "experimental"
+  ))
+})
+
 test_that(".resolve_stan_model() resolves valid names to existing files", {
   stable_path <- .resolve_stan_model("stable")
   expect_true(file.exists(stable_path))
   expect_match(stable_path, "bilatr_dirmult_irt\\.stan$")
+
+  expect_match(.resolve_stan_model("alphanorm"), "bilatr_alphanorm\\.stan$")
+  expect_match(.resolve_stan_model("ou"), "bilatr_ou\\.stan$")
+  expect_match(.resolve_stan_model("alphanorm_ou"), "bilatr_alphanorm_ou\\.stan$")
 })
 
 test_that(".resolve_stan_model() errors informatively on an unknown name", {

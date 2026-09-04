@@ -1,0 +1,45 @@
+// Shared reduce_sum likelihood for all bilatr Stan model variants.
+//
+// Indifferent to how `alpha` and `mu_intercept` were constructed upstream
+// (fixed-reference vs. sum-to-zero, static vs. OU-derived theta, ...): it
+// only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
+// vectors.
+//
+// This is the single canonical source. It is NOT included at compile/
+// sample time via Stan's `#include` (cmdstanr breaks `#include` resolution
+// at $sample()-time whenever include_paths contains a space -- see
+// https://github.com/stan-dev/cmdstanr/issues/820 -- which bites this
+// project's own devtools::load_all() working tree). Instead,
+// `data-raw/sync_stan_functions.R` splices this file's contents verbatim
+// into a marker-delimited block in each registered model's `.stan` file;
+// see `R/stan_includes.R`. Edit only this file, then rerun the sync
+// script -- do not hand-edit the generated blocks, and do not fork this
+// file per variant.
+real partial_log_lik(array[] int slice_d,
+                      int start, int end,
+                      int T, int A,
+                      array[,] int is_obs,
+                      array[,,] int Y,
+                      array[,] real theta,
+                      vector mu_intercept,
+                      vector phi,
+                      vector alpha,
+                      vector dyad_weight,
+                      vector period_weight,
+                      vector action_weight) {
+  real lp = 0;
+  for (d in start:end) {
+    for (t in 1:T) {
+      if (is_obs[d, t] == 1) {
+        vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept;
+        vector[A] p = softmax(eta);
+        // action_weight rescales concentration per action type
+        vector[A] conc = phi[d] * (action_weight .* p);
+        // dyad_weight/period_weight scale each dyad-period's contribution
+        lp += dyad_weight[d] * period_weight[t] *
+          dirichlet_multinomial_lpmf(Y[d, t] | conc);
+      }
+    }
+  }
+  return lp;
+}

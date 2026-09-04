@@ -12,6 +12,9 @@ original_code/
 # executables, *.o, *.hpp, *.d, etc.), regardless of which model it's for.
 inst/stan/*
 !inst/stan/*.stan
+!inst/stan/include/
+inst/stan/include/*
+!inst/stan/include/*.stanfunctions
 
 # Retired model sources kept for local reference only, not part of the
 # package (the `inst/stan/*` rule above already covers this, but keep it
