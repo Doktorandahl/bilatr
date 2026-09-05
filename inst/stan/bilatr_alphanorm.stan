@@ -90,6 +90,70 @@
 // directly on theta's cross-dyad SD, playing the scale-anchor role alpha
 // plays here). Not implemented; recorded here as the documented fallback
 // per task instructions, left for a future decision.
+//
+// REFLECTION SYMMETRY -- a SECOND, DISCRETE degeneracy, distinct from the
+// radial one above and exact regardless of alpha_raw's realized value:
+// eta = alpha .* theta - mu_intercept is invariant under the JOINT
+// negation alpha -> -alpha, theta -> -theta (i.e. theta0 -> -theta0,
+// z_theta0 -> -z_theta0, and theta_raw -> -theta_raw at every t),
+// because alpha .* theta is a product of two negations while
+// mu_intercept is untouched. Every prior on the flipped quantities
+// (alpha_raw ~ std_normal(), z_theta0 ~ std_normal(), theta_raw ~
+// std_normal()) is symmetric about 0, so the two mirror modes have
+// exactly equal posterior mass. With mass split 50/50 across two modes,
+// different chains can land in either: Rhat on alpha/theta becomes
+// uninterpretable, and pooled posterior means get pulled toward 0. This
+// is also the explanation for the sign difference previously observed
+// between this model's output and stable's/ou's: those pin
+// alpha[1] = 1, which selects a mode directly; this model removed that
+// pin (see "This variant closes the ridge" above) without replacing
+// what it was doing for sign identification, and evidently landed in
+// the other mode.
+//
+// alpha[1] IS the reference/neutral action class here, not an arbitrary
+// index: assemble_stan_data() (via grouped_events_to_dyad_period()'s
+// `reference_category` argument) already reorders that class to be
+// first in the action dimension before this model ever sees the data
+// (verified directly: with grouping_var = "BilatrClass2",
+// reference_category = 2, `attr(stan_data, "event_classes")[1]` is
+// `"2"`), so no separate index needs to be threaded through as new
+// data -- `alpha[1]` already IS the anchor position.
+//
+// Fixed with a SOFT sign anchor on alpha[1], not a hard one:
+//   target += log_inv_logit(alpha[1] * inv(anchor_scale))
+// (anchor_scale is a NEW data field, default 0.1). This is ~0 when
+// alpha[1] is comfortably positive and ~ -|alpha[1]| / anchor_scale when
+// negative -- it penalizes SIGN only, not magnitude. At alpha[1] ~ 0.786
+// (this model's current fit, in the wrong-sign mode) that's ~7.9 nats of
+// penalty, ample to make the negative-alpha[1] mode posterior-negligible
+// without pulling alpha[1]'s estimated magnitude toward any particular
+// value. Two things deliberately NOT done here, both considered and
+// rejected:
+//   - a hard `alpha[1] <lower=0>` constraint: a boundary the sampler
+//     must approach whenever the true posterior mass sits near 0, which
+//     this one plausibly does
+//   - an informative location prior like alpha[1] ~ normal(0.8, 0.3):
+//     confounds sign-breaking with a magnitude belief, and needs
+//     re-tuning every time the action-class coding scheme changes
+// Also deliberately not done: a second anchor on a hostile class. The
+// symmetry is a discrete two-element group; one constraint removes it
+// entirely. A second constraint would cut a region of parameter space
+// unrelated to this symmetry and would distort alpha, the same failure
+// mode as the two hard alpha anchors tried previously (see stable's
+// history / this model's own "This variant closes the ridge" section).
+//
+// ORIENTATION: positive alpha[1] means higher theta corresponds to
+// better (less hostile) relations at the reference/neutral action class
+// -- matching stable/ou and the package's stated quantity (bilateral
+// relationship quality). Runs from before this anchor was added may be
+// sign-flipped relative to runs after it. To compare them:
+//   FLIP sign:  alpha, theta, theta0, z_theta0, theta_raw
+//   UNCHANGED:  mu_intercept, phi, sigma_theta0, process_noise,
+//               mu_log_noise, sigma_log_noise, mu_log_phi, sigma_log_phi
+// mu_intercept does not flip: alpha .* theta is invariant under the
+// joint negation, so only the theta-side and alpha-side terms change;
+// every scale/dispersion parameter is a positive quantity, not a
+// location, so none of them flip either.
 functions {
   // <<< BEGIN GENERATED partial_log_lik (source: inst/stan/include/partial_log_lik.stanfunctions) >>>
   // Do not hand-edit between these markers -- edit the source file
@@ -176,6 +240,9 @@ data {
   int<lower=0, upper=1> compute_log_lik;     // 1 = also compute per-dyad-period
                                               // log_lik in generated quantities
                                               // (D x T x draws; default 0/off)
+  real<lower=0> anchor_scale;                // soft sign-anchor scale on alpha[1];
+                                              // default 0.1 (see header,
+                                              // "REFLECTION SYMMETRY")
 }
 parameters {
   // Latent states per dyad
@@ -241,6 +308,11 @@ model {
   // load-bearing, not merely regularizing: identifies the radial
   // direction of alpha_raw (see header, "RADIAL DEGENERACY")
   alpha_raw ~ std_normal();
+
+  // soft sign anchor: breaks the alpha/theta reflection symmetry by
+  // penalizing alpha[1] < 0, not by constraining or centering it (see
+  // header, "REFLECTION SYMMETRY")
+  target += log_inv_logit(alpha[1] * inv(anchor_scale));
 
   // likelihood, chunked via reduce_sum
   array[D] int dyad_seq = linspaced_int_array(D, 1, D);

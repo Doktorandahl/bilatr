@@ -150,3 +150,160 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
   # ...but re-running the same (1s) data must be exactly reproducible
   expect_equal(lp_base, logprob_at(data_1s, params))
 })
+
+test_that("alphanorm's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  set.seed(1)
+  D <- 2
+  Tn <- 3
+  A <- 5
+  anchor_scale <- 0.1
+  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+
+  sum0 <- function(x) x - mean(x)
+
+  alpha_raw_pos <- sum0(c(2, stats::rnorm(A - 1, 0, 0.5)))
+  if (alpha_raw_pos[1] < 0) alpha_raw_pos <- -alpha_raw_pos
+
+  params_pos <- list(
+    theta_raw = matrix(stats::rnorm(D * Tn, 0, 0.3), D, Tn),
+    mu_intercept = sum0(stats::rnorm(A, 0, 0.3)),
+    alpha_raw = alpha_raw_pos,
+    sigma_theta0 = 0.6,
+    z_theta0 = stats::rnorm(D, 0, 0.3),
+    log_process_noise_raw = stats::rnorm(D, 0, 0.3),
+    mu_log_noise = log(0.2),
+    sigma_log_noise = 0.3,
+    phi = c(1.2, 0.9),
+    mu_log_phi = 0.05,
+    sigma_log_phi = 0.4
+  )
+
+  # exact mirror image: flip alpha_raw and every theta-side quantity;
+  # mu_intercept and every process/dispersion parameter are untouched,
+  # per the model header's FLIP/UNCHANGED lists
+  params_neg <- params_pos
+  params_neg$alpha_raw <- -params_pos$alpha_raw
+  params_neg$z_theta0 <- -params_pos$z_theta0
+  params_neg$theta_raw <- -params_pos$theta_raw
+
+  mod <- cmdstanr::cmdstan_model(
+    system.file("stan", "bilatr_alphanorm.stan", package = "bilatr"),
+    cpp_options = list(stan_threads = TRUE),
+    compile_model_methods = TRUE,
+    force_recompile = TRUE
+  )
+
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, anchor_scale = anchor_scale
+  )
+
+  logprob_at <- function(params) {
+    fit <- suppressWarnings(mod$sample(
+      data = data_list, chains = 1, iter_warmup = 50, iter_sampling = 5,
+      seed = 1, refresh = 0, threads_per_chain = 1,
+      output_dir = tempdir(), show_messages = FALSE
+    ))
+    fit$init_model_methods(verbose = FALSE)
+    up <- fit$unconstrain_variables(variables = params)
+    fit$log_prob(up, jacobian = TRUE)
+  }
+
+  lp_pos <- logprob_at(params_pos)
+  lp_neg <- logprob_at(params_neg)
+
+  alpha1_pos <- alpha_raw_pos[1] * sqrt(A / sum(alpha_raw_pos^2))
+  expected_gap <- stats::plogis(alpha1_pos / anchor_scale, log.p = TRUE) -
+    stats::plogis(-alpha1_pos / anchor_scale, log.p = TRUE)
+
+  # the base likelihood, every prior, and the sum_to_zero_vector Jacobian
+  # are all exactly invariant under this joint negation (see the model's
+  # header, "REFLECTION SYMMETRY"), so the entire log-prob gap must come
+  # from the anchor term alone
+  expect_equal(lp_pos - lp_neg, expected_gap, tolerance = 1e-6)
+  # and the anchor must actually favor the positive-alpha[1] mode
+  expect_gt(lp_pos, lp_neg)
+})
+
+test_that("alphanorm_ou's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  set.seed(2)
+  D <- 2
+  Tn <- 4
+  A <- 5
+  anchor_scale <- 0.1
+  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+
+  sum0 <- function(x) x - mean(x)
+
+  alpha_raw_pos <- sum0(c(2, stats::rnorm(A - 1, 0, 0.5)))
+  if (alpha_raw_pos[1] < 0) alpha_raw_pos <- -alpha_raw_pos
+
+  params_pos <- list(
+    theta_raw = matrix(stats::rnorm(D * Tn, 0, 0.3), D, Tn),
+    mu_intercept = sum0(stats::rnorm(A, 0, 0.3)),
+    alpha_raw = alpha_raw_pos,
+    sigma_mu = 0.6,
+    mu_dyad_raw = stats::rnorm(D, 0, 0.3),
+    rho = 0.7,
+    mu_log_sd_stat = log(0.8),
+    sigma_log_sd_stat = 0.3,
+    log_sd_stat_raw = stats::rnorm(D, 0, 0.3),
+    phi = c(1.2, 0.9),
+    mu_log_phi = 0.05,
+    sigma_log_phi = 0.4
+  )
+
+  # exact mirror image: flip alpha_raw and every theta-side quantity
+  # (mu_dyad_raw, theta_raw); mu_intercept and every process/dispersion/
+  # ratio parameter are untouched, per the model header's FLIP/UNCHANGED
+  # lists
+  params_neg <- params_pos
+  params_neg$alpha_raw <- -params_pos$alpha_raw
+  params_neg$mu_dyad_raw <- -params_pos$mu_dyad_raw
+  params_neg$theta_raw <- -params_pos$theta_raw
+
+  mod <- cmdstanr::cmdstan_model(
+    system.file("stan", "bilatr_alphanorm_ou.stan", package = "bilatr"),
+    cpp_options = list(stan_threads = TRUE),
+    compile_model_methods = TRUE,
+    force_recompile = TRUE
+  )
+
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, rho_prior_a = 8, rho_prior_b = 2, anchor_scale = anchor_scale
+  )
+
+  logprob_at <- function(params) {
+    fit <- suppressWarnings(mod$sample(
+      data = data_list, chains = 1, iter_warmup = 50, iter_sampling = 5,
+      seed = 1, refresh = 0, threads_per_chain = 1,
+      output_dir = tempdir(), show_messages = FALSE
+    ))
+    fit$init_model_methods(verbose = FALSE)
+    up <- fit$unconstrain_variables(variables = params)
+    fit$log_prob(up, jacobian = TRUE)
+  }
+
+  lp_pos <- logprob_at(params_pos)
+  lp_neg <- logprob_at(params_neg)
+
+  alpha1_pos <- alpha_raw_pos[1] * sqrt(A / sum(alpha_raw_pos^2))
+  expected_gap <- stats::plogis(alpha1_pos / anchor_scale, log.p = TRUE) -
+    stats::plogis(-alpha1_pos / anchor_scale, log.p = TRUE)
+
+  expect_equal(lp_pos - lp_neg, expected_gap, tolerance = 1e-6)
+  expect_gt(lp_pos, lp_neg)
+})

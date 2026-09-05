@@ -19,7 +19,8 @@ assemble_stan_data(
   chunk_size = 100,
   rho_prior_a = 8,
   rho_prior_b = 2,
-  compute_log_lik = 0
+  compute_log_lik = 0,
+  anchor_scale = 0.1
 )
 }
 \arguments{
@@ -86,13 +87,26 @@ the three experimental variants, gating a per-dyad-period \code{log_lik}
 in \verb{generated quantities}; left off by default since it is \verb{D x T x}
 draws and file size already scales with dyad count. Ignored by
 \code{stable}.}
+
+\item{anchor_scale}{Scale of the soft sign anchor
+\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}, consumed
+only by the experimental \code{alphanorm}/\code{alphanorm_ou} Stan model
+variants (see \code{R/model_registry.R}). Those two normalize \code{alpha} via
+a \code{sum_to_zero_vector} with no fixed element, which leaves an exact
+reflection symmetry (\code{alpha}, \code{theta} -> \code{-alpha}, \code{-theta} is
+likelihood-invariant); the anchor breaks it by softly penalizing
+\code{alpha[1] < 0}, so higher \code{theta} orients toward better relations,
+matching \code{stable}/\code{ou}. \code{alpha[1]} is already the reference/neutral
+action class supplied via \code{reference_category} -- no separate index
+is needed. Ignored by \code{stable}/\code{ou}, whose \code{alpha[1] = 1} hard fix
+already selects a mode. Default \code{0.1}.}
 }
 \value{
 A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
 \code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{dyad_weight}, \code{period_weight},
-\code{action_weight}, \code{rho_prior_a}, \code{rho_prior_b}, \code{compute_log_lik}.
-Also carries a \code{dyad_ids} attribute (the output of
+\code{action_weight}, \code{rho_prior_a}, \code{rho_prior_b}, \code{compute_log_lik},
+\code{anchor_scale}. Also carries a \code{dyad_ids} attribute (the output of
 \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to posterior draws;
 see \code{\link[=extract_theta]{extract_theta()}}.
 }

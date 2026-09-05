@@ -28,6 +28,10 @@
       "Experimental: closes the affine ridge in stable's identification by",
       "hard-pinning location (mu_theta0 removed) and normalizing alpha's",
       "RMS to 1 (sum_to_zero_vector) instead of pinning alpha[1] = 1.",
+      "This leaves an exact alpha/theta reflection symmetry (no fixed",
+      "alpha element), broken by a soft sign anchor on alpha[1]",
+      "(anchor_scale data field, default 0.1) oriented so positive alpha[1]",
+      "means better relations, matching stable/ou.",
       "process_noise's prior is now a ratio to sigma_theta0, not an",
       "absolute theta-unit quantity -- see header comment; not yet",
       "prior-predictive calibrated."
@@ -50,7 +54,8 @@
     file = "bilatr_alphanorm_ou.stan",
     description = paste(
       "Experimental: combines alphanorm's identification (hard location",
-      "pin, RMS-1 alpha normalization) with ou's OU/AR(1) dynamics.",
+      "pin, RMS-1 alpha normalization, soft alpha[1] sign anchor via",
+      "anchor_scale) with ou's OU/AR(1) dynamics.",
       "sd_stat is relative to sigma_mu, so exp(mu_log_sd_stat) is",
       "directly the within/between-dyad SD ratio; not yet",
       "prior-predictive calibrated."

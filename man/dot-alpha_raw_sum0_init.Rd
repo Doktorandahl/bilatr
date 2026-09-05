@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit.R
 \name{.alpha_raw_sum0_init}
 \alias{.alpha_raw_sum0_init}
-\title{A sum-to-zero init vector for \code{sum_to_zero_vector[A]} alpha parameters}
+\title{A sum-to-zero init draw for \code{sum_to_zero_vector[A]} alpha parameters}
 \usage{
 .alpha_raw_sum0_init(A)
 }
@@ -10,13 +10,24 @@
 \item{A}{Number of action types.}
 }
 \value{
-A length-\code{A} numeric vector summing to exactly 0.
+A length-\code{A} numeric vector summing to exactly 0, with its
+first element positive.
 }
 \description{
 \code{alphanorm}/\code{alphanorm_ou} normalize \code{alpha_raw} by
 \code{sqrt(A / dot_self(alpha_raw))}, so an all-zero init (otherwise the
-natural default) would divide by zero. This returns a small-magnitude,
-exactly-sum-to-zero vector instead (centered \code{1:A}, scaled down), away
-from that degeneracy without biasing any particular action class.
+natural default) would divide by zero. This draws a small-magnitude
+random vector instead, centered to sum to exactly 0 (required by
+\code{sum_to_zero_vector}'s constrained representation) and away from the
+\code{dot_self(alpha_raw) == 0} degeneracy.
+}
+\details{
+Both models also anchor \code{alpha[1]}'s sign with a soft penalty in the
+model block, breaking an exact reflection symmetry (alpha, theta ->
+-alpha, -theta leaves the likelihood unchanged; see each \code{.stan}
+file's header, "REFLECTION SYMMETRY"). This negates the whole draw
+whenever its first element came out negative, so chains start already
+in the anchored (\code{alpha[1] > 0}) basin rather than needing warmup to
+find it.
 }
 \keyword{internal}

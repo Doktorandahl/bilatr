@@ -150,11 +150,23 @@ parse_weighted_arg <- function(weighted) {
 #'   in `generated quantities`; left off by default since it is `D x T x`
 #'   draws and file size already scales with dyad count. Ignored by
 #'   `stable`.
+#' @param anchor_scale Scale of the soft sign anchor
+#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`, consumed
+#'   only by the experimental `alphanorm`/`alphanorm_ou` Stan model
+#'   variants (see `R/model_registry.R`). Those two normalize `alpha` via
+#'   a `sum_to_zero_vector` with no fixed element, which leaves an exact
+#'   reflection symmetry (`alpha`, `theta` -> `-alpha`, `-theta` is
+#'   likelihood-invariant); the anchor breaks it by softly penalizing
+#'   `alpha[1] < 0`, so higher `theta` orients toward better relations,
+#'   matching `stable`/`ou`. `alpha[1]` is already the reference/neutral
+#'   action class supplied via `reference_category` -- no separate index
+#'   is needed. Ignored by `stable`/`ou`, whose `alpha[1] = 1` hard fix
+#'   already selects a mode. Default `0.1`.
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `dyad_weight`, `period_weight`,
-#'   `action_weight`, `rho_prior_a`, `rho_prior_b`, `compute_log_lik`.
-#'   Also carries a `dyad_ids` attribute (the output of
+#'   `action_weight`, `rho_prior_a`, `rho_prior_b`, `compute_log_lik`,
+#'   `anchor_scale`. Also carries a `dyad_ids` attribute (the output of
 #'   [make_dyad_ids()]) for reattaching identifiers to posterior draws;
 #'   see [extract_theta()].
 #' @examples
@@ -212,7 +224,8 @@ assemble_stan_data <- function(
   chunk_size = 100,
   rho_prior_a = 8,
   rho_prior_b = 2,
-  compute_log_lik = 0
+  compute_log_lik = 0,
+  anchor_scale = 0.1
 ) {
   resolution <- match.arg(resolution)
 
@@ -283,7 +296,11 @@ assemble_stan_data <- function(
     # Consumed only by the three experimental variants; gates a
     # per-dyad-period `log_lik` in generated quantities (D x T x draws,
     # so off by default). Ignored by stable.
-    compute_log_lik = compute_log_lik
+    compute_log_lik = compute_log_lik,
+    # Consumed only by alphanorm/alphanorm_ou: soft sign anchor on
+    # alpha[1], breaking their alpha/theta reflection symmetry. Ignored
+    # by stable/ou (whose alpha[1] = 1 hard fix already breaks it).
+    anchor_scale = anchor_scale
   )
 
   attr(stan_data, "dyad_ids") <- make_dyad_ids(

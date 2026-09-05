@@ -71,19 +71,34 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
   .compile_stan_model(.BILATR_DEFAULT_MODEL, opt_level, force_recompile)
 }
 
-#' A sum-to-zero init vector for `sum_to_zero_vector[A]` alpha parameters
+#' A sum-to-zero init draw for `sum_to_zero_vector[A]` alpha parameters
 #'
 #' `alphanorm`/`alphanorm_ou` normalize `alpha_raw` by
 #' `sqrt(A / dot_self(alpha_raw))`, so an all-zero init (otherwise the
-#' natural default) would divide by zero. This returns a small-magnitude,
-#' exactly-sum-to-zero vector instead (centered `1:A`, scaled down), away
-#' from that degeneracy without biasing any particular action class.
+#' natural default) would divide by zero. This draws a small-magnitude
+#' random vector instead, centered to sum to exactly 0 (required by
+#' `sum_to_zero_vector`'s constrained representation) and away from the
+#' `dot_self(alpha_raw) == 0` degeneracy.
+#'
+#' Both models also anchor `alpha[1]`'s sign with a soft penalty in the
+#' model block, breaking an exact reflection symmetry (alpha, theta ->
+#' -alpha, -theta leaves the likelihood unchanged; see each `.stan`
+#' file's header, "REFLECTION SYMMETRY"). This negates the whole draw
+#' whenever its first element came out negative, so chains start already
+#' in the anchored (`alpha[1] > 0`) basin rather than needing warmup to
+#' find it.
 #'
 #' @param A Number of action types.
-#' @return A length-`A` numeric vector summing to exactly 0.
+#' @return A length-`A` numeric vector summing to exactly 0, with its
+#'   first element positive.
 #' @keywords internal
 .alpha_raw_sum0_init <- function(A) {
-  (seq_len(A) - mean(seq_len(A))) * 0.1
+  v <- stats::rnorm(A, 0, 0.1)
+  v <- v - mean(v)
+  if (v[1] < 0) {
+    v <- -v
+  }
+  v
 }
 
 #' Build an initial-value generator matching a model's parameterization

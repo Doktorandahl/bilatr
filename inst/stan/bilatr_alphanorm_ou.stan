@@ -50,6 +50,46 @@
 //   - rho_prior_a/rho_prior_b (default Beta(8, 2)) and
 //     sigma_log_sd_stat ~ normal(0, 0.5): same as `ou`, same caveat.
 //
+// REFLECTION SYMMETRY -- inherited from `alphanorm` (see that file's
+// header for the full derivation and rationale; this section only
+// restates it in this model's own variable names, since mu_dyad/
+// mu_dyad_raw take the role theta0/z_theta0 play in `alphanorm`). A
+// SECOND, DISCRETE degeneracy, distinct from the radial one above and
+// exact regardless of alpha_raw's realized value: eta = alpha .* theta -
+// mu_intercept is invariant under the JOINT negation alpha -> -alpha,
+// theta -> -theta (i.e. mu_dyad -> -mu_dyad, mu_dyad_raw -> -mu_dyad_raw,
+// and theta_raw -> -theta_raw at every t; the OU recursion
+// theta[t] = mu_dyad + rho*(theta[t-1] - mu_dyad) + process_noise*
+// theta_raw[t] is self-consistent under this joint negation, since rho
+// and process_noise are untouched positive/unsigned quantities). Every
+// prior on the flipped quantities is symmetric about 0, so the two
+// mirror modes have exactly equal posterior mass, with the same
+// Rhat/pooling consequences described in `alphanorm`'s header.
+//
+// alpha[1] IS the reference/neutral action class here (same mechanism as
+// `alphanorm`: assemble_stan_data()'s `reference_category` argument
+// already reorders it to be first, so no new index needs to be passed
+// as data). Fixed the same way, with a SOFT sign anchor:
+//   target += log_inv_logit(alpha[1] * inv(anchor_scale))
+// (anchor_scale is a NEW data field, default 0.1). See `alphanorm`'s
+// header for why this is soft rather than a hard `alpha[1] <lower=0>`
+// constraint or an informative location prior, and why there is only
+// one anchor, not a second one on a hostile class.
+//
+// ORIENTATION: positive alpha[1] means higher theta corresponds to
+// better (less hostile) relations at the reference/neutral action class
+// -- matching stable/ou. Runs from before this anchor was added may be
+// sign-flipped relative to runs after it. To compare them:
+//   FLIP sign:  alpha, theta, mu_dyad, mu_dyad_raw, theta_raw
+//   UNCHANGED:  mu_intercept, phi, sigma_mu, sd_stat, process_noise,
+//               mu_log_sd_stat, sigma_log_sd_stat, rho,
+//               within_between_ratio
+// mu_intercept does not flip: alpha .* theta is invariant under the
+// joint negation, so only the theta-side and alpha-side terms change;
+// every scale/dispersion/ratio quantity above is unsigned, so none of
+// them flip either (within_between_ratio = exp(mu_log_sd_stat) in
+// particular is a ratio of two positive scales, not a location).
+//
 // GENERATED QUANTITIES: within_between_ratio = exp(mu_log_sd_stat)
 // directly (no mean() over dyads needed, unlike `ou`), computed
 // unconditionally (cheap). log_lik gated behind compute_log_lik (D x T x
@@ -143,6 +183,9 @@ data {
   real<lower=0> rho_prior_a;                 // Beta(rho_prior_a, rho_prior_b) on
   real<lower=0> rho_prior_b;                 // rho; default 8, 2 (weighted toward
                                               // strong persistence)
+  real<lower=0> anchor_scale;                // soft sign-anchor scale on alpha[1];
+                                              // default 0.1 (see header,
+                                              // "REFLECTION SYMMETRY")
 }
 parameters {
   array[D, T] real theta_raw;
@@ -209,6 +252,11 @@ model {
   // direction of alpha_raw (see bilatr_alphanorm.stan header,
   // "RADIAL DEGENERACY")
   alpha_raw ~ std_normal();
+
+  // soft sign anchor: breaks the alpha/theta reflection symmetry by
+  // penalizing alpha[1] < 0, not by constraining or centering it (see
+  // header, "REFLECTION SYMMETRY")
+  target += log_inv_logit(alpha[1] * inv(anchor_scale));
 
   // likelihood, chunked via reduce_sum
   array[D] int dyad_seq = linspaced_int_array(D, 1, D);

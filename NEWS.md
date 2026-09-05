@@ -1,4 +1,22 @@
 
+# bilatr 0.3.4
+
+## Changes
+
+* `alphanorm`/`alphanorm_ou` gained a soft sign anchor on `alpha[1]`
+  (`target += log_inv_logit(alpha[1] * inv(anchor_scale))`, new
+  `anchor_scale` data field on `assemble_stan_data()`, default `0.1`),
+  breaking an exact reflection symmetry those two models' identification
+  (`sum_to_zero_vector` alpha with no fixed element) otherwise leaves in
+  place: negating `alpha` together with `theta` and its upstream raw
+  parameters leaves the likelihood and every prior unchanged, so the
+  posterior has two mirror modes of equal mass and chains could land in
+  either, making Rhat on `alpha`/`theta` uninterpretable. The anchor
+  orients the positive mode as canonical, so higher `theta` means better
+  (less hostile) relations, matching `stable`/`ou`. `ou` is unaffected
+  (its hard `alpha[1] = 1` already selects a mode) and does not get this
+  data field.
+
 # bilatr 0.3.3
 
 ## New features

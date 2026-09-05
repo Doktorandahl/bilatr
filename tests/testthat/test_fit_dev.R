@@ -59,12 +59,15 @@ test_that("bilatr_init_fn() matches the current parameterization (non-centered p
   expect_length(init$alpha_raw, stan_data$A - 1)
 })
 
-test_that(".alpha_raw_sum0_init() sums to exactly 0 and is bounded away from the dot_self()=0 degeneracy", {
+test_that(".alpha_raw_sum0_init() sums to exactly 0, is bounded away from the dot_self()=0 degeneracy, and starts in the anchored (alpha[1] > 0) basin", {
   for (A in c(2, 4, 5, 9)) {
-    v <- .alpha_raw_sum0_init(A)
-    expect_length(v, A)
-    expect_equal(sum(v), 0)
-    expect_gt(sum(v^2), 0)
+    for (draw in 1:20) { # repeat: it's a random draw, the guarantees must hold every time
+      v <- .alpha_raw_sum0_init(A)
+      expect_length(v, A)
+      expect_equal(sum(v), 0)
+      expect_gt(sum(v^2), 0)
+      expect_gt(v[1], 0)
+    }
   }
 })
 
@@ -84,6 +87,7 @@ test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental 
   expect_length(alphanorm_init$mu_intercept, stan_data$A) # sum_to_zero_vector[A], not A - 1
   expect_length(alphanorm_init$alpha_raw, stan_data$A)
   expect_equal(sum(alphanorm_init$alpha_raw), 0)
+  expect_gt(alphanorm_init$alpha_raw[1], 0) # starts in the anchored basin
 
   ou_init <- bilatr_init_fn(stan_data, stan_model = "ou")()
   expect_setequal(
@@ -111,4 +115,5 @@ test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental 
   expect_false(any(c("mu_theta0", "mu_theta_bar") %in% names(alphanorm_ou_init))) # location pinned hard
   expect_length(alphanorm_ou_init$mu_intercept, stan_data$A)
   expect_equal(sum(alphanorm_ou_init$alpha_raw), 0)
+  expect_gt(alphanorm_ou_init$alpha_raw[1], 0) # starts in the anchored basin
 })
