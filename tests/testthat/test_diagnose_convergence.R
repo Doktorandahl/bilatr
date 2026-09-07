@@ -1,3 +1,36 @@
+# --- fixture for the CSV-file-path branch: a real, tiny multi-chain
+# CmdStan run, since read_cmdstan_csv()/cmdstanr:::read_csv_metadata()
+# need real CmdStan CSV files, not a hand-built posterior::draws_array
+# like make_fake_draws() above. D/T/A are kept small (a few dozen
+# variables spanning all three tiers) purely to keep the test fast; the
+# chunking logic itself is exercised via a deliberately tiny chunk_size/
+# max_memory_mb, not by the fixture's own size.
+make_csv_diagnostics_fixture <- function() {
+  set.seed(1)
+  D <- 6
+  Tn <- 4
+  A <- 4
+  Y <- array(sample(0:6, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A)
+  )
+  mod <- compile_bilatr_model(opt_level = 1)
+  outdir <- tempfile()
+  dir.create(outdir)
+  fit <- suppressWarnings(mod$sample(
+    data = data_list, chains = 2, parallel_chains = 2,
+    iter_warmup = 30, iter_sampling = 15, seed = 1, refresh = 0,
+    output_dir = outdir, show_messages = FALSE, threads_per_chain = 1
+  ))
+  list(
+    fit = fit,
+    csv_files = list.files(outdir, pattern = "\\.csv$", full.names = TRUE),
+    n_dt = tibble::tibble(dyad_id = seq_len(D), n_dt = apply(Y, 1, sum))
+  )
+}
+
 make_fake_draws <- function() {
   set.seed(1)
   n_iter <- 400
@@ -260,4 +293,137 @@ test_that("print.bilatr_diagnostics() always prints flagged Tier 1 rows in full"
   expect_true(any(grepl("Tier 1", out)))
   expect_true(any(grepl("Tier 2", out)))
   expect_true(any(grepl("Tier 3", out)))
+})
+
+# --- CSV-path chunking helpers (pure functions, no Stan needed) ---------
+
+test_that(".dot_name_to_bracket() converts CmdStan raw CSV names to posterior form", {
+  expect_equal(.dot_name_to_bracket("lp__"), "lp__")
+  expect_equal(.dot_name_to_bracket("sigma_theta0"), "sigma_theta0")
+  expect_equal(.dot_name_to_bracket("phi.3"), "phi[3]")
+  expect_equal(.dot_name_to_bracket("theta_raw.3.12"), "theta_raw[3,12]")
+})
+
+test_that(".compute_chunk_size() derives a sensible size from a memory budget and scales with n_workers under parallel", {
+  seq_size <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, max_memory_mb = 100,
+    n_workers = 1, parallel = FALSE
+  )
+  expect_gt(seq_size, 0)
+
+  par_size <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, max_memory_mb = 100,
+    n_workers = 4, parallel = TRUE
+  )
+  # same budget spread across 4 concurrently-resident chunks -> ~1/4 the
+  # size (not exactly floor(seq_size / 4): floor() is applied at two
+  # different denominators, so a small integer-rounding slack is expected)
+  expect_lt(abs(seq_size - par_size * 4), 4)
+})
+
+test_that(".compute_chunk_size() clamps to 1 and warns when the budget is too tight", {
+  expect_warning(
+    size <- .compute_chunk_size(
+      n_draws = 1e6, n_chains = 4, max_memory_mb = 1e-6,
+      n_workers = 1, parallel = FALSE
+    ),
+    "too tight"
+  )
+  expect_equal(size, 1L)
+})
+
+test_that(".estimate_diagnostics_memory_mb() and .compute_chunk_size() invert each other", {
+  n_draws <- 500
+  n_chains <- 4
+  budget <- 250
+  chunk_size <- .compute_chunk_size(n_draws, n_chains, budget, n_workers = 1, parallel = FALSE)
+  est <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size, n_workers = 1, parallel = FALSE)
+  expect_lte(est, budget)
+  # one variable larger should just barely exceed the budget (floor() was tight)
+  est_next <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size + 1L, n_workers = 1, parallel = FALSE)
+  expect_gt(est_next, budget)
+})
+
+# --- CSV-path integration: chunked reading against a real CmdStan run ----
+
+test_that("diagnose_convergence() from CSV files matches the in-memory path exactly, chunked and unchunked", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  # low-ESS warnings are expected noise from this fixture's tiny (15) draw
+  # count, unrelated to what's under test here
+  diag_mem <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, tiers = 1:3))
+
+  # forced small chunk_size -> many chunks
+  diag_csv_chunked <- suppressWarnings(suppressMessages(diagnose_convergence(
+    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3
+  )))
+  expect_equal(dplyr::arrange(diag_mem$tier1, variable), dplyr::arrange(diag_csv_chunked$tier1, variable))
+  expect_equal(dplyr::arrange(diag_mem$tier2, dyad_id), dplyr::arrange(diag_csv_chunked$tier2, dyad_id))
+  expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_chunked$tier3, dyad_id))
+
+  # default max_memory_mb -> everything fits in one chunk for this tiny fixture
+  diag_csv_unchunked <- suppressWarnings(suppressMessages(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 1:3)))
+  expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_unchunked$tier3, dyad_id))
+
+  # tier labels survive chunking: same dyads, same columns as the in-memory path
+  expect_equal(sort(diag_csv_chunked$tier2$dyad_id), sort(diag_mem$tier2$dyad_id))
+  expect_setequal(names(diag_csv_chunked$tier3), names(diag_mem$tier3))
+})
+
+test_that("diagnose_convergence() from CSV files: parallel and sequential chunk processing agree numerically", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+
+  diag_seq <- suppressWarnings(suppressMessages(diagnose_convergence(
+    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = FALSE
+  )))
+  old_plan <- future::plan()
+  diag_par <- suppressWarnings(suppressMessages(diagnose_convergence(
+    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = TRUE, n_workers = 2
+  )))
+
+  expect_equal(dplyr::arrange(diag_seq$tier3, dyad_id), dplyr::arrange(diag_par$tier3, dyad_id))
+  # the parallel call must not permanently change the caller's future plan
+  expect_equal(class(future::plan()), class(old_plan))
+})
+
+test_that("diagnose_convergence() from CSV files respects tiers = 1 (no n_dt, no Tier 3 read at all)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  diag <- suppressWarnings(suppressMessages(diagnose_convergence(fx$csv_files, tiers = 1)))
+
+  expect_false(is.null(diag$tier1))
+  expect_null(diag$tier2)
+  expect_null(diag$tier3)
+})
+
+test_that("diagnose_convergence() from CSV files messages about the max_memory_mb default only when it's left unset", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+
+  expect_message(
+    suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 3, chunk_size = 3)),
+    "Using the default max_memory_mb"
+  )
+  expect_no_message(
+    suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 3, chunk_size = 3, max_memory_mb = 8192)),
+    message = "Using the default max_memory_mb"
+  )
+  # the per-run memory-estimate message still fires either way
+  expect_message(
+    suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 3, chunk_size = 3, max_memory_mb = 8192)),
+    "estimated peak memory"
+  )
 })

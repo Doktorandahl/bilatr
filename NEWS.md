@@ -1,4 +1,27 @@
 
+# bilatr 0.3.6
+
+## Changes
+
+* `diagnose_convergence()`'s `fit` argument now also accepts a character
+  vector of raw CmdStan CSV file paths (one per chain), for diagnosing a
+  completed run without loading it into memory first via
+  `cmdstanr::as_cmdstan_fit()`. In this mode, Tier 1/2 variables are read
+  in one small call as before, but Tier 3 (`theta`/`theta_raw`, typically
+  the overwhelming majority of monitored quantities for production-sized
+  panels) is read and summarised in memory-bounded chunks via
+  `cmdstanr::read_cmdstan_csv()`'s `variables` argument, discarding each
+  chunk's draws before reading the next -- the full draws array is never
+  materialized at once. New arguments `max_memory_mb` (default `8192`;
+  drives an automatically-derived chunk size, so callers don't have to
+  guess a variable count directly), `chunk_size` (explicit override),
+  `parallel` (process chunks concurrently via `furrr::future_map_dfr()`;
+  trades the sequential path's memory bound for wall-clock speed, and
+  falls back from `future::multicore` to `future::multisession` with a
+  warning on Windows), and `n_workers`. Existing calls (an in-memory fit
+  or draws object, the previous signature) are unaffected -- the new
+  arguments are unused on that path.
+
 # bilatr 0.3.5
 
 ## Changes

@@ -266,101 +266,27 @@
     dplyr::arrange(dyad_id)
 }
 
-#' Triage MCMC convergence diagnostics by parameter tier
+#' Assemble a `bilatr_diagnostics` object from a tier-classified summary
 #'
-#' Runs [posterior::summarise_draws()] over a fitted `bilatr` model and
-#' splits the result into three diagnostic tiers before applying Rhat/ESS
-#' thresholds, so that pathologies in global/shared parameters are never
-#' masked by the wide, poorly-identified posteriors expected for
-#' sparsely-observed dyads. See `vignette("diagnostics")` for a worked
-#' example and the rationale behind the tiering.
+#' Shared by both branches of [diagnose_convergence()] (in-memory fit and
+#' raw CmdStan CSV files): everything past "we now have a
+#' `summarise_draws()`-shaped tibble with `tier`/`dyad_id`/`time_index`
+#' columns joined on" is identical regardless of how that tibble was
+#' produced, so it lives here once rather than being duplicated per
+#' branch.
 #'
-#' Tier 1 (global/shared parameters plus `lp__`) is always reported in
-#' full and never summarized away. Tier 2 (per-dyad hierarchical
-#' parameters, e.g. `phi`, `process_noise`, `theta0`) and Tier 3
-#' (per-dyad-period latent states, e.g. `theta`, `theta_raw`) are joined
-#' against `n_dt` and screened for dyads whose diagnostics are worse than
-#' a smooth degradation-with-sparsity trend predicts (see
-#' [.flag_worse_than_expected]), so sparse-but-unremarkable dyads don't
-#' flood the report. See [.classify_bilatr_tier] for how parameter names
-#' are assigned to tiers.
-#'
-#' `tiers` limits *which* of these are computed at all: quantities not
-#' assigned to a requested tier are dropped before
-#' [posterior::summarise_draws()] ever runs on them (via
-#' [posterior::subset_draws()]), rather than just being hidden afterward.
-#' This matters in practice because Tier 3 (`theta`/`theta_raw`) typically
-#' has, by far, the most monitored quantities of the three tiers (one per
-#' dyad-period); requesting only `tiers = 1` or `tiers = 1:2` skips
-#' computing Rhat/ESS for all of them.
-#'
-#' @param fit A `CmdStanMCMC`/`CmdStanFit`-like fit object (anything with
-#'   a `$draws()` method), or a `posterior::draws_array`/`draws_df`.
-#' @param n_dt A data frame with a dyad-id column (matching `"dyad..."`)
-#'   and an observation-count column (matching `"n_dt"`/`"n_obs"`/
-#'   `"n_events"`), or a named numeric vector of counts keyed by dyad id.
-#'   Only required when `tiers` includes `2` and/or `3` (Tier 1 has no
-#'   per-dyad structure to join against `n_dt`).
-#' @param rhat_threshold Rhat values strictly above this are flagged.
-#'   Defaults to `1.01` (Vehtari et al. 2021).
-#' @param ess_threshold ESS_bulk/ESS_tail values strictly below this are
-#'   flagged. Defaults to `400` (Vehtari et al. 2021).
-#' @param tiers Integer vector, a subset of `1:3`, naming which tier(s) to
-#'   compute: `1` (global/shared), `2` (per-dyad hierarchical parameters),
-#'   `3` (per-dyad-period latent states). Defaults to `1:3` (all tiers).
-#'   A tier not requested is left as `NULL` in the returned object rather
-#'   than an empty tibble, so `is.null(diag$tier3)` distinguishes "not
-#'   computed" from "computed, nothing to report".
-#' @return A list of class `bilatr_diagnostics` with elements:
-#'   \describe{
-#'     \item{tier1}{Tibble of global/shared diagnostics, one row per
-#'       monitored quantity, with a `flagged` column; `NULL` if `1` was
-#'       not in `tiers`.}
-#'     \item{tier2}{Tibble with one row per dyad found in `n_dt` (or in
-#'       the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
-#'       and a `worse_than_expected` column; `NULL` if `2` was not in
-#'       `tiers`.}
-#'     \item{tier3}{Tibble with one row per dyad summarizing its
-#'       per-dyad-period latent-state diagnostics (min ESS, share of
-#'       entries breaching thresholds); `NULL` if `3` was not in `tiers`.}
-#'     \item{summary}{A short named list of headline counts (see
-#'       [print.bilatr_diagnostics]).}
-#'   }
-#' @examples
-#' \dontrun{
-#' diag <- diagnose_convergence(fit, n_dt = dplyr::count(events, dyad, wt = 1))
-#' diag
-#' diag$tier1
-#'
-#' # only the cheap, always-important global/shared parameters, and no
-#' # need to supply n_dt at all:
-#' diagnose_convergence(fit, tiers = 1)
-#' }
-#' @export
-diagnose_convergence <- function(
-  fit,
-  n_dt = NULL,
-  rhat_threshold = 1.01,
-  ess_threshold = 400,
-  tiers = 1:3
-) {
-  tiers <- .validate_tiers(tiers)
-  if (any(c(2L, 3L) %in% tiers) && is.null(n_dt)) {
-    stop(
-      "`n_dt` is required when `tiers` includes 2 and/or 3 (Tier 1 alone ",
-      "needs no per-dyad join).",
-      call. = FALSE
-    )
-  }
-
-  draws <- if (posterior::is_draws(fit)) fit else fit$draws()
-  var_tiers <- .classify_bilatr_tier(posterior::variables(draws))
-  keep_vars <- var_tiers$variable[var_tiers$tier %in% tiers]
-  summ <- posterior::summarise_draws(posterior::subset_draws(draws, variable = keep_vars))
-  summ <- dplyr::left_join(summ, var_tiers, by = "variable")
-
-  n_dt_tbl <- if (any(c(2L, 3L) %in% tiers)) .normalize_n_dt(n_dt) else NULL
-
+#' @param summ A tibble as produced by [posterior::summarise_draws()],
+#'   left-joined with [.classify_bilatr_tier]'s `tier`/`dyad_id`/
+#'   `time_index` columns.
+#' @param n_dt_tbl Output of [.normalize_n_dt], or `NULL` if `tiers`
+#'   excludes both 2 and 3.
+#' @param tiers Validated (via [.validate_tiers]) tiers to compute.
+#' @param rhat_threshold,ess_threshold See [diagnose_convergence()].
+#' @return A list of class `bilatr_diagnostics`; see
+#'   [diagnose_convergence()]'s `@return` for the element-by-element
+#'   description.
+#' @keywords internal
+.assemble_bilatr_diagnostics <- function(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold) {
   tier1 <- if (1L %in% tiers) .compute_tier1(summ, rhat_threshold, ess_threshold) else NULL
   tier2_result <- if (2L %in% tiers) .compute_tier2(summ, n_dt_tbl) else NULL
   tier2 <- tier2_result$tier2
@@ -388,6 +314,401 @@ diagnose_convergence <- function(
     list(tier1 = tier1, tier2 = tier2, tier3 = tier3, summary = summary_info),
     class = "bilatr_diagnostics"
   )
+}
+
+#' Convert a CmdStan raw CSV dot-index name to posterior bracket-index form
+#'
+#' `"theta.3.12"` -> `"theta[3,12]"`; `"lp__"` (no indices) -> `"lp__"`
+#' unchanged. Safe because Stan identifiers cannot themselves contain a
+#' dot, so the first dot-separated segment is always the base name and
+#' any remaining segments are always indices.
+#'
+#' @param name A single CmdStan raw CSV column name.
+#' @return The equivalent posterior/bracket-style name.
+#' @keywords internal
+.dot_name_to_bracket <- function(name) {
+  parts <- strsplit(name, ".", fixed = TRUE)[[1]]
+  if (length(parts) == 1) {
+    return(name)
+  }
+  paste0(parts[1], "[", paste(parts[-1], collapse = ","), "]")
+}
+
+#' Get posterior-style variable names from a CmdStan CSV without reading
+#' any draws
+#'
+#' Uses `cmdstanr:::read_csv_metadata()` (unexported -- if a future
+#' cmdstanr release changes or removes it, this needs revisiting), which
+#' scans a CSV's header/comment lines only. This bounds R's memory
+#' regardless of file size (draws are never touched), though not
+#' necessarily wall-clock time on a very large file, since the scan is
+#' still sequential over the whole file on disk.
+#'
+#' @param csv_file A single CmdStan CSV file path (any one chain's file;
+#'   variable structure is identical across chains of the same run).
+#' @return Character vector of variable names in posterior/bracket form.
+#' @keywords internal
+.stan_csv_variable_names <- function(csv_file) {
+  meta <- cmdstanr:::read_csv_metadata(csv_file)
+  vapply(meta$variables, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
+}
+
+#' Cheaply get per-chain draw count and chain count from CmdStan CSVs
+#'
+#' `n_draws` comes from the same header-only metadata read as
+#' [.stan_csv_variable_names]; `n_chains` is simply `length(csv_files)`
+#' (one file per chain, per this package's own SLURM submission
+#' convention -- see `runscripts/submit_bilatr_runs.R`), not the
+#' `num_chains` metadata field, which records only the single chain each
+#' individual CSV file's own run was configured for.
+#'
+#' @param csv_files Character vector of CmdStan CSV file paths.
+#' @return A list with `n_draws` and `n_chains`.
+#' @keywords internal
+.stan_csv_dims <- function(csv_files) {
+  meta <- cmdstanr:::read_csv_metadata(csv_files[1])
+  list(n_draws = meta$iter_sampling, n_chains = length(csv_files))
+}
+
+#' Derive a Tier 3 chunk size (variables per chunk) from a memory budget
+#'
+#' Solves, for `chunk_size`, the same memory model
+#' [.estimate_diagnostics_memory_mb] reports in the other direction:
+#' peak memory (MB) ~= `n_draws * n_chains * chunk_size * 8 bytes *
+#' overhead_factor * (n_workers if parallel else 1) / 1e6`.
+#' `overhead_factor` (default `2`) is a fixed safety margin for
+#' `read_cmdstan_csv()`'s intermediate structures and
+#' `summarise_draws()`'s own working memory, which a raw
+#' 8-bytes-per-double count understates -- this is meant as a
+#' sanity-check number, not a guarantee (see `max_memory_mb` in
+#' [diagnose_convergence()]'s documentation).
+#'
+#' @param n_draws,n_chains From [.stan_csv_dims].
+#' @param max_memory_mb See [diagnose_convergence()].
+#' @param n_workers,parallel See [diagnose_convergence()].
+#' @param overhead_factor Fixed safety multiplier; not user-facing.
+#' @return Integer chunk size, at least `1`.
+#' @keywords internal
+.compute_chunk_size <- function(n_draws, n_chains, max_memory_mb, n_workers, parallel, overhead_factor = 2) {
+  denom <- n_draws * n_chains * 8 * overhead_factor * (if (parallel) n_workers else 1)
+  chunk_size <- floor((max_memory_mb * 1e6) / denom)
+  if (chunk_size < 1) {
+    warning(
+      "max_memory_mb (", max_memory_mb, ") is too tight to fit even 1 ",
+      "variable per chunk at this n_draws/n_chains/n_workers combination; ",
+      "using chunk_size = 1. Per-chunk read overhead will dominate runtime.",
+      call. = FALSE
+    )
+    chunk_size <- 1L
+  }
+  as.integer(chunk_size)
+}
+
+#' Estimate peak memory (MB) for a given Tier 3 chunk size
+#'
+#' The same memory model as [.compute_chunk_size], used in the other
+#' direction (chunk size known, want the resulting estimate) for the
+#' pre-flight `message()` in [diagnose_convergence()].
+#'
+#' @inheritParams .compute_chunk_size
+#' @param chunk_size Variables per chunk.
+#' @return Estimated peak memory in MB.
+#' @keywords internal
+.estimate_diagnostics_memory_mb <- function(n_draws, n_chains, chunk_size, n_workers, parallel, overhead_factor = 2) {
+  bytes <- n_draws * n_chains * chunk_size * 8 * overhead_factor * (if (parallel) n_workers else 1)
+  bytes / 1e6
+}
+
+#' Summarise Tier 3 variables in memory-bounded chunks
+#'
+#' Reads and summarises `variables` in groups of `chunk_size`, discarding
+#' each chunk's draws before moving to the next -- this is what keeps
+#' peak memory bounded regardless of how many Tier 3 variables there are
+#' in total. `parallel = TRUE` processes chunks concurrently via
+#' `furrr::future_map_dfr()`, trading the sequential path's memory bound
+#' (now multiplied by `n_workers`, since that many chunks are in memory
+#' at once) for wall-clock speed. The active `future::plan()` is saved
+#' and restored on exit, so this never permanently changes the caller's
+#' parallel backend.
+#'
+#' @param csv_files Character vector of CmdStan CSV file paths.
+#' @param variables Character vector of Tier 3 variable names to
+#'   summarise.
+#' @param chunk_size Variables per chunk.
+#' @param parallel,n_workers See [diagnose_convergence()].
+#' @return A tibble, the row-bound [posterior::summarise_draws()] output
+#'   across all chunks.
+#' @keywords internal
+.summarise_tier3_chunked <- function(csv_files, variables, chunk_size, parallel, n_workers) {
+  chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
+
+  summarise_one_chunk <- function(chunk_vars) {
+    draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = chunk_vars)$post_warmup_draws
+    posterior::summarise_draws(draws)
+  }
+
+  if (!parallel) {
+    return(purrr::map_dfr(chunks, summarise_one_chunk))
+  }
+
+  old_plan <- future::plan()
+  on.exit(future::plan(old_plan), add = TRUE)
+
+  if (.Platform$OS.type == "unix") {
+    future::plan(future::multicore, workers = n_workers)
+  } else {
+    warning(
+      "parallel = TRUE on Windows falls back to future::multisession, ",
+      "which copies data to each worker rather than sharing it via ",
+      "copy-on-write (unlike future::multicore on Unix-like systems); ",
+      "peak memory will run higher than the max_memory_mb estimate ",
+      "assumes. Consider parallel = FALSE if memory is tight.",
+      call. = FALSE
+    )
+    future::plan(future::multisession, workers = n_workers)
+  }
+
+  furrr::future_map_dfr(chunks, summarise_one_chunk)
+}
+
+#' Build the tier-classified summary tibble directly from raw CmdStan CSVs
+#'
+#' The CSV-path counterpart of the in-memory branch in
+#' [diagnose_convergence()]: reads only Tier 1/2 variables in one small
+#' read (cheap, as today), and Tier 3 variables (typically, by far, the
+#' most numerous of the three tiers) in memory-bounded chunks via
+#' [.summarise_tier3_chunked]. Never materializes the full multi-chain
+#' draws array in memory, unlike the in-memory branch, which necessarily
+#' receives an already-fully-read `fit`.
+#'
+#' @param csv_files Character vector of CmdStan CSV file paths.
+#' @param tiers,max_memory_mb,chunk_size,parallel,n_workers See
+#'   [diagnose_convergence()].
+#' @param max_memory_mb_missing Whether the caller left `max_memory_mb`
+#'   at its default (via `missing()` in [diagnose_convergence()]) --
+#'   gates the one-time "this is a default, not a calibrated value"
+#'   message.
+#' @return A tibble in the same shape [diagnose_convergence()]'s
+#'   in-memory branch produces: [posterior::summarise_draws()] columns
+#'   left-joined with [.classify_bilatr_tier]'s `tier`/`dyad_id`/
+#'   `time_index`.
+#' @keywords internal
+.read_diagnostics_summary_from_csv <- function(
+  csv_files, tiers, max_memory_mb, chunk_size, parallel, n_workers,
+  max_memory_mb_missing
+) {
+  all_vars <- .stan_csv_variable_names(csv_files[1])
+  var_tiers <- .classify_bilatr_tier(all_vars)
+  keep_tiers <- var_tiers[var_tiers$tier %in% tiers, ]
+
+  tier12_vars <- keep_tiers$variable[keep_tiers$tier %in% c(1L, 2L)]
+  tier3_vars <- keep_tiers$variable[keep_tiers$tier == 3L]
+
+  tier12_summ <- if (length(tier12_vars) > 0) {
+    draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = tier12_vars)$post_warmup_draws
+    posterior::summarise_draws(draws)
+  } else {
+    NULL
+  }
+
+  tier3_summ <- if (length(tier3_vars) > 0) {
+    dims <- .stan_csv_dims(csv_files)
+
+    if (max_memory_mb_missing) {
+      message(
+        "Using the default max_memory_mb = ", max_memory_mb, " (",
+        round(max_memory_mb / 1024, 1), " GB). If Tier 3 diagnostics is ",
+        "very slow, this argument may need adjusting: raise it if you ",
+        "have memory headroom to spare (fewer, larger chunks), or lower ",
+        "it if memory is tight."
+      )
+    }
+
+    chunk_size_used <- chunk_size %||% .compute_chunk_size(
+      n_draws = dims$n_draws, n_chains = dims$n_chains,
+      max_memory_mb = max_memory_mb, n_workers = n_workers, parallel = parallel
+    )
+
+    est_mb <- .estimate_diagnostics_memory_mb(
+      n_draws = dims$n_draws, n_chains = dims$n_chains,
+      chunk_size = chunk_size_used, n_workers = n_workers, parallel = parallel
+    )
+    message(
+      "Tier 3: ", length(tier3_vars), " variable(s) in ",
+      ceiling(length(tier3_vars) / chunk_size_used), " chunk(s) of ",
+      chunk_size_used, " variable(s) each; estimated peak memory ~",
+      round(est_mb), " MB",
+      if (parallel) paste0(" across ", n_workers, " worker(s)") else "", "."
+    )
+
+    .summarise_tier3_chunked(csv_files, tier3_vars, chunk_size_used, parallel, n_workers)
+  } else {
+    NULL
+  }
+
+  summ_raw <- dplyr::bind_rows(tier12_summ, tier3_summ)
+  dplyr::left_join(summ_raw, var_tiers, by = "variable")
+}
+
+#' Triage MCMC convergence diagnostics by parameter tier
+#'
+#' Runs [posterior::summarise_draws()] over a fitted `bilatr` model and
+#' splits the result into three diagnostic tiers before applying Rhat/ESS
+#' thresholds, so that pathologies in global/shared parameters are never
+#' masked by the wide, poorly-identified posteriors expected for
+#' sparsely-observed dyads. See `vignette("diagnostics")` for a worked
+#' example and the rationale behind the tiering.
+#'
+#' Tier 1 (global/shared parameters plus `lp__`) is always reported in
+#' full and never summarized away. Tier 2 (per-dyad hierarchical
+#' parameters, e.g. `phi`, `process_noise`, `theta0`) and Tier 3
+#' (per-dyad-period latent states, e.g. `theta`, `theta_raw`) are joined
+#' against `n_dt` and screened for dyads whose diagnostics are worse than
+#' a smooth degradation-with-sparsity trend predicts (see
+#' [.flag_worse_than_expected]), so sparse-but-unremarkable dyads don't
+#' flood the report. See [.classify_bilatr_tier] for how parameter names
+#' are assigned to tiers.
+#'
+#' `tiers` limits *which* of these are computed at all: quantities not
+#' assigned to a requested tier are never read into memory in the first
+#' place (see `fit` below), rather than being read and then hidden. This
+#' matters in practice because Tier 3 (`theta`/`theta_raw`) typically
+#' has, by far, the most monitored quantities of the three tiers (one per
+#' dyad-period); requesting only `tiers = 1` or `tiers = 1:2` skips
+#' reading/computing Rhat/ESS for all of them.
+#'
+#' @param fit Either (a) a `CmdStanMCMC`/`CmdStanFit`-like fit object
+#'   (anything with a `$draws()` method) or a `posterior::draws_array`/
+#'   `draws_df` -- the whole object is already in memory, so `tiers`
+#'   controls what gets summarised but not what gets read, and
+#'   `max_memory_mb`/`chunk_size`/`parallel`/`n_workers` are unused; or
+#'   (b) a character vector of raw CmdStan CSV file paths (one per
+#'   chain, e.g. from a completed SLURM run never loaded into this R
+#'   session) -- in this case Tier 1/2 variables are read in one small
+#'   call, and Tier 3 variables (typically the overwhelming majority for
+#'   production-sized panels) are read and summarised in memory-bounded
+#'   chunks via [cmdstanr::read_cmdstan_csv()]'s `variables` argument,
+#'   discarding each chunk's draws before moving to the next, so the
+#'   full draws array is never materialized at once. This is the path
+#'   that matters for production Stan output too large to read normally
+#'   (tested against panels with millions of Tier 3 columns).
+#' @param n_dt A data frame with a dyad-id column (matching `"dyad..."`)
+#'   and an observation-count column (matching `"n_dt"`/`"n_obs"`/
+#'   `"n_events"`), or a named numeric vector of counts keyed by dyad id.
+#'   Only required when `tiers` includes `2` and/or `3` (Tier 1 has no
+#'   per-dyad structure to join against `n_dt`).
+#' @param rhat_threshold Rhat values strictly above this are flagged.
+#'   Defaults to `1.01` (Vehtari et al. 2021).
+#' @param ess_threshold ESS_bulk/ESS_tail values strictly below this are
+#'   flagged. Defaults to `400` (Vehtari et al. 2021).
+#' @param tiers Integer vector, a subset of `1:3`, naming which tier(s) to
+#'   compute: `1` (global/shared), `2` (per-dyad hierarchical parameters),
+#'   `3` (per-dyad-period latent states). Defaults to `1:3` (all tiers).
+#'   A tier not requested is left as `NULL` in the returned object rather
+#'   than an empty tibble, so `is.null(diag$tier3)` distinguishes "not
+#'   computed" from "computed, nothing to report".
+#' @param max_memory_mb Only used when `fit` is CSV file paths and `tiers`
+#'   includes `3`. Target ceiling, in MB, for Tier 3's peak memory;
+#'   drives the automatically-derived `chunk_size` (see `chunk_size`
+#'   below) so you don't have to guess a variable count yourself.
+#'   Defaults to `8192` (8 GB) -- a guess, not a calibration against your
+#'   hardware, and this function says so via `message()` the first time
+#'   you rely on that default rather than setting it explicitly. This is
+#'   a sanity-check number, not a guarantee: actual peak memory depends
+#'   on `read_cmdstan_csv()`/`summarise_draws()` internals this function
+#'   doesn't control. If Tier 3 diagnostics is very slow, that's a signal
+#'   this may need adjusting -- raise it if you have memory headroom to
+#'   spare (fewer, larger chunks, less per-chunk read overhead), or lower
+#'   it if memory is tight (more, smaller chunks).
+#' @param chunk_size Only used when `fit` is CSV file paths and `tiers`
+#'   includes `3`. Explicit override: number of Tier 3 variables read per
+#'   chunk. `NULL` (the default) derives this from `max_memory_mb`
+#'   instead; set this directly only if you want to bypass that
+#'   calculation (e.g. you've measured actual memory use and want to
+#'   tune it by hand).
+#' @param parallel Only used when `fit` is CSV file paths and `tiers`
+#'   includes `3`. `FALSE` (default) processes Tier 3 chunks
+#'   sequentially, one at a time -- this is what makes `max_memory_mb`'s
+#'   bound hold regardless of `n_workers`. `TRUE` processes chunks
+#'   concurrently via `furrr::future_map_dfr()`, trading that memory
+#'   bound (now effectively `max_memory_mb` times up to `n_workers`,
+#'   since that many chunks are in memory at once) for wall-clock speed.
+#'   Prefer `parallel = FALSE` when memory is already tight (e.g. a
+#'   memory-constrained HPC allocation) and `parallel = TRUE` when you
+#'   have memory headroom to spend on speed instead. On Windows this
+#'   falls back from `future::multicore` to `future::multisession` with
+#'   a loud `warning()`, since `multisession` copies data to each worker
+#'   rather than sharing it via copy-on-write -- the memory math changes
+#'   substantially, and `max_memory_mb` is less trustworthy there.
+#' @param n_workers Only used when `parallel = TRUE`. Defaults to
+#'   `max(1, parallel::detectCores() - 1)`.
+#' @return A list of class `bilatr_diagnostics` with elements:
+#'   \describe{
+#'     \item{tier1}{Tibble of global/shared diagnostics, one row per
+#'       monitored quantity, with a `flagged` column; `NULL` if `1` was
+#'       not in `tiers`.}
+#'     \item{tier2}{Tibble with one row per dyad found in `n_dt` (or in
+#'       the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
+#'       and a `worse_than_expected` column; `NULL` if `2` was not in
+#'       `tiers`.}
+#'     \item{tier3}{Tibble with one row per dyad summarizing its
+#'       per-dyad-period latent-state diagnostics (min ESS, share of
+#'       entries breaching thresholds); `NULL` if `3` was not in `tiers`.}
+#'     \item{summary}{A short named list of headline counts (see
+#'       [print.bilatr_diagnostics]).}
+#'   }
+#' @examples
+#' \dontrun{
+#' diag <- diagnose_convergence(fit, n_dt = dplyr::count(events, dyad, wt = 1))
+#' diag
+#' diag$tier1
+#'
+#' # only the cheap, always-important global/shared parameters, and no
+#' # need to supply n_dt at all:
+#' diagnose_convergence(fit, tiers = 1)
+#'
+#' # a completed SLURM run, never read into this R session: Tier 3 is
+#' # read and summarised in memory-bounded chunks rather than all at once
+#' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
+#' diagnose_convergence(csv_files, n_dt = n_dt, max_memory_mb = 4096)
+#' }
+#' @export
+diagnose_convergence <- function(
+  fit,
+  n_dt = NULL,
+  rhat_threshold = 1.01,
+  ess_threshold = 400,
+  tiers = 1:3,
+  max_memory_mb = 8192,
+  chunk_size = NULL,
+  parallel = FALSE,
+  n_workers = max(1L, parallel::detectCores() - 1L)
+) {
+  max_memory_mb_missing <- missing(max_memory_mb)
+
+  tiers <- .validate_tiers(tiers)
+  if (any(c(2L, 3L) %in% tiers) && is.null(n_dt)) {
+    stop(
+      "`n_dt` is required when `tiers` includes 2 and/or 3 (Tier 1 alone ",
+      "needs no per-dyad join).",
+      call. = FALSE
+    )
+  }
+  n_dt_tbl <- if (any(c(2L, 3L) %in% tiers)) .normalize_n_dt(n_dt) else NULL
+
+  if (is.character(fit)) {
+    summ <- .read_diagnostics_summary_from_csv(
+      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing
+    )
+  } else {
+    draws <- if (posterior::is_draws(fit)) fit else fit$draws()
+    var_tiers <- .classify_bilatr_tier(posterior::variables(draws))
+    keep_vars <- var_tiers$variable[var_tiers$tier %in% tiers]
+    summ <- posterior::summarise_draws(posterior::subset_draws(draws, variable = keep_vars))
+    summ <- dplyr::left_join(summ, var_tiers, by = "variable")
+  }
+
+  .assemble_bilatr_diagnostics(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold)
 }
 
 #' Print a `bilatr_diagnostics` object

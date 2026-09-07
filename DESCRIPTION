@@ -1,6 +1,6 @@
 Package: bilatr
 Title: Hierarchical Dynamic IRT Models for Dyadic Conflict Trajectories
-Version: 0.3.5
+Version: 0.3.6
 Authors@R: c(
     person("David", "Randahl", , "david.randahl@fhs.se", role = c("aut", "cre")),
     person("Magnus", "Lundgren", role = "aut"),
@@ -35,6 +35,7 @@ Imports:
     lubridate,
     furrr,
     future,
+    parallel,
     stats,
     utils
 Suggests:

@@ -9,12 +9,29 @@ diagnose_convergence(
   n_dt = NULL,
   rhat_threshold = 1.01,
   ess_threshold = 400,
-  tiers = 1:3
+  tiers = 1:3,
+  max_memory_mb = 8192,
+  chunk_size = NULL,
+  parallel = FALSE,
+  n_workers = max(1L, parallel::detectCores() - 1L)
 )
 }
 \arguments{
-\item{fit}{A \code{CmdStanMCMC}/\code{CmdStanFit}-like fit object (anything with
-a \verb{$draws()} method), or a \code{posterior::draws_array}/\code{draws_df}.}
+\item{fit}{Either (a) a \code{CmdStanMCMC}/\code{CmdStanFit}-like fit object
+(anything with a \verb{$draws()} method) or a \code{posterior::draws_array}/
+\code{draws_df} -- the whole object is already in memory, so \code{tiers}
+controls what gets summarised but not what gets read, and
+\code{max_memory_mb}/\code{chunk_size}/\code{parallel}/\code{n_workers} are unused; or
+(b) a character vector of raw CmdStan CSV file paths (one per
+chain, e.g. from a completed SLURM run never loaded into this R
+session) -- in this case Tier 1/2 variables are read in one small
+call, and Tier 3 variables (typically the overwhelming majority for
+production-sized panels) are read and summarised in memory-bounded
+chunks via \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}}'s \code{variables} argument,
+discarding each chunk's draws before moving to the next, so the
+full draws array is never materialized at once. This is the path
+that matters for production Stan output too large to read normally
+(tested against panels with millions of Tier 3 columns).}
 
 \item{n_dt}{A data frame with a dyad-id column (matching \code{"dyad..."})
 and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
@@ -34,6 +51,45 @@ compute: \code{1} (global/shared), \code{2} (per-dyad hierarchical parameters),
 A tier not requested is left as \code{NULL} in the returned object rather
 than an empty tibble, so \code{is.null(diag$tier3)} distinguishes "not
 computed" from "computed, nothing to report".}
+
+\item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
+includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory;
+drives the automatically-derived \code{chunk_size} (see \code{chunk_size}
+below) so you don't have to guess a variable count yourself.
+Defaults to \code{8192} (8 GB) -- a guess, not a calibration against your
+hardware, and this function says so via \code{message()} the first time
+you rely on that default rather than setting it explicitly. This is
+a sanity-check number, not a guarantee: actual peak memory depends
+on \code{read_cmdstan_csv()}/\code{summarise_draws()} internals this function
+doesn't control. If Tier 3 diagnostics is very slow, that's a signal
+this may need adjusting -- raise it if you have memory headroom to
+spare (fewer, larger chunks, less per-chunk read overhead), or lower
+it if memory is tight (more, smaller chunks).}
+
+\item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
+includes \code{3}. Explicit override: number of Tier 3 variables read per
+chunk. \code{NULL} (the default) derives this from \code{max_memory_mb}
+instead; set this directly only if you want to bypass that
+calculation (e.g. you've measured actual memory use and want to
+tune it by hand).}
+
+\item{parallel}{Only used when \code{fit} is CSV file paths and \code{tiers}
+includes \code{3}. \code{FALSE} (default) processes Tier 3 chunks
+sequentially, one at a time -- this is what makes \code{max_memory_mb}'s
+bound hold regardless of \code{n_workers}. \code{TRUE} processes chunks
+concurrently via \code{furrr::future_map_dfr()}, trading that memory
+bound (now effectively \code{max_memory_mb} times up to \code{n_workers},
+since that many chunks are in memory at once) for wall-clock speed.
+Prefer \code{parallel = FALSE} when memory is already tight (e.g. a
+memory-constrained HPC allocation) and \code{parallel = TRUE} when you
+have memory headroom to spend on speed instead. On Windows this
+falls back from \code{future::multicore} to \code{future::multisession} with
+a loud \code{warning()}, since \code{multisession} copies data to each worker
+rather than sharing it via copy-on-write -- the memory math changes
+substantially, and \code{max_memory_mb} is less trustworthy there.}
+
+\item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
+\code{max(1, parallel::detectCores() - 1)}.}
 }
 \value{
 A list of class \code{bilatr_diagnostics} with elements:
@@ -72,13 +128,12 @@ flood the report. See \link{.classify_bilatr_tier} for how parameter names
 are assigned to tiers.
 
 \code{tiers} limits \emph{which} of these are computed at all: quantities not
-assigned to a requested tier are dropped before
-\code{\link[posterior:draws_summary]{posterior::summarise_draws()}} ever runs on them (via
-\code{\link[posterior:subset_draws]{posterior::subset_draws()}}), rather than just being hidden afterward.
-This matters in practice because Tier 3 (\code{theta}/\code{theta_raw}) typically
+assigned to a requested tier are never read into memory in the first
+place (see \code{fit} below), rather than being read and then hidden. This
+matters in practice because Tier 3 (\code{theta}/\code{theta_raw}) typically
 has, by far, the most monitored quantities of the three tiers (one per
 dyad-period); requesting only \code{tiers = 1} or \code{tiers = 1:2} skips
-computing Rhat/ESS for all of them.
+reading/computing Rhat/ESS for all of them.
 }
 \examples{
 \dontrun{
@@ -89,5 +144,10 @@ diag$tier1
 # only the cheap, always-important global/shared parameters, and no
 # need to supply n_dt at all:
 diagnose_convergence(fit, tiers = 1)
+
+# a completed SLURM run, never read into this R session: Tier 3 is
+# read and summarised in memory-bounded chunks rather than all at once
+csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
+diagnose_convergence(csv_files, n_dt = n_dt, max_memory_mb = 4096)
 }
 }
