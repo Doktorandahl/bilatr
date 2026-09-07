@@ -61,10 +61,15 @@ hardware, and this function says so via \code{message()} the first time
 you rely on that default rather than setting it explicitly. This is
 a sanity-check number, not a guarantee: actual peak memory depends
 on \code{read_cmdstan_csv()}/\code{summarise_draws()} internals this function
-doesn't control. If Tier 3 diagnostics is very slow, that's a signal
-this may need adjusting -- raise it if you have memory headroom to
-spare (fewer, larger chunks, less per-chunk read overhead), or lower
-it if memory is tight (more, smaller chunks).}
+doesn't control. IMPORTANT, from a real benchmark against a
+production-scale CSV (see \link{.chunked_summarise_csv}): reading is
+strongly I/O-bound, so a SMALLER \code{max_memory_mb} (more, smaller
+chunks) does not make this cheaper -- it can make it dramatically
+\emph{slower}, since each chunk pays nearly the same full-row-scan cost
+regardless of how many columns it keeps, and total wall-time scales
+with chunk count. Prefer the LARGEST \code{max_memory_mb} your job's
+memory allocation can afford; only lower it if memory, not time, is
+the binding constraint.}
 
 \item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Explicit override: number of Tier 3 variables read per

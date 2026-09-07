@@ -36,7 +36,7 @@ The CSV-path counterpart of the in-memory branch in
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}: reads only Tier 1/2 variables in one small
 read (cheap, as today), and Tier 3 variables (typically, by far, the
 most numerous of the three tiers) in memory-bounded chunks via
-\link{.summarise_tier3_chunked}. Never materializes the full multi-chain
+\link{.chunked_summarise_csv}. Never materializes the full multi-chain
 draws array in memory, unlike the in-memory branch, which necessarily
 receives an already-fully-read \code{fit}.
 }

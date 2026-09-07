@@ -1,36 +1,3 @@
-# --- fixture for the CSV-file-path branch: a real, tiny multi-chain
-# CmdStan run, since read_cmdstan_csv()/cmdstanr:::read_csv_metadata()
-# need real CmdStan CSV files, not a hand-built posterior::draws_array
-# like make_fake_draws() above. D/T/A are kept small (a few dozen
-# variables spanning all three tiers) purely to keep the test fast; the
-# chunking logic itself is exercised via a deliberately tiny chunk_size/
-# max_memory_mb, not by the fixture's own size.
-make_csv_diagnostics_fixture <- function() {
-  set.seed(1)
-  D <- 6
-  Tn <- 4
-  A <- 4
-  Y <- array(sample(0:6, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
-  is_obs <- matrix(1L, D, Tn)
-  data_list <- list(
-    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A)
-  )
-  mod <- compile_bilatr_model(opt_level = 1)
-  outdir <- tempfile()
-  dir.create(outdir)
-  fit <- suppressWarnings(mod$sample(
-    data = data_list, chains = 2, parallel_chains = 2,
-    iter_warmup = 30, iter_sampling = 15, seed = 1, refresh = 0,
-    output_dir = outdir, show_messages = FALSE, threads_per_chain = 1
-  ))
-  list(
-    fit = fit,
-    csv_files = list.files(outdir, pattern = "\\.csv$", full.names = TRUE),
-    n_dt = tibble::tibble(dyad_id = seq_len(D), n_dt = apply(Y, 1, sum))
-  )
-}
-
 make_fake_draws <- function() {
   set.seed(1)
   n_iter <- 400

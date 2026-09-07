@@ -419,31 +419,57 @@
   bytes / 1e6
 }
 
-#' Summarise Tier 3 variables in memory-bounded chunks
+#' Read and summarise CSV variables in memory-bounded chunks
 #'
-#' Reads and summarises `variables` in groups of `chunk_size`, discarding
-#' each chunk's draws before moving to the next -- this is what keeps
-#' peak memory bounded regardless of how many Tier 3 variables there are
-#' in total. `parallel = TRUE` processes chunks concurrently via
-#' `furrr::future_map_dfr()`, trading the sequential path's memory bound
-#' (now multiplied by `n_workers`, since that many chunks are in memory
-#' at once) for wall-clock speed. The active `future::plan()` is saved
-#' and restored on exit, so this never permanently changes the caller's
-#' parallel backend.
+#' Shared by [diagnose_convergence()]'s CSV-path branch and
+#' [extract_theta()]'s: reads and summarises `variables` in groups of
+#' `chunk_size`, discarding each chunk's draws before moving to the next
+#' -- this is what keeps peak memory bounded regardless of how many
+#' variables there are in total. `parallel = TRUE` processes chunks
+#' concurrently via `furrr::future_map_dfr()`, trading the sequential
+#' path's memory bound (now multiplied by `n_workers`, since that many
+#' chunks are in memory at once) for wall-clock speed. The active
+#' `future::plan()` is saved and restored on exit, so this never
+#' permanently changes the caller's parallel backend.
+#'
+#' Benchmarked against a real production-scale single-chain CSV (~1.9M
+#' Tier 3 columns): `read_cmdstan_csv()` is strongly I/O-bound, not
+#' parsing-bound -- per-call wall-time barely depends on how many
+#' `variables` are requested (a 1000x range in chunk size changed
+#' per-call time by under 10%), because extracting even one column from
+#' a row-oriented CSV requires scanning the full row width regardless of
+#' how many fields are kept. Consequence: total sweep time scales with
+#' the NUMBER OF CHUNKS, not with memory saved -- a small `chunk_size`
+#' does not make this cheaper, it makes it much slower for a given
+#' `variables` list, potentially by orders of magnitude. See
+#' `max_memory_mb` in [diagnose_convergence()]'s documentation, which
+#' this benchmark motivated.
 #'
 #' @param csv_files Character vector of CmdStan CSV file paths.
-#' @param variables Character vector of Tier 3 variable names to
-#'   summarise.
+#' @param variables Character vector of variable names to summarise.
 #' @param chunk_size Variables per chunk.
 #' @param parallel,n_workers See [diagnose_convergence()].
+#' @param flip If `TRUE`, negate each chunk's raw draws before
+#'   summarising (used by [extract_theta()]'s CSV path to apply
+#'   [bilatr_orient()]'s sign correction; always `FALSE` for
+#'   [diagnose_convergence()], since Rhat/ESS are invariant to a
+#'   deterministic sign flip and it would be pointless work there).
+#'   Applied pre-summary, per chunk, matching how [bilatr_orient()]
+#'   flips raw draws for the in-memory path -- not a post-hoc
+#'   transformation of the summary columns, which would need to swap
+#'   the quantile columns (`quantile(-X, p) == -quantile(X, 1 - p)`),
+#'   not just negate them.
 #' @return A tibble, the row-bound [posterior::summarise_draws()] output
 #'   across all chunks.
 #' @keywords internal
-.summarise_tier3_chunked <- function(csv_files, variables, chunk_size, parallel, n_workers) {
+.chunked_summarise_csv <- function(csv_files, variables, chunk_size, parallel, n_workers, flip = FALSE) {
   chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
 
   summarise_one_chunk <- function(chunk_vars) {
     draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = chunk_vars)$post_warmup_draws
+    if (flip) {
+      draws <- -draws
+    }
     posterior::summarise_draws(draws)
   }
 
@@ -471,13 +497,80 @@
   furrr::future_map_dfr(chunks, summarise_one_chunk)
 }
 
+#' Resolve a chunk size for a CSV-file-path chunked read, and report it
+#'
+#' Shared by [diagnose_convergence()]'s and [extract_theta()]'s CSV-path
+#' branches. If `max_memory_mb` was left at its default, emits a one-time
+#' `message()` naming the I/O-bound wall-time/memory tradeoff a real
+#' benchmark against a production-scale CSV found (see
+#' [.chunked_summarise_csv]): a smaller `chunk_size` does NOT make
+#' reading cheaper -- it multiplies wall-time roughly by the number of
+#' chunks, since each chunk pays nearly the same full-row-scan cost
+#' regardless of how many columns it keeps. A second `message()`, always
+#' emitted, reports the resolved chunk count/size and estimated peak
+#' memory, so a caller can see the actual tradeoff being made before a
+#' long run commits to it.
+#'
+#' @param n_vars Number of variables the chunked sweep will cover (for
+#'   the reporting message only; does not affect the chunk_size
+#'   calculation itself).
+#' @param csv_files,max_memory_mb,chunk_size,parallel,n_workers See
+#'   [diagnose_convergence()].
+#' @param max_memory_mb_missing Whether the caller left `max_memory_mb`
+#'   at its default (via `missing()` in the calling function).
+#' @return The resolved integer chunk size.
+#' @keywords internal
+.resolve_chunk_size_and_report <- function(
+  n_vars, csv_files, max_memory_mb, chunk_size, parallel, n_workers,
+  max_memory_mb_missing
+) {
+  dims <- .stan_csv_dims(csv_files)
+
+  if (max_memory_mb_missing) {
+    message(
+      "Using the default max_memory_mb = ", max_memory_mb, " (",
+      round(max_memory_mb / 1024, 1), " GB). Reading is I/O-bound, not ",
+      "parsing-bound: a benchmark against a production-scale CSV found ",
+      "per-chunk wall-time barely depends on how many variables are ",
+      "requested (a 1000x range in chunk size changed per-call time by ",
+      "under 10%), because extracting even one column from a row-",
+      "oriented CSV means scanning the full row regardless of how much ",
+      "of it is kept. So chunk COUNT, not chunk size, drives total ",
+      "wall-time: a smaller max_memory_mb produces more chunks and can ",
+      "multiply total time by orders of magnitude for a modest memory ",
+      "saving. Prefer the LARGEST max_memory_mb your job's memory ",
+      "allocation can afford; only lower it if memory, not time, is the ",
+      "binding constraint."
+    )
+  }
+
+  chunk_size_used <- chunk_size %||% .compute_chunk_size(
+    n_draws = dims$n_draws, n_chains = dims$n_chains,
+    max_memory_mb = max_memory_mb, n_workers = n_workers, parallel = parallel
+  )
+
+  est_mb <- .estimate_diagnostics_memory_mb(
+    n_draws = dims$n_draws, n_chains = dims$n_chains,
+    chunk_size = chunk_size_used, n_workers = n_workers, parallel = parallel
+  )
+  message(
+    n_vars, " variable(s) in ",
+    ceiling(n_vars / chunk_size_used), " chunk(s) of ",
+    chunk_size_used, " variable(s) each; estimated peak memory ~",
+    round(est_mb), " MB",
+    if (parallel) paste0(" across ", n_workers, " worker(s)") else "", "."
+  )
+
+  chunk_size_used
+}
+
 #' Build the tier-classified summary tibble directly from raw CmdStan CSVs
 #'
 #' The CSV-path counterpart of the in-memory branch in
 #' [diagnose_convergence()]: reads only Tier 1/2 variables in one small
 #' read (cheap, as today), and Tier 3 variables (typically, by far, the
 #' most numerous of the three tiers) in memory-bounded chunks via
-#' [.summarise_tier3_chunked]. Never materializes the full multi-chain
+#' [.chunked_summarise_csv]. Never materializes the full multi-chain
 #' draws array in memory, unlike the in-memory branch, which necessarily
 #' receives an already-fully-read `fit`.
 #'
@@ -512,36 +605,11 @@
   }
 
   tier3_summ <- if (length(tier3_vars) > 0) {
-    dims <- .stan_csv_dims(csv_files)
-
-    if (max_memory_mb_missing) {
-      message(
-        "Using the default max_memory_mb = ", max_memory_mb, " (",
-        round(max_memory_mb / 1024, 1), " GB). If Tier 3 diagnostics is ",
-        "very slow, this argument may need adjusting: raise it if you ",
-        "have memory headroom to spare (fewer, larger chunks), or lower ",
-        "it if memory is tight."
-      )
-    }
-
-    chunk_size_used <- chunk_size %||% .compute_chunk_size(
-      n_draws = dims$n_draws, n_chains = dims$n_chains,
-      max_memory_mb = max_memory_mb, n_workers = n_workers, parallel = parallel
+    chunk_size_used <- .resolve_chunk_size_and_report(
+      length(tier3_vars), csv_files, max_memory_mb, chunk_size, parallel, n_workers,
+      max_memory_mb_missing
     )
-
-    est_mb <- .estimate_diagnostics_memory_mb(
-      n_draws = dims$n_draws, n_chains = dims$n_chains,
-      chunk_size = chunk_size_used, n_workers = n_workers, parallel = parallel
-    )
-    message(
-      "Tier 3: ", length(tier3_vars), " variable(s) in ",
-      ceiling(length(tier3_vars) / chunk_size_used), " chunk(s) of ",
-      chunk_size_used, " variable(s) each; estimated peak memory ~",
-      round(est_mb), " MB",
-      if (parallel) paste0(" across ", n_workers, " worker(s)") else "", "."
-    )
-
-    .summarise_tier3_chunked(csv_files, tier3_vars, chunk_size_used, parallel, n_workers)
+    .chunked_summarise_csv(csv_files, tier3_vars, chunk_size_used, parallel, n_workers)
   } else {
     NULL
   }
@@ -616,10 +684,15 @@
 #'   you rely on that default rather than setting it explicitly. This is
 #'   a sanity-check number, not a guarantee: actual peak memory depends
 #'   on `read_cmdstan_csv()`/`summarise_draws()` internals this function
-#'   doesn't control. If Tier 3 diagnostics is very slow, that's a signal
-#'   this may need adjusting -- raise it if you have memory headroom to
-#'   spare (fewer, larger chunks, less per-chunk read overhead), or lower
-#'   it if memory is tight (more, smaller chunks).
+#'   doesn't control. IMPORTANT, from a real benchmark against a
+#'   production-scale CSV (see [.chunked_summarise_csv]): reading is
+#'   strongly I/O-bound, so a SMALLER `max_memory_mb` (more, smaller
+#'   chunks) does not make this cheaper -- it can make it dramatically
+#'   *slower*, since each chunk pays nearly the same full-row-scan cost
+#'   regardless of how many columns it keeps, and total wall-time scales
+#'   with chunk count. Prefer the LARGEST `max_memory_mb` your job's
+#'   memory allocation can afford; only lower it if memory, not time, is
+#'   the binding constraint.
 #' @param chunk_size Only used when `fit` is CSV file paths and `tiers`
 #'   includes `3`. Explicit override: number of Tier 3 variables read per
 #'   chunk. `NULL` (the default) derives this from `max_memory_mb`

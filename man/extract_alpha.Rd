@@ -13,7 +13,8 @@ extract_alpha(
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
-\code{\link[=fit_panel]{fit_panel()}}.}
+\code{\link[=fit_panel]{fit_panel()}}, or a character vector of raw CmdStan CSV file paths
+(see Details).}
 
 \item{event_classes}{Optional character vector of event-class labels,
 in the same order used to build \code{stan_data} (i.e. the
@@ -21,7 +22,8 @@ in the same order used to build \code{stan_data} (i.e. the
 supplied, an \code{event_class} column is added alongside the raw action
 index.}
 
-\item{probs}{Posterior quantiles to report alongside the mean.}
+\item{probs}{Posterior quantiles to report alongside the mean. Only
+the default is supported when \code{fit} is CSV file paths (see Details).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
 which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
@@ -45,9 +47,23 @@ Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before su
 \code{alpha}'s sign always reflects the canonical orientation regardless of
 which reflection-symmetry basin the sampler actually landed in
 (\code{stan_model = "alphanorm"}/\code{"alphanorm_ou"} only; a no-op otherwise).
+
+\code{fit} also accepts a character vector of raw CmdStan CSV file paths
+(one per chain), for the case where there is no in-memory fit at all
+-- e.g. a post-hoc, cross-chain roll-up script run after several
+independently-submitted single-chain SLURM jobs have all completed,
+with only their saved CSVs on disk. Unlike \code{\link[=extract_theta]{extract_theta()}}'s
+CSV-path mode, \code{alpha} is small (Tier 1: a handful of values
+regardless of dyad-set size), so there is no chunking/\code{parallel}
+machinery here -- just one plain \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} call
+across all of \code{fit}, then the same extraction logic either way.
 }
 \examples{
 \dontrun{
 alpha <- extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
+
+# cross-chain roll-up from saved CSVs, no in-memory fit
+csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
+alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "alphanorm")
 }
 }

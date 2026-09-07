@@ -1,4 +1,31 @@
 
+# bilatr 0.3.8
+
+## Changes
+
+* A benchmark against a production-scale CmdStan CSV (~1.9M Tier 3
+  columns) found `read_cmdstan_csv()` strongly I/O-bound, not
+  parsing-bound: per-chunk wall-time barely depends on how many
+  variables are requested (a 1000x range in chunk size changed per-call
+  time by under 10%), so total sweep time scales with chunk COUNT, not
+  memory saved. `diagnose_convergence()`'s chunking is unchanged, but
+  its default-`max_memory_mb` message now explains this tradeoff
+  explicitly, so a smaller budget isn't mistaken for a "safer" choice.
+* `extract_theta()`'s `fit` argument now also accepts a character vector
+  of raw CmdStan CSV file paths, reading/summarising `theta` in the same
+  memory-bounded, optionally-parallel chunks as
+  `diagnose_convergence()`'s CSV path (new `max_memory_mb`/`chunk_size`/
+  `parallel`/`n_workers` arguments, sharing its underlying helper so a
+  worker script can eventually feed both from one pass over the CSVs
+  instead of two). Sign orientation (`bilatr_orient()`) is applied to
+  raw draws before summarising, per chunk, matching the in-memory path
+  exactly rather than adjusting already-computed quantiles post hoc.
+  Only supports the default `probs`. `extract_alpha()`/
+  `extract_mu_intercept()` also gained CSV-path support (no chunking --
+  Tier 1/2 is small regardless of dyad-set size), for cross-chain
+  roll-up scripts run after several independently-submitted SLURM jobs
+  have completed, with no in-memory fit available.
+
 # bilatr 0.3.7
 
 ## New features

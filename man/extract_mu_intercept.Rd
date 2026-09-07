@@ -14,7 +14,8 @@ extract_mu_intercept(
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
-\code{\link[=fit_panel]{fit_panel()}}.}
+\code{\link[=fit_panel]{fit_panel()}}, or a character vector of raw CmdStan CSV file paths
+(see Details).}
 
 \item{event_classes}{Optional character vector of event-class labels,
 in the same order used to build \code{stan_data} (i.e. the
@@ -22,7 +23,8 @@ in the same order used to build \code{stan_data} (i.e. the
 supplied, an \code{event_class} column is added alongside the raw action
 index.}
 
-\item{probs}{Posterior quantiles to report alongside the mean.}
+\item{probs}{Posterior quantiles to report alongside the mean. Only
+the default is supported when \code{fit} is CSV file paths (see Details).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
 which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
@@ -45,6 +47,11 @@ symmetry (\verb{alpha .* theta} is invariant under the joint negation, so
 \code{mu_intercept} never needs to flip; see \code{\link[=bilatr_orient]{bilatr_orient()}}) -- \code{fit} is
 passed through it anyway, for a single consistent code path across the
 \verb{extract_*()} functions, but it is always a no-op here.
+
+\code{fit} also accepts a character vector of raw CmdStan CSV file paths,
+for the same post-hoc/no-in-memory-fit case described in
+\code{\link[=extract_alpha]{extract_alpha()}}'s documentation (also Tier 1/2: small regardless of
+dyad-set size, so no chunking here either).
 }
 \examples{
 \dontrun{
