@@ -3,6 +3,7 @@
 S3method(print,bilatr_diagnostics)
 export(assemble_stan_data)
 export(compile_bilatr_model)
+export(diagnose_and_extract_bilatr)
 export(diagnose_convergence)
 export(download_gdelt_raw_zip)
 export(extract_all_relevant_gdelt)

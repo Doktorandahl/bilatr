@@ -1,4 +1,23 @@
 
+# bilatr 0.3.9
+
+## New features
+
+* Added `diagnose_and_extract_bilatr()`, the single-shared-read follow-up
+  0.3.8 anticipated: given raw CmdStan CSV file paths, it reads Tier 1/2
+  once and Tier 3 once (chunked, same as `diagnose_convergence()`),
+  reorients whichever columns `bilatr_orient()` would flip as part of
+  that one read, and derives `diagnose_convergence()`,
+  `extract_theta()`, `extract_alpha()`, and `extract_mu_intercept()`'s
+  outputs from those two summaries -- rather than calling the four
+  public functions independently, which re-reads `theta`'s columns
+  twice (once for Tier 3 diagnostics, once for `extract_theta()`) and
+  pays a full separate file-scan for each of `extract_alpha()`/
+  `extract_mu_intercept()`, on top of `diagnose_convergence()`'s own
+  Tier 1/2 read of the same columns. Meaningful for CSV-path,
+  I/O-bound reads specifically (see 0.3.8); an in-memory `fit` has no
+  repeated-read cost to fuse away, so it isn't supported here.
+
 # bilatr 0.3.8
 
 ## Changes
