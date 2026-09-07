@@ -35,6 +35,25 @@ test_that("assign_eventrootcode2 splits root 04 and folds 09/14/15/18/20", {
   expect_equal(assign_eventrootcode2(c("180", "204")), c("19", "19"))
 })
 
+test_that("eventrootcode2_name labels every assign_eventrootcode2() output value and NAs anything else", {
+  expect_equal(eventrootcode2_name("01"), "Make a public statement")
+  expect_equal(eventrootcode2_name("044"), "Consult: meet, discuss, or visit")
+  expect_equal(eventrootcode2_name("046"), "Consult: negotiate or mediate")
+  expect_equal(eventrootcode2_name("19"), "Assault, fight, or mass violence")
+  expect_true(is.na(eventrootcode2_name("99")))
+
+  # every value assign_eventrootcode2() produces for a real CAMEO code
+  # has a label (unlike arbitrary 2-digit strings, which may not
+  # correspond to any real CAMEO root and are correctly unlabeled)
+  produced <- unique(assign_eventrootcode2(cameo_lookup$CAMEOEVENTCODE))
+  expect_false(any(is.na(eventrootcode2_name(produced))))
+
+  # "044"/"046" deliberately match bilatr_class_name()'s text for the
+  # same underlying category (see eventrootcode2_name()'s docs)
+  expect_equal(eventrootcode2_name("044"), bilatr_class_name(2L))
+  expect_equal(eventrootcode2_name("046"), bilatr_class_name(3L))
+})
+
 test_that("assign_bilatr_class follows EventRootCode2 with per-code refinements", {
   # regrouped-root defaults
   expect_equal(assign_bilatr_class(c("010", "190", "071", "0862")), c(0L, 10L, 5L, 6L))
@@ -71,6 +90,7 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$QuadClass)))
   expect_false(any(is.na(cameo_lookup$PentaClass)))
   expect_false(any(is.na(cameo_lookup$EventRootCode2)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode2Name)))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
   expect_false(any(is.na(cameo_lookup$BilatrClass2)))
@@ -101,10 +121,12 @@ test_that("recode_cameo also attaches EventRootCode2, BilatrClass, and BilatrCla
   events <- tibble::tibble(EventCode = c("044", "190", "180", "093"))
   out <- recode_cameo(events, code_col = "EventCode")
   expect_true(all(c(
-    "EventRootCode2", "BilatrClass", "BilatrClassName",
+    "EventRootCode2", "EventRootCode2Name", "BilatrClass", "BilatrClassName",
     "BilatrClass2", "BilatrClass2Name"
   ) %in% names(out)))
   expect_equal(out$EventRootCode2, c("044", "19", "19", "10"))
+  expect_equal(out$EventRootCode2Name[1], "Consult: meet, discuss, or visit")
+  expect_equal(out$EventRootCode2Name[2], "Assault, fight, or mass violence")
   expect_equal(out$BilatrClass, c(2L, 10L, 10L, 7L))
   expect_equal(out$BilatrClassName[2], "Assault, fight, or mass violence")
   expect_equal(out$BilatrClass2, c(2L, 8L, 8L, 7L))

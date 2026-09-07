@@ -85,6 +85,45 @@ assign_eventrootcode2 <- function(code) {
   )
 }
 
+#' Human-readable label for an `EventRootCode2` value
+#'
+#' Preliminary labels, one per [assign_eventrootcode2()] output value.
+#' Where an `EventRootCode2` value corresponds exactly to a `BilatrClass`
+#' level (the two root-04 splits `"044"`/`"046"`), the label text matches
+#' [bilatr_class_name()]'s for that level, since they denote the same
+#' category; every other label is new here, since `EventRootCode2` is
+#' finer-grained than `BilatrClass` everywhere else (e.g. `"06"`/`"07"`
+#' get distinct labels despite both folding into `BilatrClass`'s single
+#' "material cooperation or provide aid").
+#'
+#' @param class Character vector of `EventRootCode2` values, as returned
+#'   by [assign_eventrootcode2()].
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values [assign_eventrootcode2()] does not produce.
+#' @keywords internal
+eventrootcode2_name <- function(class) {
+  names <- c(
+    "01"  = "Make a public statement",
+    "02"  = "Appeal for action",
+    "03"  = "Express intent to cooperate",
+    "040" = "Consult, unspecified",
+    "044" = "Consult: meet, discuss, or visit",
+    "046" = "Consult: negotiate or mediate",
+    "05"  = "Engage in diplomatic cooperation",
+    "06"  = "Engage in material cooperation",
+    "07"  = "Provide aid",
+    "08"  = "Yield",
+    "10"  = "Investigate or demand",
+    "11"  = "Disapprove",
+    "12"  = "Reject",
+    "13"  = "Threaten, protest, or exhibit force posture",
+    "16"  = "Reduce relations",
+    "17"  = "Coerce",
+    "19"  = "Assault, fight, or mass violence"
+  )
+  unname(names[as.character(class)])
+}
+
 #' Human-readable label for a bilatr event class
 #'
 #' @param class Integer vector of `BilatrClass` values (0-10).
@@ -224,16 +263,18 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
 #' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `PentaClass`,
-#' `PentaClass_modified`, `EventRootCode2`, `BilatrClass`,
-#' `BilatrClassName`, `BilatrClass2`, and `BilatrClass2Name` columns.
-#' `PentaClass_modified` folds low-intensity verbal cooperation (Goldstein
-#' score <= 1) into its own class, which can be useful as a near-neutral
-#' reference category. `EventRootCode2` (see [assign_eventrootcode2()]) is
-#' a coarser regrouping of the CAMEO root codes; `BilatrClass` /
-#' `BilatrClassName` (see [assign_bilatr_class()]) is the 11-level action
-#' scheme used as the model's default; `BilatrClass2` / `BilatrClass2Name`
-#' (see [assign_bilatr_class2()]) is a 9-level coarsening that merges the
-#' two adjacent pairs of hostile levels.
+#' `PentaClass_modified`, `EventRootCode2`, `EventRootCode2Name`,
+#' `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
+#' `BilatrClass2Name` columns. `PentaClass_modified` folds low-intensity
+#' verbal cooperation (Goldstein score <= 1) into its own class, which
+#' can be useful as a near-neutral reference category. `EventRootCode2` /
+#' `EventRootCode2Name` (see [assign_eventrootcode2()] and
+#' [eventrootcode2_name()]) is a coarser regrouping of the CAMEO root
+#' codes; `BilatrClass` / `BilatrClassName` (see [assign_bilatr_class()])
+#' is the 11-level action scheme used as the model's default;
+#' `BilatrClass2` / `BilatrClass2Name` (see [assign_bilatr_class2()]) is
+#' a 9-level coarsening that merges the two adjacent pairs of hostile
+#' levels.
 #'
 #' Any of these columns that already exist in `data` are left as they are
 #' (not overwritten, no `.x`/`.y` suffixing), with a warning naming them.

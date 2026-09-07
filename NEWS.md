@@ -1,4 +1,16 @@
 
+# bilatr 0.3.7
+
+## New features
+
+* Added preliminary human-readable labels for `EventRootCode2`
+  (`eventrootcode2_name()`, matching the existing `bilatr_class_name()`/
+  `bilatr_class2_name()` convention), attached as a new
+  `EventRootCode2Name` column in `cameo_lookup` and by `recode_cameo()`.
+  The two root-04 splits (`"044"`/`"046"`) reuse `bilatr_class_name()`'s
+  text for the same category; every other label is new, since
+  `EventRootCode2` is finer-grained than `BilatrClass` elsewhere.
+
 # bilatr 0.3.6
 
 ## Changes

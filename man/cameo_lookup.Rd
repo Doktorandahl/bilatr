@@ -23,6 +23,8 @@ class 0, useful as a near-neutral reference category.}
 \item{EventRootCode2}{Character. A coarser regrouping of the CAMEO
 root codes (root 04 split three ways; roots 09/14/15/18/20 folded
 into related roots); see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}.}
+\item{EventRootCode2Name}{Character. Human-readable label for
+\code{EventRootCode2}; see \code{\link[=eventrootcode2_name]{eventrootcode2_name()}}.}
 \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}

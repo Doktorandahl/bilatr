@@ -2,8 +2,9 @@
 # code, with its Goldstein score, human-readable label, and the
 # QuadClass / PentaClass / PentaClass_modified / EventRootCode2 /
 # BilatrClass / BilatrClass2 recodings (each with a *Name label where it
-# has one). Source values are taken verbatim from the project's existing
-# CAMEO/Goldstein reference table (O'Brien 2010 scale; quad/penta
+# has one, including EventRootCode2Name). Source values are taken
+# verbatim from the project's existing CAMEO/Goldstein reference table
+# (O'Brien 2010 scale; quad/penta
 # breakpoints and the EventRootCode2/BilatrClass regrouping as previously
 # used in this project's GDELT pipeline, see original_code/cameo_df.csv).
 # Re-run this script (and `devtools::document()`) whenever the lookup
@@ -476,6 +477,7 @@ cameo_lookup <- cameo_label %>%
       PentaClass
     ),
     EventRootCode2 = assign_eventrootcode2(CAMEOEVENTCODE),
+    EventRootCode2Name = eventrootcode2_name(EventRootCode2),
     BilatrClass = assign_bilatr_class(CAMEOEVENTCODE, EventRootCode2),
     BilatrClassName = bilatr_class_name(BilatrClass),
     BilatrClass2 = assign_bilatr_class2(BilatrClass),
