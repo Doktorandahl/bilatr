@@ -1,12 +1,3 @@
-skip_if_no_cmdstan <- function() {
-  skip_if_not_installed("cmdstanr")
-  has_cmdstan <- tryCatch({
-    cmdstanr::cmdstan_path()
-    TRUE
-  }, error = function(e) FALSE)
-  skip_if_not(has_cmdstan, "CmdStan is not installed")
-}
-
 test_that("the bilatr Stan model compiles", {
   skip_if_no_cmdstan()
   skip_on_cran()
@@ -69,6 +60,43 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
       refresh = 0,
       show_messages = FALSE
     ))
+    expect_s3_class(fit, "CmdStanMCMC")
+    expect_equal(posterior::ndraws(fit$draws()), 5)
+  }
+})
+
+test_that("bilatr_init_fn()'s alphanorm/alphanorm_ou inits pass cmdstanr's init validation", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  # Specifically verifies what R/fit.R's bilatr_init_fn() assumes but
+  # cannot check for itself at the R level: that cmdstanr's `init`
+  # argument accepts sum_to_zero_vector[A] parameters (alpha_raw,
+  # mu_intercept) as their length-A CONSTRAINED representation, not the
+  # length-(A - 1) unconstrained one, and that a plain rep(0, A) is
+  # accepted for mu_intercept. If cmdstanr instead required the
+  # unconstrained form, mod$sample(init = ...) below would error.
+  set.seed(1)
+  D <- 2
+  Tn <- 3
+  A <- 4
+  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
+  )
+
+  for (name in c("alphanorm", "alphanorm_ou")) {
+    mod <- .compile_stan_model(name, opt_level = 1)
+    init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
+    fit <- suppressWarnings(suppressMessages(mod$sample(
+      data = data_list, chains = 1, iter_warmup = 20, iter_sampling = 5,
+      seed = 1, refresh = 0, threads_per_chain = 1,
+      init = init_fn, output_dir = tempdir(), show_messages = FALSE
+    )))
     expect_s3_class(fit, "CmdStanMCMC")
     expect_equal(posterior::ndraws(fit$draws()), 5)
   }

@@ -75,25 +75,34 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #'
 #' `alphanorm`/`alphanorm_ou` normalize `alpha_raw` by
 #' `sqrt(A / dot_self(alpha_raw))`, so an all-zero init (otherwise the
-#' natural default) would divide by zero. This draws a small-magnitude
-#' random vector instead, centered to sum to exactly 0 (required by
+#' natural default) would divide by zero. This draws a random vector
+#' instead, centered to sum to exactly 0 (required by
 #' `sum_to_zero_vector`'s constrained representation) and away from the
 #' `dot_self(alpha_raw) == 0` degeneracy.
 #'
 #' Both models also anchor `alpha[1]`'s sign with a soft penalty in the
-#' model block, breaking an exact reflection symmetry (alpha, theta ->
-#' -alpha, -theta leaves the likelihood unchanged; see each `.stan`
-#' file's header, "REFLECTION SYMMETRY"). This negates the whole draw
-#' whenever its first element came out negative, so chains start already
-#' in the anchored (`alpha[1] > 0`) basin rather than needing warmup to
-#' find it.
+#' model block (breaking an exact reflection symmetry: alpha, theta ->
+#' -alpha, -theta leaves the likelihood, every prior, and the
+#' `sum_to_zero_vector` Jacobian unchanged; see each `.stan` file's
+#' header, "REFLECTION SYMMETRY"), but that penalty only makes the
+#' TARGET correctly specified -- it does not, by itself, make a chain
+#' visit the `alpha[1] > 0` basin, since the two basins are separated by a
+#' likelihood barrier of thousands of nats that a chain essentially
+#' never crosses during warmup. This negates the whole draw whenever its
+#' first element came out negative, so chains START already in the
+#' anchored basin instead of relying on warmup to find it. This is a
+#' bias, not a guarantee for every init/data/seed combination -- see
+#' `bilatr_orient()` (`R/orient.R`) for the deterministic, always-correct
+#' fallback that relabels draws after the fact regardless of which basin
+#' a chain actually landed in, and `.warn_if_wrong_basin()` below for the
+#' automatic post-sampling check that flags it when this bias didn't work.
 #'
 #' @param A Number of action types.
 #' @return A length-`A` numeric vector summing to exactly 0, with its
 #'   first element positive.
 #' @keywords internal
 .alpha_raw_sum0_init <- function(A) {
-  v <- stats::rnorm(A, 0, 0.1)
+  v <- stats::rnorm(A, 0, 0.5)
   v <- v - mean(v)
   if (v[1] < 0) {
     v <- -v
@@ -141,7 +150,11 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
       sigma_theta0 = 0.5,
-      z_theta0 = rep(0, D),
+      # real initial spread, not near 0: with theta near 0 the likelihood
+      # is nearly flat in alpha's direction, leaving an early-warmup
+      # window in which alpha could still rotate before the data locks
+      # the orientation in
+      z_theta0 = stats::rnorm(D, 0, 0.5),
       log_process_noise_raw = rep(0, D),
       mu_log_noise = log(0.2),
       sigma_log_noise = 0.3,
@@ -169,7 +182,8 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
       sigma_mu = 0.5,
-      mu_dyad_raw = rep(0, D),
+      # real initial spread, not near 0 -- see the alphanorm branch above
+      mu_dyad_raw = stats::rnorm(D, 0, 0.5),
       rho = 0.8,
       mu_log_sd_stat = log(1),
       sigma_log_sd_stat = 0.3,
@@ -190,6 +204,45 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   }
 }
 
+#' Warn if a fit's `alpha[1]` landed in the wrong reflection-symmetry basin
+#'
+#' Only `alphanorm`/`alphanorm_ou` have a reflection symmetry a chain's
+#' init can land on either side of (see `R/orient.R`); every other
+#' registered model hard-fixes `alpha[1]`, so this is a no-op for them.
+#' With single-chain runs (this project's SLURM submission convention --
+#' see `runscripts/submit_bilatr_runs.R`) there is no cross-chain Rhat or
+#' other diagnostic that would otherwise surface a wrong-basin fit, so
+#' this check is the only automatic signal; it reports regardless of sign
+#' so a caller always sees where `alpha[1]` landed, and warns specifically
+#' when it's negative.
+#'
+#' @param fit A `CmdStanMCMC` fit object.
+#' @param stan_model Name registered in `.bilatr_stan_models`.
+#' @return `fit`, invisibly (called for the message/warning side effect).
+#' @keywords internal
+.warn_if_wrong_basin <- function(fit, stan_model) {
+  if (!(stan_model %in% c("alphanorm", "alphanorm_ou"))) {
+    return(invisible(fit))
+  }
+
+  alpha1_median <- stats::median(posterior::extract_variable(fit$draws("alpha[1]"), "alpha[1]"))
+  message("Posterior median of alpha[1]: ", round(alpha1_median, 3))
+
+  if (alpha1_median < 0) {
+    warning(
+      "stan_model = '", stan_model, "' fit has posterior median ",
+      "alpha[1] = ", round(alpha1_median, 3), " (< 0): this chain's init ",
+      "landed in the wrong-sign basin of the alpha/theta reflection ",
+      "symmetry (see the model's .stan file header, ",
+      "\"REFLECTION SYMMETRY\"). Use bilatr_orient() to relabel this ",
+      "fit's draws before downstream use.",
+      call. = FALSE
+    )
+  }
+
+  invisible(fit)
+}
+
 #' Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
 #' counterparts in R/fit_dev.R
 #' @keywords internal
@@ -207,7 +260,7 @@ fit_bilatr <- function(
   ...
 ) {
   mod <- .compile_stan_model(stan_model, opt_level)
-  mod$sample(
+  fit <- mod$sample(
     data = stan_data,
     chains = chains,
     parallel_chains = parallel_chains,
@@ -219,6 +272,8 @@ fit_bilatr <- function(
     output_dir = output_dir,
     ...
   )
+  .warn_if_wrong_basin(fit, stan_model)
+  fit
 }
 
 #' Fit the bilatr model to a single dyad's time series

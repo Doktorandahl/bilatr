@@ -4,7 +4,12 @@
 \alias{extract_theta}
 \title{Extract theta trajectories with dyad identifiers reattached}
 \usage{
-extract_theta(fit, stan_data, probs = c(0.05, 0.5, 0.95))
+extract_theta(
+  fit,
+  stan_data,
+  probs = c(0.05, 0.5, 0.95),
+  stan_model = .BILATR_DEFAULT_MODEL
+)
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
@@ -15,6 +20,11 @@ by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (must still carry its
 attribute).}
 
 \item{probs}{Posterior quantiles to report alongside the mean.}
+
+\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
+which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
+\code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
+\code{\link[=fit_panel]{fit_panel()}} always fit.}
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
@@ -28,6 +38,15 @@ the human-readable dyad identifiers (\code{dyad}, the undirected \code{dyad2},
 \code{year}, and \code{month} if applicable) via the \code{dyad_ids} attribute that
 \code{\link[=assemble_stan_data]{assemble_stan_data()}} attaches to its output. Works the same way for
 single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=fit_panel]{fit_panel()}}) fits.
+}
+\details{
+Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
+\code{theta}'s sign always reflects the canonical orientation (higher theta
+= better relations) regardless of which reflection-symmetry basin the
+sampler actually landed in. This is a no-op for \code{stan_model}s other
+than \code{"alphanorm"}/\code{"alphanorm_ou"}, so the default preserves existing
+behavior for \code{stable}-model fits (its \code{alpha[1] = 1} is fixed, never
+negative).
 }
 \examples{
 \dontrun{

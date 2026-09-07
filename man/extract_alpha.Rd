@@ -4,7 +4,12 @@
 \alias{extract_alpha}
 \title{Extract discrimination parameters (alpha) with action-class labels}
 \usage{
-extract_alpha(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
+extract_alpha(
+  fit,
+  event_classes = NULL,
+  probs = c(0.05, 0.5, 0.95),
+  stan_model = .BILATR_DEFAULT_MODEL
+)
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
@@ -17,6 +22,11 @@ supplied, an \code{event_class} column is added alongside the raw action
 index.}
 
 \item{probs}{Posterior quantiles to report alongside the mean.}
+
+\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
+which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
+\code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
+\code{\link[=fit_panel]{fit_panel()}} always fit.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}
@@ -26,8 +36,15 @@ A tibble with one row per action type: \code{action_index}
 \description{
 Pulls posterior summaries of the action-type discrimination parameters
 \code{alpha} out of a fitted model. \code{alpha[1]} is fixed at 1 (the model's
-scale/sign reference); every other element is freely estimated. See the
-package's identification notes in \code{vignette("dyad_time_series")}.
+scale/sign reference) for \code{stable}/\code{ou}; every other element is freely
+estimated. See the package's identification notes in
+\code{vignette("dyad_time_series")}.
+}
+\details{
+Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
+\code{alpha}'s sign always reflects the canonical orientation regardless of
+which reflection-symmetry basin the sampler actually landed in
+(\code{stan_model = "alphanorm"}/\code{"alphanorm_ou"} only; a no-op otherwise).
 }
 \examples{
 \dontrun{

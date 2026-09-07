@@ -1,4 +1,25 @@
 
+# bilatr 0.3.5
+
+## Changes
+
+* `alphanorm`/`alphanorm_ou`'s `alpha[1]` sign orientation is now
+  deterministic across runs: their soft sign anchor alone could not
+  guarantee it (it corrects relative posterior mass between the two
+  mirror modes, but the modes are separated by a likelihood barrier a
+  single chain essentially never crosses, so whichever mode a chain's
+  init landed in was the one it reported). `bilatr_init_fn()` now biases
+  initial values toward the canonical (`alpha[1] > 0`) mode and gives the
+  latent states real initial spread, `fit_bilatr()` warns after sampling
+  if a fit still came back in the wrong mode, and the new
+  `bilatr_orient()` (`R/orient.R`) deterministically relabels a fit's
+  draws to the canonical orientation regardless of which mode the
+  sampler found -- now wired into `extract_theta()`/`extract_alpha()`/
+  `extract_mu_intercept()` via their new `stan_model` argument, so no
+  consumer of those functions sees an unoriented fit. Fits produced
+  before this change may be sign-flipped relative to fits produced after
+  it; `bilatr_orient()` relabels them to match.
+
 # bilatr 0.3.4
 
 ## Changes

@@ -5,7 +5,12 @@
 \title{Extract global action-type intercepts (mu_intercept) with action-class
 labels}
 \usage{
-extract_mu_intercept(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
+extract_mu_intercept(
+  fit,
+  event_classes = NULL,
+  probs = c(0.05, 0.5, 0.95),
+  stan_model = .BILATR_DEFAULT_MODEL
+)
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
@@ -18,6 +23,11 @@ supplied, an \code{event_class} column is added alongside the raw action
 index.}
 
 \item{probs}{Posterior quantiles to report alongside the mean.}
+
+\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
+which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
+\code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
+\code{\link[=fit_panel]{fit_panel()}} always fit.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}
@@ -27,7 +37,14 @@ A tibble with one row per action type: \code{action_index}
 \description{
 Pulls posterior summaries of the global action-type intercepts
 \code{mu_intercept} out of a fitted model. \code{mu_intercept[1]} is fixed at 0
-(the model's softmax level-shift reference).
+(the model's softmax level-shift reference) for \code{stable}/\code{ou}.
+}
+\details{
+\code{mu_intercept} is unaffected by alphanorm/alphanorm_ou's reflection
+symmetry (\verb{alpha .* theta} is invariant under the joint negation, so
+\code{mu_intercept} never needs to flip; see \code{\link[=bilatr_orient]{bilatr_orient()}}) -- \code{fit} is
+passed through it anyway, for a single consistent code path across the
+\verb{extract_*()} functions, but it is always a no-op here.
 }
 \examples{
 \dontrun{

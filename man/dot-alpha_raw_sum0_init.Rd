@@ -16,18 +16,27 @@ first element positive.
 \description{
 \code{alphanorm}/\code{alphanorm_ou} normalize \code{alpha_raw} by
 \code{sqrt(A / dot_self(alpha_raw))}, so an all-zero init (otherwise the
-natural default) would divide by zero. This draws a small-magnitude
-random vector instead, centered to sum to exactly 0 (required by
+natural default) would divide by zero. This draws a random vector
+instead, centered to sum to exactly 0 (required by
 \code{sum_to_zero_vector}'s constrained representation) and away from the
 \code{dot_self(alpha_raw) == 0} degeneracy.
 }
 \details{
 Both models also anchor \code{alpha[1]}'s sign with a soft penalty in the
-model block, breaking an exact reflection symmetry (alpha, theta ->
--alpha, -theta leaves the likelihood unchanged; see each \code{.stan}
-file's header, "REFLECTION SYMMETRY"). This negates the whole draw
-whenever its first element came out negative, so chains start already
-in the anchored (\code{alpha[1] > 0}) basin rather than needing warmup to
-find it.
+model block (breaking an exact reflection symmetry: alpha, theta ->
+-alpha, -theta leaves the likelihood, every prior, and the
+\code{sum_to_zero_vector} Jacobian unchanged; see each \code{.stan} file's
+header, "REFLECTION SYMMETRY"), but that penalty only makes the
+TARGET correctly specified -- it does not, by itself, make a chain
+visit the \code{alpha[1] > 0} basin, since the two basins are separated by a
+likelihood barrier of thousands of nats that a chain essentially
+never crosses during warmup. This negates the whole draw whenever its
+first element came out negative, so chains START already in the
+anchored basin instead of relying on warmup to find it. This is a
+bias, not a guarantee for every init/data/seed combination -- see
+\code{bilatr_orient()} (\code{R/orient.R}) for the deterministic, always-correct
+fallback that relabels draws after the fact regardless of which basin
+a chain actually landed in, and \code{.warn_if_wrong_basin()} below for the
+automatic post-sampling check that flags it when this bias didn't work.
 }
 \keyword{internal}

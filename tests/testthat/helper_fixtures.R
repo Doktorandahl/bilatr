@@ -1,3 +1,12 @@
+skip_if_no_cmdstan <- function() {
+  skip_if_not_installed("cmdstanr")
+  has_cmdstan <- tryCatch({
+    cmdstanr::cmdstan_path()
+    TRUE
+  }, error = function(e) FALSE)
+  skip_if_not(has_cmdstan, "CmdStan is not installed")
+}
+
 make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
   set.seed(seed)
   countries <- c("USA", "CHN", "RUS")

@@ -17,10 +17,14 @@
 // reliably comparable.
 //
 // This variant closes the ridge:
-//   - location is pinned HARD: mu_theta0 is removed entirely (theta0 is
-//     sigma_theta0 * z_theta0, mean exactly 0 across the population by
-//     construction of z_theta0 ~ std_normal(), not merely softly shrunk
-//     toward 0 by a prior)
+//   - location has no separate free parameter: mu_theta0 is removed
+//     entirely (theta0 is sigma_theta0 * z_theta0). This removes the
+//     ADDITIONAL soft anchor mu_theta0 ~ normal(0,1) stable puts on top
+//     of z_theta0's own prior -- but z_theta0's own population mean is
+//     itself still only softly (if stiffly) pinned toward 0 by
+//     z_theta0 ~ std_normal(), not pinned exactly; see "Identification"
+//     below for the correction to this point and why it doesn't
+//     practically matter
 //   - scale is pinned on the ALPHA side, not the theta side: alpha_raw is
 //     a sum_to_zero_vector[A] (mean exactly 0 by construction, so no
 //     mu_intercept-style location dof leaks into alpha), and alpha is
@@ -42,8 +46,19 @@
 //     construction in transformed parameters -- not softly shrunk by a
 //     prior
 //   - mu_intercept sums to exactly 0, by construction (sum_to_zero_vector)
-//   - theta0 has population mean exactly 0, by construction (no
-//     mu_theta0)
+//   - theta0's population mean is softly but STIFFLY pinned toward 0 --
+//     NOT exact, and this is a correction to earlier text in this
+//     header (and to this variant's registry description): z_theta0 is
+//     a plain vector[D] with z_theta0 ~ std_normal(), a prior, not a
+//     sum-to-zero constraint, so a common shift b in z_theta0 costs
+//     D * b^2 / 2 in log density rather than being forbidden outright.
+//     The pin is nonetheless very stiff in practice (D is in the
+//     thousands for this project's dyad sets), so the mean is
+//     effectively 0 for any purpose that matters -- but "effectively"
+//     is doing real work in that sentence, and it belongs in a
+//     different category than alpha's/mu_intercept's genuinely exact
+//     constraints above. sum_to_zero_vector[D] z_theta0 would make it
+//     exact too, if that distinction ever mattered enough to act on.
 //   - no dyad-specific intercept, as in stable: cross-dyad level
 //     differences are forced into theta via mu_intercept
 //
@@ -127,8 +142,41 @@
 // (this model's current fit, in the wrong-sign mode) that's ~7.9 nats of
 // penalty, ample to make the negative-alpha[1] mode posterior-negligible
 // without pulling alpha[1]'s estimated magnitude toward any particular
-// value. Two things deliberately NOT done here, both considered and
-// rejected:
+// value.
+//
+// IMPORTANT CAVEAT, learned the hard way: that "~7.9 nats, ample to make
+// the negative mode posterior-negligible" describes RELATIVE MASS, not
+// whether a chain can actually move between the two modes -- and it is
+// NOT sufficient by itself to fix sign selection in practice. The two
+// modes are separated by a LIKELIHOOD BARRIER of THOUSANDS of nats:
+// flipping sign requires alpha to rotate across the RMS-1 sphere to a
+// direction that fits every dyad badly while theta passes through 0
+// along the way, which costs vastly more than the anchor's ~7.9 nats
+// could ever counteract by pulling a chain back. The two modes are
+// therefore effectively DISCONNECTED under NUTS -- a single chain
+// essentially never crosses that barrier during warmup, regardless of
+// anchor_scale. Whichever basin a chain's INIT happens to land in is the
+// one it reports; the anchor cannot rescue a chain that started in the
+// wrong one. Concretely, this project's runs are single-chain (see
+// runscripts/submit_bilatr_runs.R), and an observed sign difference
+// between two such fits (e.g. a directed vs. an undirected run) reflects
+// two independent inits landing on opposite sides of the barrier, not
+// evidence the anchor is broken.
+//
+// So the anchor STAYS -- it makes the target correctly specified, which
+// matters if both modes were ever actually visited within one chain, and
+// is simply correct model-building regardless -- but mode SELECTION has
+// to come from somewhere else: initialization (bilatr_init_fn(),
+// R/fit.R, biases alpha_raw's sign and gives the theta-side latent
+// states real initial spread so there's no early-warmup window where
+// alpha can rotate freely), a post-sampling check
+// (.warn_if_wrong_basin(), R/fit.R, reports alpha[1]'s posterior median
+// and warns if it's still negative), and bilatr_orient() (R/orient.R),
+// the deterministic fallback that relabels a fit's draws after the fact
+// regardless of which basin the sampler actually found -- this is the
+// robustness guarantee that always works; the other two just reduce how
+// often it has to act. Two things deliberately NOT done for the anchor
+// itself, both considered and rejected:
 //   - a hard `alpha[1] <lower=0>` constraint: a boundary the sampler
 //     must approach whenever the true posterior mass sits near 0, which
 //     this one plausibly does
@@ -142,11 +190,49 @@
 // mode as the two hard alpha anchors tried previously (see stable's
 // history / this model's own "This variant closes the ridge" section).
 //
+// DOCUMENTED FALLBACK (reflection symmetry) -- NOT implemented, only
+// recorded here. Trigger: initialization-controlled runs (the bias in
+// bilatr_init_fn()) still keep coming back with alpha[1] < 0 (per the
+// post-sampling check) often enough to be a practical problem, even
+// though bilatr_orient() already makes it a correctness non-issue. If
+// so, replace alpha_raw's sum_to_zero_vector[A] with a manual
+// construction whose first element is <lower=0>:
+//   real<lower=0> alpha_raw_1;
+//   vector[A - 2] alpha_raw_mid;
+//   alpha_raw[1] = alpha_raw_1;
+//   alpha_raw[2:(A - 1)] = alpha_raw_mid;
+//   alpha_raw[A] = -alpha_raw_1 - sum(alpha_raw_mid);
+// (still sums to exactly 0 by construction, but alpha_raw[1] is now hard
+// non-negative -- this changes sign SELECTION at the parameterization
+// level, upstream of anything a chain's dynamics could undo). Two things
+// to weigh if this is ever adopted, both of which must be stated, not
+// slipped in:
+//   (a) the objection above to a hard alpha[1] <lower=0> constraint --
+//       "a boundary the sampler must approach whenever the true
+//       posterior mass sits near 0" -- is EMPIRICALLY VOID here:
+//       alpha[1] is ~0.786 with a 90% CI of roughly [0.757, 0.815], i.e.
+//       more than 40 posterior SDs from 0. There is no boundary-approach
+//       cost to pay in practice.
+//   (b) the cost that IS real: this construction is NOT isotropic under
+//       alpha_raw ~ std_normal(). alpha_raw[A], built as
+//       -alpha_raw_1 - sum(alpha_raw_mid), absorbs the accumulated
+//       variance of every other element, so the implied prior on
+//       alpha's DIRECTION is no longer exchangeable across action
+//       classes (class A is a priori different from classes 2..A-1).
+//       With alpha normalized to RMS 1 and ~1678 dyads' worth of
+//       likelihood dominating the prior, this is very likely
+//       immaterial -- but it is a real change to the prior, and must be
+//       reported as such if adopted.
+//
 // ORIENTATION: positive alpha[1] means higher theta corresponds to
 // better (less hostile) relations at the reference/neutral action class
 // -- matching stable/ou and the package's stated quantity (bilateral
 // relationship quality). Runs from before this anchor was added may be
-// sign-flipped relative to runs after it. To compare them:
+// sign-flipped relative to runs after it; so, separately, may any two
+// runs made after it (see "IMPORTANT CAVEAT" above -- the anchor does
+// not guarantee orientation by itself). To compare or combine any two
+// fits, use bilatr_orient() rather than assuming they already agree; its
+// FLIP/UNCHANGED lists are:
 //   FLIP sign:  alpha, theta, theta0, z_theta0, theta_raw
 //   UNCHANGED:  mu_intercept, phi, sigma_theta0, process_noise,
 //               mu_log_noise, sigma_log_noise, mu_log_phi, sigma_log_phi

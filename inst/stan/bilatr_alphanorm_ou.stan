@@ -14,10 +14,19 @@
 //     is load-bearing, not merely regularizing; see that file's header
 //     for the diagnostic/escape-hatch discussion, which applies
 //     unchanged here)
-//   - location is pinned HARD: there is no mu_theta_bar here (unlike
-//     `ou`, which keeps stable's mu_theta0-equivalent location anchor).
-//     mu_dyad = sigma_mu * mu_dyad_raw, mean exactly 0 across dyads by
-//     construction.
+//   - location has no separate free parameter: there is no mu_theta_bar
+//     here (unlike `ou`, which keeps stable's mu_theta0-equivalent
+//     location anchor). mu_dyad = sigma_mu * mu_dyad_raw; mu_dyad_raw is
+//     a plain vector[D] with mu_dyad_raw ~ std_normal(), so mu_dyad's
+//     population mean is softly but STIFFLY pinned toward 0 (a prior, not
+//     a constraint -- D is in the thousands for this project's dyad
+//     sets, so a common shift b costs D * b^2 / 2 in log density, which
+//     makes it effectively 0 in practice but not exactly 0 by
+//     construction the way alpha's/mu_intercept's sum_to_zero_vector
+//     constraints are; see bilatr_alphanorm.stan's header for the same
+//     correction applied there to theta0/z_theta0).
+//     sum_to_zero_vector[D] mu_dyad_raw would make it exact, if that
+//     distinction ever mattered enough to act on.
 //
 // From `ou` (restoring force):
 //   - theta follows the same OU/AR(1) process with dyad-specific
@@ -76,10 +85,34 @@
 // constraint or an informative location prior, and why there is only
 // one anchor, not a second one on a hostile class.
 //
+// IMPORTANT CAVEAT (inherited from `alphanorm`, restated here because it
+// is easy to miss and consequential): the anchor's ~nats-scale penalty
+// controls RELATIVE MASS between the two modes, not whether a chain can
+// move between them. The modes are separated by a likelihood barrier of
+// THOUSANDS of nats (crossing requires alpha to rotate across the RMS-1
+// sphere to a direction that fits every dyad badly while theta passes
+// through 0), so they are effectively DISCONNECTED under NUTS -- a
+// single chain essentially never crosses during warmup, and the anchor
+// cannot rescue a chain that started on the wrong side. This project's
+// runs are single-chain, so an observed sign difference between two such
+// fits reflects two independent inits landing in different basins, not a
+// broken anchor. The anchor stays -- it makes the target correctly
+// specified -- but mode SELECTION comes from initialization
+// (bilatr_init_fn(), R/fit.R), a post-sampling check
+// (.warn_if_wrong_basin(), R/fit.R), and, as the deterministic fallback
+// that always works regardless of which basin was found, bilatr_orient()
+// (R/orient.R). See `alphanorm`'s header for the full version of this
+// argument and its documented (not implemented) hard-constraint fallback
+// -- both apply here unchanged, since this model shares alpha_raw's
+// exact parameterization.
+//
 // ORIENTATION: positive alpha[1] means higher theta corresponds to
 // better (less hostile) relations at the reference/neutral action class
 // -- matching stable/ou. Runs from before this anchor was added may be
-// sign-flipped relative to runs after it. To compare them:
+// sign-flipped relative to runs after it; so, separately, may any two
+// runs made after it (see "IMPORTANT CAVEAT" above). To compare or
+// combine any two fits, use bilatr_orient() rather than assuming they
+// already agree; its FLIP/UNCHANGED lists are:
 //   FLIP sign:  alpha, theta, mu_dyad, mu_dyad_raw, theta_raw
 //   UNCHANGED:  mu_intercept, phi, sigma_mu, sd_stat, process_noise,
 //               mu_log_sd_stat, sigma_log_sd_stat, rho,

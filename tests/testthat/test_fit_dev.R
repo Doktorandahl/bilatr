@@ -88,6 +88,8 @@ test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental 
   expect_length(alphanorm_init$alpha_raw, stan_data$A)
   expect_equal(sum(alphanorm_init$alpha_raw), 0)
   expect_gt(alphanorm_init$alpha_raw[1], 0) # starts in the anchored basin
+  expect_length(alphanorm_init$z_theta0, stan_data$D)
+  expect_gt(stats::sd(alphanorm_init$z_theta0), 0) # real initial spread, not rep(0, D)
 
   ou_init <- bilatr_init_fn(stan_data, stan_model = "ou")()
   expect_setequal(
@@ -116,4 +118,6 @@ test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental 
   expect_length(alphanorm_ou_init$mu_intercept, stan_data$A)
   expect_equal(sum(alphanorm_ou_init$alpha_raw), 0)
   expect_gt(alphanorm_ou_init$alpha_raw[1], 0) # starts in the anchored basin
+  expect_length(alphanorm_ou_init$mu_dyad_raw, stan_data$D)
+  expect_gt(stats::sd(alphanorm_ou_init$mu_dyad_raw), 0) # real initial spread, not rep(0, D)
 })
