@@ -1,4 +1,43 @@
 
+# bilatr 0.3.10
+
+## Bug fixes
+
+* Fixed a memory-model bug in every CSV-file-path read
+  (`diagnose_convergence()`, `diagnose_and_extract_bilatr()`,
+  `extract_theta()`, `extract_alpha()`, `extract_mu_intercept()`) that
+  could OOM-kill a job however small `max_memory_mb`/`chunk_size` was
+  set, or however many cores `parallel = TRUE` was given: internally,
+  every one of these previously called
+  `cmdstanr::read_cmdstan_csv(csv_files, variables = ...)`, which reads
+  each chain's CSV via `data.table::fread(cmd = "grep -v '^#' <file>")`
+  -- and per `?data.table::fread`, a `cmd=`/piped input is always
+  written to a full temporary copy in `tempdir()` before being read "as
+  normal," regardless of how few `variables` are requested. That
+  temp-file write happened on *every* call -- once per Tier 3 chunk, not
+  once per run -- so a sweep with hundreds of chunks repeated a
+  near-complete copy of each (often many-GB) chain file hundreds of
+  times; and if `tempdir()`/`$TMPDIR` resolves to a RAM-backed `tmpfs`
+  (a common per-node HPC/SLURM default), each copy was a direct hit
+  against the job's memory allocation, independent of anything
+  `max_memory_mb`/`chunk_size`/`n_workers` controlled.
+* All of these now read via two new internal helpers,
+  `.prepare_fast_csv_read()`/`.fast_read_post_warmup_draws()`: each
+  chain file has its comment lines stripped exactly once per call (via
+  a portable, streaming `readr::read_lines_chunked()` pass -- no
+  external `grep` dependency), written next to the source file by
+  default rather than through `tempdir()`, and every subsequent
+  Tier 1/2/3 read/chunk reads `variables` straight from that one cleaned
+  file via `data.table::fread(file = ...)` (a real path, so `fread` can
+  select columns without buffering the whole file), verified to match
+  `cmdstanr::read_cmdstan_csv()`'s output exactly. This restores the
+  memory bound `max_memory_mb`/`chunk_size` was always meant to provide,
+  makes `parallel = TRUE` safe to use at its documented memory cost
+  again, and removes the redundant per-chunk file-copying regardless. A
+  new `scratch_dir` argument (default `NULL`, meaning alongside each
+  source file) lets you redirect the one-time cleaned copies elsewhere
+  if needed.
+
 # bilatr 0.3.9
 
 ## New features

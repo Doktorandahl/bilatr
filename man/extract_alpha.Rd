@@ -8,7 +8,8 @@ extract_alpha(
   fit,
   event_classes = NULL,
   probs = c(0.05, 0.5, 0.95),
-  stan_model = .BILATR_DEFAULT_MODEL
+  stan_model = .BILATR_DEFAULT_MODEL,
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -29,6 +30,9 @@ the default is supported when \code{fit} is CSV file paths (see Details).}
 which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
 \code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
 \code{\link[=fit_panel]{fit_panel()}} always fit.}
+
+\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}. Only used when \code{fit}
+is CSV file paths.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}
@@ -55,8 +59,8 @@ independently-submitted single-chain SLURM jobs have all completed,
 with only their saved CSVs on disk. Unlike \code{\link[=extract_theta]{extract_theta()}}'s
 CSV-path mode, \code{alpha} is small (Tier 1: a handful of values
 regardless of dyad-set size), so there is no chunking/\code{parallel}
-machinery here -- just one plain \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} call
-across all of \code{fit}, then the same extraction logic either way.
+machinery here -- just one plain read (via \link{.get_draws}) across all
+of \code{fit}, then the same extraction logic either way.
 }
 \examples{
 \dontrun{

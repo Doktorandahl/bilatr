@@ -51,6 +51,7 @@
 #'   passed through to the `alpha`/`mu_intercept` outputs exactly as in
 #'   [extract_alpha()]. Defaults to `stan_data`'s `"event_classes"`
 #'   attribute, if present.
+#' @param scratch_dir See [diagnose_convergence()].
 #' @return A list with elements `diagnostics` (a `bilatr_diagnostics`
 #'   object, as from [diagnose_convergence()]), `theta`, `alpha`, and
 #'   `mu_intercept` (tibbles, in the same shape [extract_theta()]/
@@ -71,7 +72,7 @@ diagnose_and_extract_bilatr <- function(
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
   event_classes = attr(stan_data, "event_classes"),
   max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L)
+  n_workers = max(1L, parallel::detectCores() - 1L), scratch_dir = NULL
 ) {
   if (!is.character(csv_files)) {
     stop(
@@ -105,6 +106,9 @@ diagnose_and_extract_bilatr <- function(
     )
   }
 
+  prepared <- .prepare_fast_csv_read(csv_files, scratch_dir)
+  on.exit(.cleanup_fast_csv_read(prepared), add = TRUE)
+
   all_vars <- .stan_csv_variable_names(csv_files[1])
   var_tiers <- .classify_bilatr_tier(all_vars)
   keep_tiers <- var_tiers[var_tiers$tier %in% tiers, ]
@@ -121,7 +125,7 @@ diagnose_and_extract_bilatr <- function(
   flip_vars <- .bilatr_flip_variables(stan_model)
   flip <- FALSE
   if (length(flip_vars) > 0) {
-    alpha1_draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = "alpha[1]")$post_warmup_draws
+    alpha1_draws <- .fast_read_post_warmup_draws(prepared, "alpha[1]")
     flip <- stats::median(posterior::extract_variable(alpha1_draws, "alpha[1]")) < 0
   }
 
@@ -131,7 +135,7 @@ diagnose_and_extract_bilatr <- function(
   # oriented mean/quantile columns, with no second read.
   tier12_summ <- NULL
   if (length(tier12_vars) > 0) {
-    tier12_draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = tier12_vars)$post_warmup_draws
+    tier12_draws <- .fast_read_post_warmup_draws(prepared, tier12_vars)
     if (flip) {
       df <- as.data.frame(posterior::as_draws_df(tier12_draws))
       flip_cols <- .bilatr_match_draws_columns(names(df), flip_vars)
@@ -156,7 +160,7 @@ diagnose_and_extract_bilatr <- function(
       max_memory_mb_missing
     )
     tier3_summ <- .chunked_summarise_csv(
-      csv_files, tier3_vars, chunk_size_used, parallel, n_workers, flip = flip
+      prepared, tier3_vars, chunk_size_used, parallel, n_workers, flip = flip
     )
   }
 

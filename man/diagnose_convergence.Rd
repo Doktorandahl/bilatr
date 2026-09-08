@@ -13,7 +13,8 @@ diagnose_convergence(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L)
+  n_workers = max(1L, parallel::detectCores() - 1L),
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -95,6 +96,18 @@ substantially, and \code{max_memory_mb} is less trustworthy there.}
 
 \item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
 \code{max(1, parallel::detectCores() - 1)}.}
+
+\item{scratch_dir}{Only used when \code{fit} is CSV file paths. Directory
+to write a one-time, comment-stripped copy of each chain file into
+before reading (see \link{.prepare_fast_csv_read}). \code{NULL} (the default)
+writes each copy alongside its source file, which is deliberate:
+that's already known-good storage for these (often many-GB) files,
+unlike \code{tempdir()}/\verb{$TMPDIR}, which on some HPC systems is a
+RAM-backed \code{tmpfs} -- silently turning a routine disk read into a
+direct hit against the job's memory allocation. Point this at an
+explicit path only if the CSVs' own directory is unsuitable (e.g.
+quota-constrained, read-only, or a slow network filesystem when
+faster local scratch is available).}
 }
 \value{
 A list of class \code{bilatr_diagnostics} with elements:

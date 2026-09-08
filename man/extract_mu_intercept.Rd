@@ -9,7 +9,8 @@ extract_mu_intercept(
   fit,
   event_classes = NULL,
   probs = c(0.05, 0.5, 0.95),
-  stan_model = .BILATR_DEFAULT_MODEL
+  stan_model = .BILATR_DEFAULT_MODEL,
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -30,6 +31,9 @@ the default is supported when \code{fit} is CSV file paths (see Details).}
 which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
 \code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
 \code{\link[=fit_panel]{fit_panel()}} always fit.}
+
+\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}. Only used when \code{fit}
+is CSV file paths.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}

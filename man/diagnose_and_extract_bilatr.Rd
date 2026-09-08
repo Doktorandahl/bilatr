@@ -17,7 +17,8 @@ diagnose_and_extract_bilatr(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L)
+  n_workers = max(1L, parallel::detectCores() - 1L),
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -99,6 +100,8 @@ substantially, and \code{max_memory_mb} is less trustworthy there.}
 
 \item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
 \code{max(1, parallel::detectCores() - 1)}.}
+
+\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}

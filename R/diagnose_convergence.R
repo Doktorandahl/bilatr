@@ -432,20 +432,29 @@
 #' `future::plan()` is saved and restored on exit, so this never
 #' permanently changes the caller's parallel backend.
 #'
-#' Benchmarked against a real production-scale single-chain CSV (~1.9M
-#' Tier 3 columns): `read_cmdstan_csv()` is strongly I/O-bound, not
-#' parsing-bound -- per-call wall-time barely depends on how many
-#' `variables` are requested (a 1000x range in chunk size changed
-#' per-call time by under 10%), because extracting even one column from
-#' a row-oriented CSV requires scanning the full row width regardless of
-#' how many fields are kept. Consequence: total sweep time scales with
-#' the NUMBER OF CHUNKS, not with memory saved -- a small `chunk_size`
-#' does not make this cheaper, it makes it much slower for a given
-#' `variables` list, potentially by orders of magnitude. See
-#' `max_memory_mb` in [diagnose_convergence()]'s documentation, which
-#' this benchmark motivated.
+#' Reads via [.fast_read_post_warmup_draws] against `prepared`'s
+#' comment-stripped files (see [.prepare_fast_csv_read]), not
+#' [cmdstanr::read_cmdstan_csv()] directly: the latter's `cmd = grep`
+#' read re-materializes a full near-complete copy of each chain's raw
+#' CSV on *every* call (see [.prepare_fast_csv_read]'s docs), which
+#' would otherwise happen once per chunk here -- exactly the redundant,
+#' memory-model-breaking cost this function's `max_memory_mb`/
+#' `chunk_size` accounting is meant to avoid.
 #'
-#' @param csv_files Character vector of CmdStan CSV file paths.
+#' Benchmarked against a real production-scale single-chain CSV (~1.9M
+#' Tier 3 columns): reading is strongly I/O-bound, not parsing-bound --
+#' per-call wall-time barely depends on how many `variables` are
+#' requested (a 1000x range in chunk size changed per-call time by under
+#' 10%), because extracting even one column from a row-oriented CSV
+#' requires scanning the full row width regardless of how many fields
+#' are kept. Consequence: total sweep time scales with the NUMBER OF
+#' CHUNKS, not with memory saved -- a small `chunk_size` does not make
+#' this cheaper, it makes it much slower for a given `variables` list,
+#' potentially by orders of magnitude. See `max_memory_mb` in
+#' [diagnose_convergence()]'s documentation, which this benchmark
+#' motivated.
+#'
+#' @param prepared Output of [.prepare_fast_csv_read].
 #' @param variables Character vector of variable names to summarise.
 #' @param chunk_size Variables per chunk.
 #' @param parallel,n_workers See [diagnose_convergence()].
@@ -462,14 +471,11 @@
 #' @return A tibble, the row-bound [posterior::summarise_draws()] output
 #'   across all chunks.
 #' @keywords internal
-.chunked_summarise_csv <- function(csv_files, variables, chunk_size, parallel, n_workers, flip = FALSE) {
+.chunked_summarise_csv <- function(prepared, variables, chunk_size, parallel, n_workers, flip = FALSE) {
   chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
 
   summarise_one_chunk <- function(chunk_vars) {
-    draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = chunk_vars)$post_warmup_draws
-    if (flip) {
-      draws <- -draws
-    }
+    draws <- .fast_read_post_warmup_draws(prepared, chunk_vars, flip = flip)
     posterior::summarise_draws(draws)
   }
 
@@ -581,6 +587,7 @@
 #'   at its default (via `missing()` in [diagnose_convergence()]) --
 #'   gates the one-time "this is a default, not a calibrated value"
 #'   message.
+#' @param scratch_dir See [diagnose_convergence()].
 #' @return A tibble in the same shape [diagnose_convergence()]'s
 #'   in-memory branch produces: [posterior::summarise_draws()] columns
 #'   left-joined with [.classify_bilatr_tier]'s `tier`/`dyad_id`/
@@ -588,8 +595,11 @@
 #' @keywords internal
 .read_diagnostics_summary_from_csv <- function(
   csv_files, tiers, max_memory_mb, chunk_size, parallel, n_workers,
-  max_memory_mb_missing
+  max_memory_mb_missing, scratch_dir = NULL
 ) {
+  prepared <- .prepare_fast_csv_read(csv_files, scratch_dir)
+  on.exit(.cleanup_fast_csv_read(prepared), add = TRUE)
+
   all_vars <- .stan_csv_variable_names(csv_files[1])
   var_tiers <- .classify_bilatr_tier(all_vars)
   keep_tiers <- var_tiers[var_tiers$tier %in% tiers, ]
@@ -598,7 +608,7 @@
   tier3_vars <- keep_tiers$variable[keep_tiers$tier == 3L]
 
   tier12_summ <- if (length(tier12_vars) > 0) {
-    draws <- cmdstanr::read_cmdstan_csv(csv_files, variables = tier12_vars)$post_warmup_draws
+    draws <- .fast_read_post_warmup_draws(prepared, tier12_vars)
     posterior::summarise_draws(draws)
   } else {
     NULL
@@ -609,7 +619,7 @@
       length(tier3_vars), csv_files, max_memory_mb, chunk_size, parallel, n_workers,
       max_memory_mb_missing
     )
-    .chunked_summarise_csv(csv_files, tier3_vars, chunk_size_used, parallel, n_workers)
+    .chunked_summarise_csv(prepared, tier3_vars, chunk_size_used, parallel, n_workers)
   } else {
     NULL
   }
@@ -715,6 +725,17 @@
 #'   substantially, and `max_memory_mb` is less trustworthy there.
 #' @param n_workers Only used when `parallel = TRUE`. Defaults to
 #'   `max(1, parallel::detectCores() - 1)`.
+#' @param scratch_dir Only used when `fit` is CSV file paths. Directory
+#'   to write a one-time, comment-stripped copy of each chain file into
+#'   before reading (see [.prepare_fast_csv_read]). `NULL` (the default)
+#'   writes each copy alongside its source file, which is deliberate:
+#'   that's already known-good storage for these (often many-GB) files,
+#'   unlike `tempdir()`/`$TMPDIR`, which on some HPC systems is a
+#'   RAM-backed `tmpfs` -- silently turning a routine disk read into a
+#'   direct hit against the job's memory allocation. Point this at an
+#'   explicit path only if the CSVs' own directory is unsuitable (e.g.
+#'   quota-constrained, read-only, or a slow network filesystem when
+#'   faster local scratch is available).
 #' @return A list of class `bilatr_diagnostics` with elements:
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
@@ -755,7 +776,8 @@ diagnose_convergence <- function(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L)
+  n_workers = max(1L, parallel::detectCores() - 1L),
+  scratch_dir = NULL
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
 
@@ -771,7 +793,8 @@ diagnose_convergence <- function(
 
   if (is.character(fit)) {
     summ <- .read_diagnostics_summary_from_csv(
-      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing
+      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing,
+      scratch_dir
     )
   } else {
     draws <- if (posterior::is_draws(fit)) fit else fit$draws()

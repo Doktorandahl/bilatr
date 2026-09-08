@@ -5,7 +5,7 @@
 \title{Read and summarise CSV variables in memory-bounded chunks}
 \usage{
 .chunked_summarise_csv(
-  csv_files,
+  prepared,
   variables,
   chunk_size,
   parallel,
@@ -14,7 +14,7 @@
 )
 }
 \arguments{
-\item{csv_files}{Character vector of CmdStan CSV file paths.}
+\item{prepared}{Output of \link{.prepare_fast_csv_read}.}
 
 \item{variables}{Character vector of variable names to summarise.}
 
@@ -50,17 +50,26 @@ chunks are in memory at once) for wall-clock speed. The active
 permanently changes the caller's parallel backend.
 }
 \details{
+Reads via \link{.fast_read_post_warmup_draws} against \code{prepared}'s
+comment-stripped files (see \link{.prepare_fast_csv_read}), not
+\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} directly: the latter's \code{cmd = grep}
+read re-materializes a full near-complete copy of each chain's raw
+CSV on \emph{every} call (see \link{.prepare_fast_csv_read}'s docs), which
+would otherwise happen once per chunk here -- exactly the redundant,
+memory-model-breaking cost this function's \code{max_memory_mb}/
+\code{chunk_size} accounting is meant to avoid.
+
 Benchmarked against a real production-scale single-chain CSV (~1.9M
-Tier 3 columns): \code{read_cmdstan_csv()} is strongly I/O-bound, not
-parsing-bound -- per-call wall-time barely depends on how many
-\code{variables} are requested (a 1000x range in chunk size changed
-per-call time by under 10\%), because extracting even one column from
-a row-oriented CSV requires scanning the full row width regardless of
-how many fields are kept. Consequence: total sweep time scales with
-the NUMBER OF CHUNKS, not with memory saved -- a small \code{chunk_size}
-does not make this cheaper, it makes it much slower for a given
-\code{variables} list, potentially by orders of magnitude. See
-\code{max_memory_mb} in \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation, which
-this benchmark motivated.
+Tier 3 columns): reading is strongly I/O-bound, not parsing-bound --
+per-call wall-time barely depends on how many \code{variables} are
+requested (a 1000x range in chunk size changed per-call time by under
+10\%), because extracting even one column from a row-oriented CSV
+requires scanning the full row width regardless of how many fields
+are kept. Consequence: total sweep time scales with the NUMBER OF
+CHUNKS, not with memory saved -- a small \code{chunk_size} does not make
+this cheaper, it makes it much slower for a given \code{variables} list,
+potentially by orders of magnitude. See \code{max_memory_mb} in
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation, which this benchmark
+motivated.
 }
 \keyword{internal}

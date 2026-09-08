@@ -12,7 +12,8 @@ extract_theta(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L)
+  n_workers = max(1L, parallel::detectCores() - 1L),
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -32,8 +33,8 @@ which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()
 \code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
 \code{\link[=fit_panel]{fit_panel()}} always fit.}
 
-\item{max_memory_mb, chunk_size, parallel, n_workers}{Only used when
-\code{fit} is CSV file paths; identical in meaning to
+\item{max_memory_mb, chunk_size, parallel, n_workers, scratch_dir}{Only
+used when \code{fit} is CSV file paths; identical in meaning to
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s arguments of the same name (including
 the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 \code{theta} alone rather than all of Tier 3.}

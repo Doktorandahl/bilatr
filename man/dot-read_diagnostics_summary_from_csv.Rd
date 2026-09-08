@@ -11,7 +11,8 @@
   chunk_size,
   parallel,
   n_workers,
-  max_memory_mb_missing
+  max_memory_mb_missing,
+  scratch_dir = NULL
 )
 }
 \arguments{
@@ -24,6 +25,8 @@
 at its default (via \code{missing()} in \code{\link[=diagnose_convergence]{diagnose_convergence()}}) --
 gates the one-time "this is a default, not a calibrated value"
 message.}
+
+\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A tibble in the same shape \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
