@@ -14,7 +14,7 @@ A length-\code{A} numeric vector summing to exactly 0, with its
 first element positive.
 }
 \description{
-\code{alphanorm}/\code{alphanorm_ou} normalize \code{alpha_raw} by
+\code{stable}/\code{ou} normalize \code{alpha_raw} by
 \code{sqrt(A / dot_self(alpha_raw))}, so an all-zero init (otherwise the
 natural default) would divide by zero. This draws a random vector
 instead, centered to sum to exactly 0 (required by

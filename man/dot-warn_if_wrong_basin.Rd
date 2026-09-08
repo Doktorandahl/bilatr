@@ -15,9 +15,10 @@
 \code{fit}, invisibly (called for the message/warning side effect).
 }
 \description{
-Only \code{alphanorm}/\code{alphanorm_ou} have a reflection symmetry a chain's
-init can land on either side of (see \code{R/orient.R}); every other
-registered model hard-fixes \code{alpha[1]}, so this is a no-op for them.
+Only \code{stable}/\code{ou} have a reflection symmetry a chain's init can land
+on either side of (see \code{R/orient.R}); any other registered model that
+instead hard-fixes \code{alpha[1]} (as both did themselves before 0.4.0's
+promotion; see NEWS.md) is a no-op here.
 With single-chain runs (this project's SLURM submission convention --
 see \code{runscripts/submit_bilatr_runs.R}) there is no cross-chain Rhat or
 other diagnostic that would otherwise surface a wrong-basin fit, so

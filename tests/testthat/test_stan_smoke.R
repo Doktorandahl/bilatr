@@ -12,12 +12,13 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # `stable` plus the three experimental variants added alongside it
-  # (phi_logn was retired to inst/stan/legacy/ in 0.3.2 and is not
-  # registered).
+  # `stable` plus the experimental `ou` variant (phi_logn was retired to
+  # inst/stan/legacy/ in 0.3.2, and the pre-0.4.0 stable/ou were retired
+  # there in 0.4.0 when alphanorm/alphanorm_ou were promoted -- see
+  # NEWS.md; none of those three are registered).
   expect_setequal(
     names(.bilatr_stan_models),
-    c("stable", "alphanorm", "ou", "alphanorm_ou")
+    c("stable", "ou")
   )
 
   for (name in names(.bilatr_stan_models)) {
@@ -65,7 +66,7 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
   }
 })
 
-test_that("bilatr_init_fn()'s alphanorm/alphanorm_ou inits pass cmdstanr's init validation", {
+test_that("bilatr_init_fn()'s stable/ou inits pass cmdstanr's init validation", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -89,7 +90,7 @@ test_that("bilatr_init_fn()'s alphanorm/alphanorm_ou inits pass cmdstanr's init 
     compute_log_lik = 0, anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
   )
 
-  for (name in c("alphanorm", "alphanorm_ou")) {
+  for (name in c("stable", "ou")) {
     mod <- .compile_stan_model(name, opt_level = 1)
     init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
     fit <- suppressWarnings(suppressMessages(mod$sample(
@@ -127,10 +128,10 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
   Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
   is_obs <- matrix(1L, D, Tn)
 
+  sum0 <- function(x) x - mean(x)
   params <- list(
     theta_raw = matrix(stats::rnorm(D * Tn, 0, 0.3), D, Tn),
-    mu_intercept_raw = stats::rnorm(A - 1, 0, 0.3),
-    mu_theta0 = 0.1,
+    mu_intercept = sum0(stats::rnorm(A, 0, 0.3)),
     sigma_theta0 = 0.4,
     z_theta0 = stats::rnorm(D, 0, 0.3),
     log_process_noise_raw = stats::rnorm(D, 0, 0.3),
@@ -139,11 +140,11 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
     phi = c(1.2, 0.9),
     mu_log_phi = 0.05,
     sigma_log_phi = 0.4,
-    alpha_raw = stats::rnorm(A - 1, 0, 0.3)
+    alpha_raw = sum0(c(2, stats::rnorm(A - 1, 0, 0.3)))
   )
 
   mod <- cmdstanr::cmdstan_model(
-    system.file("stan", "bilatr_dirmult_irt.stan", package = "bilatr"),
+    system.file("stan", "bilatr_alphanorm.stan", package = "bilatr"),
     cpp_options = list(stan_threads = TRUE),
     compile_model_methods = TRUE,
     force_recompile = TRUE
@@ -162,12 +163,14 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
 
   data_1s <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A)
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, anchor_scale = 0.1
   )
   action_weight <- c(1.3, 0.7, 1.0, 1.5)
   data_action_weighted <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = action_weight
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = action_weight,
+    compute_log_lik = 0, anchor_scale = 0.1
   )
 
   lp_base <- logprob_at(data_1s, params)
@@ -179,7 +182,7 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
   expect_equal(lp_base, logprob_at(data_1s, params))
 })
 
-test_that("alphanorm's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+test_that("stable's (bilatr_alphanorm.stan) soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -259,7 +262,7 @@ test_that("alphanorm's soft sign anchor exactly accounts for the log-prob gap be
   expect_gt(lp_pos, lp_neg)
 })
 
-test_that("alphanorm_ou's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+test_that("ou's (bilatr_alphanorm_ou.stan) soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()

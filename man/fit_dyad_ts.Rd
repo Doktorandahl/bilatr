@@ -49,7 +49,8 @@ A \code{CmdStanMCMC} fit object.
 }
 \description{
 Fits the collapsed dyadic IRT model (see the package's Stan file,
-\code{bilatr_dirmult_irt.stan}) to a single dyad (\code{D == 1}), i.e. estimates
+\code{bilatr_alphanorm.stan}, registered as the \code{stable} model -- see
+\code{R/model_registry.R}) to a single dyad (\code{D == 1}), i.e. estimates
 one latent conflict trajectory \code{theta} with no cross-dyad pooling on
 \code{theta0}, \code{phi}, or process noise (those hierarchical parameters still
 exist in the model but are estimated from a single unit, so their

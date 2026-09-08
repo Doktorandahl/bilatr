@@ -6,7 +6,7 @@ test_that("diagnose_and_extract_bilatr() matches calling the four functions sepa
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model, no reflection symmetry
+  fx <- make_csv_diagnostics_fixture() # stable model, ordinary (right-basin) init
 
   diag_ref <- suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, chunk_size = 3))
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -100,7 +100,7 @@ test_that("diagnose_and_extract_bilatr() orients alpha/theta/mu_intercept identi
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "alphanorm",
+    stan_model = "stable",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -111,17 +111,17 @@ test_that("diagnose_and_extract_bilatr() orients alpha/theta/mu_intercept identi
   expect_lt(stats::median(alpha1_raw), 0)
 
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "alphanorm", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
   )))
   alpha_ref <- suppressWarnings(extract_alpha(
-    fx$csv_files, stan_model = "alphanorm", probs = c(0.05, 0.5, 0.95)
+    fx$csv_files, stan_model = "stable", probs = c(0.05, 0.5, 0.95)
   ))
   mu_ref <- suppressWarnings(extract_mu_intercept(
-    fx$csv_files, stan_model = "alphanorm", probs = c(0.05, 0.5, 0.95)
+    fx$csv_files, stan_model = "stable", probs = c(0.05, 0.5, 0.95)
   ))
 
   fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "alphanorm", chunk_size = 3
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable", chunk_size = 3
   )))
 
   expect_equal(

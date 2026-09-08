@@ -45,20 +45,6 @@ test_that("bilatr_init_fn() initializes phi for the stable model, not phi_logn p
   expect_false(any(c("log_phi0_raw", "beta_logn") %in% names(stable_init)))
 })
 
-test_that("bilatr_init_fn() matches the current parameterization (non-centered process noise, free alpha)", {
-  stan_data <- list(D = 2, T = 3, A = 4)
-  init <- bilatr_init_fn(stan_data, stan_model = "stable")()
-
-  # process_noise is non-centered: log_process_noise_raw, not process_noise
-  expect_true("log_process_noise_raw" %in% names(init))
-  expect_false("process_noise" %in% names(init))
-  expect_length(init$log_process_noise_raw, stan_data$D)
-
-  # alpha[A] is freely estimated: no alpha_hostile, alpha_raw has length A - 1
-  expect_false("alpha_hostile" %in% names(init))
-  expect_length(init$alpha_raw, stan_data$A - 1)
-})
-
 test_that(".alpha_raw_sum0_init() sums to exactly 0, is bounded away from the dot_self()=0 degeneracy, and starts in the anchored (alpha[1] > 0) basin", {
   for (A in c(2, 4, 5, 9)) {
     for (draw in 1:20) { # repeat: it's a random draw, the guarantees must hold every time
@@ -71,53 +57,41 @@ test_that(".alpha_raw_sum0_init() sums to exactly 0, is bounded away from the do
   }
 })
 
-test_that("bilatr_init_fn() builds correctly-shaped inits for each experimental variant", {
+test_that("bilatr_init_fn() builds correctly-shaped inits for the stable and ou models", {
   stan_data <- list(D = 3, T = 5, A = 4)
 
-  alphanorm_init <- bilatr_init_fn(stan_data, stan_model = "alphanorm")()
+  stable_init <- bilatr_init_fn(stan_data, stan_model = "stable")()
   expect_setequal(
-    names(alphanorm_init),
+    names(stable_init),
     c(
       "theta_raw", "mu_intercept", "alpha_raw", "sigma_theta0", "z_theta0",
       "log_process_noise_raw", "mu_log_noise", "sigma_log_noise", "phi",
       "mu_log_phi", "sigma_log_phi"
     )
   )
-  expect_false("mu_theta0" %in% names(alphanorm_init)) # hard-pinned, removed
-  expect_length(alphanorm_init$mu_intercept, stan_data$A) # sum_to_zero_vector[A], not A - 1
-  expect_length(alphanorm_init$alpha_raw, stan_data$A)
-  expect_equal(sum(alphanorm_init$alpha_raw), 0)
-  expect_gt(alphanorm_init$alpha_raw[1], 0) # starts in the anchored basin
-  expect_length(alphanorm_init$z_theta0, stan_data$D)
-  expect_gt(stats::sd(alphanorm_init$z_theta0), 0) # real initial spread, not rep(0, D)
+  # process_noise is non-centered: log_process_noise_raw, not process_noise
+  expect_false("process_noise" %in% names(stable_init))
+  expect_false("mu_theta0" %in% names(stable_init)) # hard-pinned, removed
+  expect_length(stable_init$mu_intercept, stan_data$A) # sum_to_zero_vector[A], not A - 1
+  expect_length(stable_init$alpha_raw, stan_data$A)
+  expect_equal(sum(stable_init$alpha_raw), 0)
+  expect_gt(stable_init$alpha_raw[1], 0) # starts in the anchored basin
+  expect_length(stable_init$z_theta0, stan_data$D)
+  expect_gt(stats::sd(stable_init$z_theta0), 0) # real initial spread, not rep(0, D)
 
   ou_init <- bilatr_init_fn(stan_data, stan_model = "ou")()
   expect_setequal(
     names(ou_init),
-    c(
-      "theta_raw", "mu_intercept_raw", "alpha_raw", "mu_theta_bar", "sigma_mu",
-      "mu_dyad_raw", "rho", "mu_log_sd_stat", "sigma_log_sd_stat",
-      "log_sd_stat_raw", "phi", "mu_log_phi", "sigma_log_phi"
-    )
-  )
-  expect_false("mu_theta0" %in% names(ou_init)) # role taken by mu_theta_bar
-  expect_length(ou_init$mu_intercept_raw, stan_data$A - 1) # identification unchanged from stable
-  expect_length(ou_init$mu_dyad_raw, stan_data$D)
-  expect_true(ou_init$rho > 0 && ou_init$rho < 1)
-
-  alphanorm_ou_init <- bilatr_init_fn(stan_data, stan_model = "alphanorm_ou")()
-  expect_setequal(
-    names(alphanorm_ou_init),
     c(
       "theta_raw", "mu_intercept", "alpha_raw", "sigma_mu", "mu_dyad_raw",
       "rho", "mu_log_sd_stat", "sigma_log_sd_stat", "log_sd_stat_raw", "phi",
       "mu_log_phi", "sigma_log_phi"
     )
   )
-  expect_false(any(c("mu_theta0", "mu_theta_bar") %in% names(alphanorm_ou_init))) # location pinned hard
-  expect_length(alphanorm_ou_init$mu_intercept, stan_data$A)
-  expect_equal(sum(alphanorm_ou_init$alpha_raw), 0)
-  expect_gt(alphanorm_ou_init$alpha_raw[1], 0) # starts in the anchored basin
-  expect_length(alphanorm_ou_init$mu_dyad_raw, stan_data$D)
-  expect_gt(stats::sd(alphanorm_ou_init$mu_dyad_raw), 0) # real initial spread, not rep(0, D)
+  expect_false(any(c("mu_theta0", "mu_theta_bar") %in% names(ou_init))) # location pinned hard
+  expect_length(ou_init$mu_intercept, stan_data$A)
+  expect_equal(sum(ou_init$alpha_raw), 0)
+  expect_gt(ou_init$alpha_raw[1], 0) # starts in the anchored basin
+  expect_length(ou_init$mu_dyad_raw, stan_data$D)
+  expect_gt(stats::sd(ou_init$mu_dyad_raw), 0) # real initial spread, not rep(0, D)
 })

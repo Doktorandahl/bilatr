@@ -152,7 +152,7 @@ quantiles.
 \dontrun{
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
 result <- diagnose_and_extract_bilatr(
-  csv_files, stan_data, n_dt = n_dt, stan_model = "alphanorm"
+  csv_files, stan_data, n_dt = n_dt, stan_model = "ou"
 )
 result$diagnostics
 result$theta

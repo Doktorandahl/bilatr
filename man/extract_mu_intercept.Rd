@@ -42,12 +42,14 @@ A tibble with one row per action type: \code{action_index}
 }
 \description{
 Pulls posterior summaries of the global action-type intercepts
-\code{mu_intercept} out of a fitted model. \code{mu_intercept[1]} is fixed at 0
-(the model's softmax level-shift reference) for \code{stable}/\code{ou}.
+\code{mu_intercept} out of a fitted model. \code{mu_intercept} sums to exactly 0
+(a \code{sum_to_zero_vector}, not a single fixed-to-0 element) for
+\code{stable}/\code{ou}, so no residual location degree of freedom hides in the
+softmax level-shift.
 }
 \details{
-\code{mu_intercept} is unaffected by alphanorm/alphanorm_ou's reflection
-symmetry (\verb{alpha .* theta} is invariant under the joint negation, so
+\code{mu_intercept} is unaffected by stable/ou's reflection symmetry
+(\verb{alpha .* theta} is invariant under the joint negation, so
 \code{mu_intercept} never needs to flip; see \code{\link[=bilatr_orient]{bilatr_orient()}}) -- \code{fit} is
 passed through it anyway, for a single consistent code path across the
 \verb{extract_*()} functions, but it is always a no-op here.

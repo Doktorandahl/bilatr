@@ -75,8 +75,9 @@ build_reduce_sum_grid <- function(n_dyads,
 
 #' Wrap the reduce_sum likelihood in a Stan `profile()` block
 #'
-#' Takes the source of `inst/stan/bilatr_dirmult_irt.stan` (or an
-#' equivalent model whose `model` block contains the exact
+#' Takes the source of `inst/stan/bilatr_alphanorm.stan` (the `stable`
+#' model since 0.4.0's promotion; see NEWS.md) or an equivalent model
+#' whose `model` block contains the exact
 #' `array[D] int dyad_seq = linspaced_int_array(D, 1, D);` +
 #' `target += reduce_sum(...);` pair) and returns a copy with that pair
 #' wrapped in `profile("<profile_name>") { ... }`, so a fit of the

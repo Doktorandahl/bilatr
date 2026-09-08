@@ -19,7 +19,7 @@
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
 #'   (see `R/model_registry.R`): `"stable"` (also the default used by the
 #'   exported [fit_dyad_ts()]) or one of the experimental variants
-#'   (`"alphanorm"`, `"ou"`, `"alphanorm_ou"`). Unrecognized names error
+#'   (`"ou"`). Unrecognized names error
 #'   immediately, before any compilation is attempted, listing the
 #'   currently registered options.
 #' @return A `CmdStanMCMC` fit object.
@@ -71,7 +71,7 @@ fit_dyad_ts_dev <- function(
 #' @param stan_model Name of a model registered in `.bilatr_stan_models`
 #'   (see `R/model_registry.R`): `"stable"` (also the default used by the
 #'   exported [fit_panel()]) or one of the experimental variants
-#'   (`"alphanorm"`, `"ou"`, `"alphanorm_ou"`). Unrecognized names error
+#'   (`"ou"`). Unrecognized names error
 #'   immediately, before any compilation is attempted, listing the
 #'   currently registered options.
 #' @return A `CmdStanMCMC` fit object.

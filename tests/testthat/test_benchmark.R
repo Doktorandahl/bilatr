@@ -43,7 +43,7 @@ test_that("build_reduce_sum_grid honours explicit grainsize_levels and validates
 
 test_that("insert_reduce_sum_profile wraps the reduce_sum call exactly once", {
   src <- paste(
-    readLines(system.file("stan", "bilatr_dirmult_irt.stan", package = "bilatr")),
+    readLines(.resolve_stan_model("stable")),
     collapse = "\n"
   )
   out <- insert_reduce_sum_profile(src)

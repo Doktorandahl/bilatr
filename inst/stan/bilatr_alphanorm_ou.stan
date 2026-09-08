@@ -1,11 +1,22 @@
 // bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories.
 //
-// EXPERIMENTAL variant `alphanorm_ou` (registered in R/model_registry.R,
-// status = "experimental"). Not the default model; fit only via
-// fit_dyad_ts_dev()/fit_panel_dev(stan_model = "alphanorm_ou"). Combines
-// `alphanorm`'s identification with `ou`'s dynamics -- see those two
-// files for the full rationale behind each half; this header covers only
-// how the two combine and what's genuinely new in the combination.
+// Registered as `ou` (R/model_registry.R, status = "experimental") since
+// 0.4.0, promoted (still experimental) from the `alphanorm_ou` variant it
+// was developed under, once `alphanorm` itself was promoted to `stable`
+// -- see NEWS.md. Fit via fit_dyad_ts_dev()/fit_panel_dev(stan_model =
+// "ou"); the file itself is unchanged/unrenamed across that promotion.
+// The ORIGINAL `ou` model this replaces (an OU/AR(1) variant of the
+// pre-0.4.0 stable model, sharing ITS alpha[1] = 1 identification, not
+// this file's) was retired to
+// inst/stan/legacy/bilatr_ou_pre_0.4.0.stan -- every bare "ou" reference
+// below this point that isn't clearly about this file means that
+// retired model.
+//
+// Combines `alphanorm`'s identification (bilatr_alphanorm.stan, now
+// registered as `stable`) with the retired `ou`'s OU/AR(1) dynamics --
+// see those two files for the full rationale behind each half; this
+// header covers only how the two combine and what's genuinely new in
+// the combination.
 //
 // From `alphanorm` (closing the affine ridge):
 //   - alpha_raw and mu_intercept are both sum_to_zero_vector[A]; alpha is

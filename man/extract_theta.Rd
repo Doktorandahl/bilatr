@@ -56,10 +56,15 @@ single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=
 Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
 \code{theta}'s sign always reflects the canonical orientation (higher theta
 = better relations) regardless of which reflection-symmetry basin the
-sampler actually landed in. This is a no-op for \code{stan_model}s other
-than \code{"alphanorm"}/\code{"alphanorm_ou"}, so the default preserves existing
-behavior for \code{stable}-model fits (its \code{alpha[1] = 1} is fixed, never
-negative).
+sampler actually landed in. This matters for the default \code{stan_model}
+(\code{"stable"}) itself, not just the experimental \code{"ou"}: both normalize
+\code{alpha} via a \code{sum_to_zero_vector} with only a \emph{soft} sign anchor on
+\code{alpha[1]} (see \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s \code{anchor_scale}), so a chain's
+init can still land in the wrong-sign basin; this reorientation is
+what makes the result correct regardless. A no-op only for a
+hypothetical \code{stan_model} whose identification hard-fixes \code{alpha[1]}'s
+sign instead (as \code{stable}/\code{ou} themselves did before 0.4.0's
+promotion; see NEWS.md).
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --
@@ -92,6 +97,6 @@ theta <- extract_theta(fit, stan_data)
 
 # a completed SLURM run, never read into this R session
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-theta <- extract_theta(csv_files, stan_data, stan_model = "alphanorm", max_memory_mb = 16384)
+theta <- extract_theta(csv_files, stan_data, stan_model = "ou", max_memory_mb = 16384)
 }
 }

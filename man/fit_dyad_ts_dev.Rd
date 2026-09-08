@@ -46,7 +46,7 @@ chain.}
 \item{stan_model}{Name of a model registered in \code{.bilatr_stan_models}
 (see \code{R/model_registry.R}): \code{"stable"} (also the default used by the
 exported \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) or one of the experimental variants
-(\code{"alphanorm"}, \code{"ou"}, \code{"alphanorm_ou"}). Unrecognized names error
+(\code{"ou"}). Unrecognized names error
 immediately, before any compilation is attempted, listing the
 currently registered options.}
 

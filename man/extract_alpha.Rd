@@ -41,16 +41,18 @@ A tibble with one row per action type: \code{action_index}
 }
 \description{
 Pulls posterior summaries of the action-type discrimination parameters
-\code{alpha} out of a fitted model. \code{alpha[1]} is fixed at 1 (the model's
-scale/sign reference) for \code{stable}/\code{ou}; every other element is freely
-estimated. See the package's identification notes in
-\code{vignette("dyad_time_series")}.
+\code{alpha} out of a fitted model. \code{alpha} sums to exactly 0 and has RMS 1
+(a \code{sum_to_zero_vector}, not a single fixed-to-1 element) for
+\code{stable}/\code{ou}; \code{alpha[1]}, the reference/neutral action class supplied
+via \code{reference_category}, is only softly anchored positive (see
+\code{\link[=assemble_stan_data]{assemble_stan_data()}}'s \code{anchor_scale}). See the package's
+identification notes in \code{vignette("dyad_time_series")}.
 }
 \details{
 Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
 \code{alpha}'s sign always reflects the canonical orientation regardless of
-which reflection-symmetry basin the sampler actually landed in
-(\code{stan_model = "alphanorm"}/\code{"alphanorm_ou"} only; a no-op otherwise).
+which reflection-symmetry basin the sampler actually landed in --
+\code{stable}/\code{ou}'s soft anchor above doesn't guarantee that on its own.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), for the case where there is no in-memory fit at all
@@ -68,6 +70,6 @@ alpha <- extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
 
 # cross-chain roll-up from saved CSVs, no in-memory fit
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "alphanorm")
+alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "ou")
 }
 }

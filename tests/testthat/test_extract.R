@@ -5,7 +5,7 @@ test_that("extract_theta() from CSV files matches the in-memory path exactly, se
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model, no reflection symmetry
+  fx <- make_csv_diagnostics_fixture() # stable model, ordinary (right-basin) init
   theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data))
 
   theta_csv <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -127,7 +127,7 @@ test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "alphanorm",
+    stan_model = "stable",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     # pin the chain near its (deliberately wrong-basin) init, per
@@ -143,18 +143,18 @@ test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'
   alpha1_raw <- posterior::extract_variable(fx$fit$draws("alpha[1]"), "alpha[1]")
   expect_lt(stats::median(alpha1_raw), 0)
 
-  theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data, stan_model = "alphanorm"))
+  theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data, stan_model = "stable"))
   theta_csv <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "alphanorm", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
   )))
   expect_equal(
     dplyr::arrange(theta_mem, dyad_id, time_index),
     dplyr::arrange(theta_csv, dyad_id, time_index)
   )
   # both must have been reoriented to the canonical positive alpha[1]
-  alpha_csv <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "alphanorm"))
+  alpha_csv <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable"))
   expect_gt(alpha_csv$mean[1], 0)
 
-  alpha_mem <- suppressWarnings(extract_alpha(fx$fit, stan_model = "alphanorm"))
+  alpha_mem <- suppressWarnings(extract_alpha(fx$fit, stan_model = "stable"))
   expect_equal(alpha_mem$mean[1], alpha_csv$mean[1])
 })

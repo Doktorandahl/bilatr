@@ -142,26 +142,28 @@ parse_weighted_arg <- function(weighted) {
 #'   `threads_per_chain` argument.
 #' @param rho_prior_a,rho_prior_b Shape parameters of the
 #'   `beta(rho_prior_a, rho_prior_b)` prior on the OU/AR(1) persistence
-#'   parameter `rho`, consumed only by the experimental `ou`/`alphanorm_ou`
-#'   Stan model variants (see `R/model_registry.R`); ignored by `stable`
-#'   and `alphanorm`. Default `8, 2` (weighted toward strong persistence).
-#' @param compute_log_lik `0` (default) or `1`. Data flag consumed only by
-#'   the three experimental variants, gating a per-dyad-period `log_lik`
-#'   in `generated quantities`; left off by default since it is `D x T x`
-#'   draws and file size already scales with dyad count. Ignored by
-#'   `stable`.
+#'   parameter `rho`, consumed only by the experimental `ou` Stan model
+#'   variant (see `R/model_registry.R`); ignored by `stable`, which keeps
+#'   a random-walk `theta` with no persistence parameter. Default `8, 2`
+#'   (weighted toward strong persistence).
+#' @param compute_log_lik `0` (default) or `1`. Data flag consumed by
+#'   both registered Stan model variants, gating a per-dyad-period
+#'   `log_lik` in `generated quantities`; left off by default since it is
+#'   `D x T x` draws and file size already scales with dyad count.
 #' @param anchor_scale Scale of the soft sign anchor
-#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`, consumed
-#'   only by the experimental `alphanorm`/`alphanorm_ou` Stan model
-#'   variants (see `R/model_registry.R`). Those two normalize `alpha` via
-#'   a `sum_to_zero_vector` with no fixed element, which leaves an exact
-#'   reflection symmetry (`alpha`, `theta` -> `-alpha`, `-theta` is
-#'   likelihood-invariant); the anchor breaks it by softly penalizing
-#'   `alpha[1] < 0`, so higher `theta` orients toward better relations,
-#'   matching `stable`/`ou`. `alpha[1]` is already the reference/neutral
-#'   action class supplied via `reference_category` -- no separate index
-#'   is needed. Ignored by `stable`/`ou`, whose `alpha[1] = 1` hard fix
-#'   already selects a mode. Default `0.1`.
+#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`, consumed by
+#'   both registered Stan model variants (see `R/model_registry.R`).
+#'   `stable`/`ou` normalize `alpha` via a `sum_to_zero_vector` with no
+#'   fixed element, which leaves an exact reflection symmetry (`alpha`,
+#'   `theta` -> `-alpha`, `-theta` is likelihood-invariant); the anchor
+#'   breaks it by softly penalizing `alpha[1] < 0`, so higher `theta`
+#'   orients toward better relations. `alpha[1]` is already the
+#'   reference/neutral action class supplied via `reference_category` --
+#'   no separate index is needed. Since the anchor is only soft, a
+#'   chain's init can still land in the wrong-sign basin; see
+#'   `bilatr_orient()` for the deterministic post-hoc fix
+#'   `extract_theta()`/`extract_alpha()`/`extract_mu_intercept()` already
+#'   apply by default. Default `0.1`.
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `dyad_weight`, `period_weight`,
@@ -288,18 +290,17 @@ assemble_stan_data <- function(
     dyad_weight = dyad_weight,
     period_weight = period_weight,
     action_weight = action_weight,
-    # Consumed only by the experimental ou/alphanorm_ou variants
-    # (R/model_registry.R); harmless extra entries for stable/alphanorm,
-    # whose Stan programs don't declare them.
+    # Consumed only by the experimental ou variant (R/model_registry.R);
+    # a harmless extra entry for stable, whose Stan program doesn't
+    # declare it.
     rho_prior_a = rho_prior_a,
     rho_prior_b = rho_prior_b,
-    # Consumed only by the three experimental variants; gates a
-    # per-dyad-period `log_lik` in generated quantities (D x T x draws,
-    # so off by default). Ignored by stable.
+    # Consumed by both registered variants; gates a per-dyad-period
+    # `log_lik` in generated quantities (D x T x draws, so off by
+    # default).
     compute_log_lik = compute_log_lik,
-    # Consumed only by alphanorm/alphanorm_ou: soft sign anchor on
-    # alpha[1], breaking their alpha/theta reflection symmetry. Ignored
-    # by stable/ou (whose alpha[1] = 1 hard fix already breaks it).
+    # Consumed by both registered variants: soft sign anchor on alpha[1],
+    # breaking their alpha/theta reflection symmetry.
     anchor_scale = anchor_scale
   )
 

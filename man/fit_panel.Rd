@@ -51,12 +51,14 @@ A \code{CmdStanMCMC} fit object.
 }
 \description{
 Fits the collapsed dyadic IRT model (see the package's Stan file,
-\code{bilatr_dirmult_irt.stan}) across multiple dyads simultaneously
-(\code{D > 1}), with hierarchical partial pooling on process noise (via
+\code{bilatr_alphanorm.stan}, registered as the \code{stable} model -- see
+\code{R/model_registry.R}) across multiple dyads simultaneously (\code{D > 1}),
+with hierarchical partial pooling on process noise (via
 \code{mu_log_noise}/\code{sigma_log_noise}), the dispersion parameter \code{phi} (via
 \code{mu_log_phi}/\code{sigma_log_phi}), and the initial latent state \code{theta0}
-(via \code{mu_theta0}/\code{sigma_theta0}). Use \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} instead for a
-single dyad.
+(via \code{sigma_theta0}; \code{theta0}'s population mean is pinned at exactly 0
+rather than a separately pooled location). Use \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} instead
+for a single dyad.
 }
 \details{
 \code{threads_per_chain} controls \code{reduce_sum} parallelization across

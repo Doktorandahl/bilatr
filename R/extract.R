@@ -10,10 +10,15 @@
 #' Draws are passed through [bilatr_orient()] before summarizing, so
 #' `theta`'s sign always reflects the canonical orientation (higher theta
 #' = better relations) regardless of which reflection-symmetry basin the
-#' sampler actually landed in. This is a no-op for `stan_model`s other
-#' than `"alphanorm"`/`"alphanorm_ou"`, so the default preserves existing
-#' behavior for `stable`-model fits (its `alpha[1] = 1` is fixed, never
-#' negative).
+#' sampler actually landed in. This matters for the default `stan_model`
+#' (`"stable"`) itself, not just the experimental `"ou"`: both normalize
+#' `alpha` via a `sum_to_zero_vector` with only a *soft* sign anchor on
+#' `alpha[1]` (see [assemble_stan_data()]'s `anchor_scale`), so a chain's
+#' init can still land in the wrong-sign basin; this reorientation is
+#' what makes the result correct regardless. A no-op only for a
+#' hypothetical `stan_model` whose identification hard-fixes `alpha[1]`'s
+#' sign instead (as `stable`/`ou` themselves did before 0.4.0's
+#' promotion; see NEWS.md).
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
@@ -66,7 +71,7 @@
 #'
 #' # a completed SLURM run, never read into this R session
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' theta <- extract_theta(csv_files, stan_data, stan_model = "alphanorm", max_memory_mb = 16384)
+#' theta <- extract_theta(csv_files, stan_data, stan_model = "ou", max_memory_mb = 16384)
 #' }
 #' @export
 extract_theta <- function(
@@ -176,15 +181,17 @@ extract_theta <- function(
 #' Extract discrimination parameters (alpha) with action-class labels
 #'
 #' Pulls posterior summaries of the action-type discrimination parameters
-#' `alpha` out of a fitted model. `alpha[1]` is fixed at 1 (the model's
-#' scale/sign reference) for `stable`/`ou`; every other element is freely
-#' estimated. See the package's identification notes in
-#' `vignette("dyad_time_series")`.
+#' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has RMS 1
+#' (a `sum_to_zero_vector`, not a single fixed-to-1 element) for
+#' `stable`/`ou`; `alpha[1]`, the reference/neutral action class supplied
+#' via `reference_category`, is only softly anchored positive (see
+#' [assemble_stan_data()]'s `anchor_scale`). See the package's
+#' identification notes in `vignette("dyad_time_series")`.
 #'
 #' Draws are passed through [bilatr_orient()] before summarizing, so
 #' `alpha`'s sign always reflects the canonical orientation regardless of
-#' which reflection-symmetry basin the sampler actually landed in
-#' (`stan_model = "alphanorm"`/`"alphanorm_ou"` only; a no-op otherwise).
+#' which reflection-symmetry basin the sampler actually landed in --
+#' `stable`/`ou`'s soft anchor above doesn't guarantee that on its own.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), for the case where there is no in-memory fit at all
@@ -213,7 +220,7 @@ extract_theta <- function(
 #'
 #' # cross-chain roll-up from saved CSVs, no in-memory fit
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "alphanorm")
+#' alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "ou")
 #' }
 #' @export
 extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL, scratch_dir = NULL) {
@@ -238,11 +245,13 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' labels
 #'
 #' Pulls posterior summaries of the global action-type intercepts
-#' `mu_intercept` out of a fitted model. `mu_intercept[1]` is fixed at 0
-#' (the model's softmax level-shift reference) for `stable`/`ou`.
+#' `mu_intercept` out of a fitted model. `mu_intercept` sums to exactly 0
+#' (a `sum_to_zero_vector`, not a single fixed-to-0 element) for
+#' `stable`/`ou`, so no residual location degree of freedom hides in the
+#' softmax level-shift.
 #'
-#' `mu_intercept` is unaffected by alphanorm/alphanorm_ou's reflection
-#' symmetry (`alpha .* theta` is invariant under the joint negation, so
+#' `mu_intercept` is unaffected by stable/ou's reflection symmetry
+#' (`alpha .* theta` is invariant under the joint negation, so
 #' `mu_intercept` never needs to flip; see [bilatr_orient()]) -- `fit` is
 #' passed through it anyway, for a single consistent code path across the
 #' `extract_*()` functions, but it is always a no-op here.

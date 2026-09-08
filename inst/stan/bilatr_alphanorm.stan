@@ -1,10 +1,18 @@
 // bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories.
 //
-// EXPERIMENTAL variant `alphanorm` (registered in R/model_registry.R,
-// status = "experimental"). Not the default model; fit only via
-// fit_dyad_ts_dev()/fit_panel_dev(stan_model = "alphanorm").
+// Registered as `stable` (R/model_registry.R, status = "stable") since
+// 0.4.0, promoted from the experimental `alphanorm` variant it was
+// developed under -- see NEWS.md. This is now the model
+// fit_dyad_ts()/fit_panel() fit by default; the file itself is
+// unchanged/unrenamed across that promotion, only the registry entry
+// pointing at it. NOTE: every bare "stable"/"ou" reference in the
+// comparative/historical discussion BELOW this point (written before the
+// promotion) means the ORIGINAL stable/ou models this one replaced,
+// retired to inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan and
+// bilatr_ou_pre_0.4.0.stan respectively -- not this file.
 //
-// Motivation: the stable model (bilatr_dirmult_irt.stan) has a residual
+// Motivation: the model this replaced (retired to
+// inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan) had a residual
 // affine ridge in its identification. With alpha[1] = 1 and
 // mu_intercept[1] = 0, the softmax only sees
 // eta_a - eta_1 = (alpha_a - 1) * theta - mu_a. Writing A_a = alpha_a - 1,

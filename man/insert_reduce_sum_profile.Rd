@@ -16,8 +16,9 @@ insert_reduce_sum_profile(stan_code, profile_name = "reduce_sum_likelihood")
 Character scalar, the modified Stan program.
 }
 \description{
-Takes the source of \code{inst/stan/bilatr_dirmult_irt.stan} (or an
-equivalent model whose \code{model} block contains the exact
+Takes the source of \code{inst/stan/bilatr_alphanorm.stan} (the \code{stable}
+model since 0.4.0's promotion; see NEWS.md) or an equivalent model
+whose \code{model} block contains the exact
 \verb{array[D] int dyad_seq = linspaced_int_array(D, 1, D);} +
 \verb{target += reduce_sum(...);} pair) and returns a copy with that pair
 wrapped in \verb{profile("<profile_name>") \{ ... \}}, so a fit of the

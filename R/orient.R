@@ -1,7 +1,7 @@
-# Post-hoc sign relabelling for alphanorm/alphanorm_ou's alpha/theta
-# reflection symmetry.
+# Post-hoc sign relabelling for stable/ou's alpha/theta reflection
+# symmetry (promoted from alphanorm/alphanorm_ou in 0.4.0; see NEWS.md).
 #
-# alphanorm/alphanorm_ou normalize alpha via a sum_to_zero_vector with no
+# stable/ou normalize alpha via a sum_to_zero_vector with no
 # fixed element, which leaves an exact reflection symmetry: negating alpha
 # together with theta and their shared upstream raw parameters leaves the
 # likelihood, every prior, and the sum_to_zero_vector Jacobian unchanged
@@ -21,12 +21,13 @@
 # relabelling is exact -- a genuine symmetry of the posterior -- not an
 # approximation.
 
-#' Variables the alphanorm/alphanorm_ou reflection symmetry ties to
-#' alpha's sign
+#' Variables the stable/ou reflection symmetry ties to alpha's sign
 #'
-#' `character(0)` for every other registered model: their identification
-#' already fixes `alpha[1]`'s sign (`alpha[1] = 1`, hard), so they have no
-#' reflection symmetry to correct.
+#' `character(0)` for any other (hypothetical) registered model whose
+#' identification instead fixes `alpha[1]`'s sign hard (`alpha[1] = 1`),
+#' leaving no reflection symmetry to correct -- as both `stable` and `ou`
+#' did themselves before 0.4.0's promotion (see NEWS.md); their pre-0.4.0
+#' Stan sources are retired to `inst/stan/legacy/`.
 #'
 #' @param stan_model Name registered in `.bilatr_stan_models`.
 #' @return Character vector of variable base names (matched against
@@ -35,8 +36,8 @@
 .bilatr_flip_variables <- function(stan_model) {
   switch(
     stan_model,
-    alphanorm = c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw"),
-    alphanorm_ou = c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw"),
+    stable = c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw"),
+    ou = c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw"),
     character(0)
   )
 }
@@ -75,10 +76,10 @@
 #'   includes `"alpha[1]"` -- required to determine orientation even if
 #'   `"alpha[1]"` itself is not requested via `variables`.
 #' @param stan_model Name registered in `.bilatr_stan_models`. Only
-#'   `"alphanorm"`/`"alphanorm_ou"` have a reflection symmetry to correct
-#'   (see [.bilatr_flip_variables()]); for any other name, `draws` is
-#'   returned unmodified (restricted to `variables`, if supplied), since
-#'   there is nothing to fix.
+#'   `"stable"`/`"ou"` have a reflection symmetry to correct (see
+#'   [.bilatr_flip_variables()]); for any other name, `draws` is returned
+#'   unmodified (restricted to `variables`, if supplied), since there is
+#'   nothing to fix.
 #' @param variables Which variables to return. Defaults to every variable
 #'   [.bilatr_flip_variables()] lists for `stan_model`; pass a subset
 #'   (e.g. `"theta"`) when only that one is needed downstream.

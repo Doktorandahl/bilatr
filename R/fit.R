@@ -73,7 +73,7 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 
 #' A sum-to-zero init draw for `sum_to_zero_vector[A]` alpha parameters
 #'
-#' `alphanorm`/`alphanorm_ou` normalize `alpha_raw` by
+#' `stable`/`ou` normalize `alpha_raw` by
 #' `sqrt(A / dot_self(alpha_raw))`, so an all-zero init (otherwise the
 #' natural default) would divide by zero. This draws a random vector
 #' instead, centered to sum to exactly 0 (required by
@@ -132,20 +132,6 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   init_list <- switch(
     stan_model,
     stable = list(
-      mu_theta0 = 0,
-      sigma_theta0 = 0.5,
-      z_theta0 = rep(0, D),
-      theta_raw = matrix(0, D, Tn),
-      mu_log_noise = log(0.2),
-      sigma_log_noise = 0.3,
-      mu_log_phi = 0,
-      sigma_log_phi = 0.5,
-      log_process_noise_raw = rep(0, D),
-      alpha_raw = rep(0, A - 1),
-      mu_intercept_raw = rep(0, A - 1),
-      phi = rep(1, D)
-    ),
-    alphanorm = list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
@@ -164,25 +150,10 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
     ),
     ou = list(
       theta_raw = matrix(0, D, Tn),
-      mu_intercept_raw = rep(0, A - 1),
-      alpha_raw = rep(0, A - 1),
-      mu_theta_bar = 0,
-      sigma_mu = 0.5,
-      mu_dyad_raw = rep(0, D),
-      rho = 0.8,
-      mu_log_sd_stat = log(0.5),
-      sigma_log_sd_stat = 0.3,
-      log_sd_stat_raw = rep(0, D),
-      phi = rep(1, D),
-      mu_log_phi = 0,
-      sigma_log_phi = 0.5
-    ),
-    alphanorm_ou = list(
-      theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
       sigma_mu = 0.5,
-      # real initial spread, not near 0 -- see the alphanorm branch above
+      # real initial spread, not near 0 -- see the stable branch above
       mu_dyad_raw = stats::rnorm(D, 0, 0.5),
       rho = 0.8,
       mu_log_sd_stat = log(1),
@@ -206,9 +177,10 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 
 #' Warn if a fit's `alpha[1]` landed in the wrong reflection-symmetry basin
 #'
-#' Only `alphanorm`/`alphanorm_ou` have a reflection symmetry a chain's
-#' init can land on either side of (see `R/orient.R`); every other
-#' registered model hard-fixes `alpha[1]`, so this is a no-op for them.
+#' Only `stable`/`ou` have a reflection symmetry a chain's init can land
+#' on either side of (see `R/orient.R`); any other registered model that
+#' instead hard-fixes `alpha[1]` (as both did themselves before 0.4.0's
+#' promotion; see NEWS.md) is a no-op here.
 #' With single-chain runs (this project's SLURM submission convention --
 #' see `runscripts/submit_bilatr_runs.R`) there is no cross-chain Rhat or
 #' other diagnostic that would otherwise surface a wrong-basin fit, so
@@ -221,7 +193,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 #' @return `fit`, invisibly (called for the message/warning side effect).
 #' @keywords internal
 .warn_if_wrong_basin <- function(fit, stan_model) {
-  if (!(stan_model %in% c("alphanorm", "alphanorm_ou"))) {
+  if (!(stan_model %in% c("stable", "ou"))) {
     return(invisible(fit))
   }
 
@@ -279,7 +251,8 @@ fit_bilatr <- function(
 #' Fit the bilatr model to a single dyad's time series
 #'
 #' Fits the collapsed dyadic IRT model (see the package's Stan file,
-#' `bilatr_dirmult_irt.stan`) to a single dyad (`D == 1`), i.e. estimates
+#' `bilatr_alphanorm.stan`, registered as the `stable` model -- see
+#' `R/model_registry.R`) to a single dyad (`D == 1`), i.e. estimates
 #' one latent conflict trajectory `theta` with no cross-dyad pooling on
 #' `theta0`, `phi`, or process noise (those hierarchical parameters still
 #' exist in the model but are estimated from a single unit, so their
@@ -356,12 +329,14 @@ fit_dyad_ts <- function(
 #' Fit the bilatr model to a panel of dyads with hierarchical pooling
 #'
 #' Fits the collapsed dyadic IRT model (see the package's Stan file,
-#' `bilatr_dirmult_irt.stan`) across multiple dyads simultaneously
-#' (`D > 1`), with hierarchical partial pooling on process noise (via
+#' `bilatr_alphanorm.stan`, registered as the `stable` model -- see
+#' `R/model_registry.R`) across multiple dyads simultaneously (`D > 1`),
+#' with hierarchical partial pooling on process noise (via
 #' `mu_log_noise`/`sigma_log_noise`), the dispersion parameter `phi` (via
 #' `mu_log_phi`/`sigma_log_phi`), and the initial latent state `theta0`
-#' (via `mu_theta0`/`sigma_theta0`). Use [fit_dyad_ts()] instead for a
-#' single dyad.
+#' (via `sigma_theta0`; `theta0`'s population mean is pinned at exactly 0
+#' rather than a separately pooled location). Use [fit_dyad_ts()] instead
+#' for a single dyad.
 #'
 #' `threads_per_chain` controls `reduce_sum` parallelization across
 #' dyads within a chain, combined with the `chunk_size` (`C`) baked into

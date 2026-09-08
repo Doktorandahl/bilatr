@@ -78,28 +78,30 @@ benefit below that scale. See \code{\link[=fit_panel]{fit_panel()}} for the corr
 
 \item{rho_prior_a, rho_prior_b}{Shape parameters of the
 \code{beta(rho_prior_a, rho_prior_b)} prior on the OU/AR(1) persistence
-parameter \code{rho}, consumed only by the experimental \code{ou}/\code{alphanorm_ou}
-Stan model variants (see \code{R/model_registry.R}); ignored by \code{stable}
-and \code{alphanorm}. Default \verb{8, 2} (weighted toward strong persistence).}
+parameter \code{rho}, consumed only by the experimental \code{ou} Stan model
+variant (see \code{R/model_registry.R}); ignored by \code{stable}, which keeps
+a random-walk \code{theta} with no persistence parameter. Default \verb{8, 2}
+(weighted toward strong persistence).}
 
-\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed only by
-the three experimental variants, gating a per-dyad-period \code{log_lik}
-in \verb{generated quantities}; left off by default since it is \verb{D x T x}
-draws and file size already scales with dyad count. Ignored by
-\code{stable}.}
+\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed by
+both registered Stan model variants, gating a per-dyad-period
+\code{log_lik} in \verb{generated quantities}; left off by default since it is
+\verb{D x T x} draws and file size already scales with dyad count.}
 
 \item{anchor_scale}{Scale of the soft sign anchor
-\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}, consumed
-only by the experimental \code{alphanorm}/\code{alphanorm_ou} Stan model
-variants (see \code{R/model_registry.R}). Those two normalize \code{alpha} via
-a \code{sum_to_zero_vector} with no fixed element, which leaves an exact
-reflection symmetry (\code{alpha}, \code{theta} -> \code{-alpha}, \code{-theta} is
-likelihood-invariant); the anchor breaks it by softly penalizing
-\code{alpha[1] < 0}, so higher \code{theta} orients toward better relations,
-matching \code{stable}/\code{ou}. \code{alpha[1]} is already the reference/neutral
-action class supplied via \code{reference_category} -- no separate index
-is needed. Ignored by \code{stable}/\code{ou}, whose \code{alpha[1] = 1} hard fix
-already selects a mode. Default \code{0.1}.}
+\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}, consumed by
+both registered Stan model variants (see \code{R/model_registry.R}).
+\code{stable}/\code{ou} normalize \code{alpha} via a \code{sum_to_zero_vector} with no
+fixed element, which leaves an exact reflection symmetry (\code{alpha},
+\code{theta} -> \code{-alpha}, \code{-theta} is likelihood-invariant); the anchor
+breaks it by softly penalizing \code{alpha[1] < 0}, so higher \code{theta}
+orients toward better relations. \code{alpha[1]} is already the
+reference/neutral action class supplied via \code{reference_category} --
+no separate index is needed. Since the anchor is only soft, a
+chain's init can still land in the wrong-sign basin; see
+\code{bilatr_orient()} for the deterministic post-hoc fix
+\code{extract_theta()}/\code{extract_alpha()}/\code{extract_mu_intercept()} already
+apply by default. Default \code{0.1}.}
 }
 \value{
 A named list suitable as the \code{data} argument to

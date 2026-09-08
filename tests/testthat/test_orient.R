@@ -8,7 +8,7 @@
   posterior::as_draws_df(df)
 }
 
-test_that("bilatr_orient() flips exactly the alphanorm flip-list and leaves the rest unchanged", {
+test_that("bilatr_orient() flips exactly the stable flip-list and leaves the rest unchanged", {
   set.seed(1)
   n <- 20
   extra <- list(
@@ -28,7 +28,7 @@ test_that("bilatr_orient() flips exactly the alphanorm flip-list and leaves the 
 
   flip_vars <- c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw")
   unchanged_vars <- c("mu_intercept", "phi", "sigma_theta0")
-  oriented <- bilatr_orient(draws, stan_model = "alphanorm", variables = c(flip_vars, unchanged_vars))
+  oriented <- bilatr_orient(draws, stan_model = "stable", variables = c(flip_vars, unchanged_vars))
 
   for (v in c("alpha[1]", "alpha[2]", "alpha_raw[1]", "theta[1,1]", "theta[1,2]", "theta0[1]", "z_theta0[1]", "theta_raw[1,1]")) {
     expect_equal(
@@ -50,7 +50,7 @@ test_that("bilatr_orient() flips exactly the alphanorm flip-list and leaves the 
   expect_equal(alpha1_theta11_after, alpha1_theta11_before)
 })
 
-test_that("bilatr_orient() flips exactly the alphanorm_ou flip-list and leaves the rest unchanged", {
+test_that("bilatr_orient() flips exactly the ou flip-list and leaves the rest unchanged", {
   set.seed(2)
   n <- 20
   extra <- list(
@@ -70,7 +70,7 @@ test_that("bilatr_orient() flips exactly the alphanorm_ou flip-list and leaves t
 
   flip_vars <- c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw")
   unchanged_vars <- c("mu_intercept", "sigma_mu", "sd_stat", "rho", "within_between_ratio")
-  oriented <- bilatr_orient(draws, stan_model = "alphanorm_ou", variables = c(flip_vars, unchanged_vars))
+  oriented <- bilatr_orient(draws, stan_model = "ou", variables = c(flip_vars, unchanged_vars))
 
   for (v in c("alpha[1]", "alpha_raw[1]", "theta[1,1]", "mu_dyad[1]", "mu_dyad_raw[1]", "theta_raw[1,1]")) {
     expect_equal(posterior::extract_variable(oriented, v), -extra[[v]], info = paste("expected", v, "to be negated"))
@@ -93,28 +93,32 @@ test_that("bilatr_orient() does not flip when alpha[1]'s median is already posit
     `theta[1,1]` = stats::rnorm(n, 0.5, 0.1)
   )
   draws <- .make_synthetic_draws(extra)
-  oriented <- bilatr_orient(draws, stan_model = "alphanorm", variables = c("alpha", "theta"))
+  oriented <- bilatr_orient(draws, stan_model = "stable", variables = c("alpha", "theta"))
   expect_equal(posterior::extract_variable(oriented, "alpha[1]"), extra[["alpha[1]"]])
   expect_equal(posterior::extract_variable(oriented, "theta[1,1]"), extra[["theta[1,1]"]])
 })
 
-test_that("bilatr_orient() is a no-op for models without a reflection symmetry", {
+test_that("bilatr_orient()/.bilatr_flip_variables() default to no-op for a model with no registered reflection symmetry", {
+  # both currently-registered models (stable, ou) DO have a reflection
+  # symmetry since 0.4.0's promotion (see NEWS.md) -- this exercises the
+  # switch()'s defensive character(0) fallback for anything else, e.g. a
+  # hypothetical future model whose identification hard-fixes alpha[1]
+  # instead, the way stable/ou themselves did before that promotion.
   set.seed(4)
   n <- 10
   extra <- list(`alpha[1]` = stats::rnorm(n, -3, 0.1), `alpha[2]` = stats::rnorm(n, 1, 0.1))
   draws <- .make_synthetic_draws(extra)
 
-  for (m in c("stable", "ou")) {
-    oriented <- bilatr_orient(draws, stan_model = m, variables = "alpha")
-    expect_equal(posterior::extract_variable(oriented, "alpha[1]"), extra[["alpha[1]"]])
-  }
+  expect_equal(.bilatr_flip_variables("some_future_model"), character(0))
+  oriented <- bilatr_orient(draws, stan_model = "some_future_model", variables = "alpha")
+  expect_equal(posterior::extract_variable(oriented, "alpha[1]"), extra[["alpha[1]"]])
 })
 
 test_that("bilatr_orient() errors informatively if alpha[1] is not present in draws", {
   n <- 5
   draws <- .make_synthetic_draws(list(`theta[1,1]` = stats::rnorm(n)))
   expect_error(
-    bilatr_orient(draws, stan_model = "alphanorm", variables = "theta"),
+    bilatr_orient(draws, stan_model = "stable", variables = "theta"),
     "alpha\\[1\\]"
   )
 })
@@ -136,7 +140,7 @@ test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_or
     compute_log_lik = 0, anchor_scale = 0.1
   )
 
-  mod <- .compile_stan_model("alphanorm", opt_level = 1)
+  mod <- .compile_stan_model("stable", opt_level = 1)
 
   # deliberately seed into the WRONG basin (opposite sign convention from
   # .alpha_raw_sum0_init()), and pin the sampler near its init
@@ -167,32 +171,36 @@ test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_or
   expect_lt(stats::median(posterior::extract_variable(fit_wrong$draws("alpha[1]"), "alpha[1]")), 0)
 
   expect_warning(
-    expect_message(.warn_if_wrong_basin(fit_wrong, "alphanorm"), "Posterior median of alpha\\[1\\]"),
+    expect_message(.warn_if_wrong_basin(fit_wrong, "stable"), "Posterior median of alpha\\[1\\]"),
     "wrong-sign basin"
   )
 
-  oriented <- bilatr_orient(fit_wrong$draws(variables = "alpha"), stan_model = "alphanorm", variables = "alpha")
+  oriented <- bilatr_orient(fit_wrong$draws(variables = "alpha"), stan_model = "stable", variables = "alpha")
   expect_gt(stats::median(posterior::extract_variable(oriented, "alpha[1]")), 0)
 
   # and the right-basin case (bilatr_init_fn()'s actual, anchored init)
   # should report but not warn
-  good_init <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = "alphanorm")
+  good_init <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = "stable")
   fit_right <- suppressWarnings(mod$sample(
     data = data_list, chains = 1, iter_warmup = 20, iter_sampling = 5,
     seed = 1, refresh = 0, threads_per_chain = 1,
     init = good_init, output_dir = tempdir(), show_messages = FALSE
   ))
-  expect_no_warning(expect_message(.warn_if_wrong_basin(fit_right, "alphanorm"), "Posterior median of alpha\\[1\\]"))
+  expect_no_warning(expect_message(.warn_if_wrong_basin(fit_right, "stable"), "Posterior median of alpha\\[1\\]"))
 })
 
-test_that(".warn_if_wrong_basin() is a no-op for models without a reflection symmetry", {
+test_that(".warn_if_wrong_basin() is a no-op for a model without a reflection symmetry", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
-  # a fake fit whose $draws() would error if ever called -- confirms the
-  # function returns early for stable/ou without even inspecting draws
+  # both currently-registered models (stable, ou) DO have a reflection
+  # symmetry since 0.4.0's promotion (see NEWS.md), so neither is a no-op
+  # case any more -- this exercises the early-return guard for anything
+  # else, e.g. a hypothetical future model whose identification
+  # hard-fixes alpha[1] instead. A fake fit whose $draws() would error if
+  # ever called confirms the function returns early without even
+  # inspecting draws.
   fake_fit <- list(draws = function(...) stop("should not be called"))
-  expect_no_warning(expect_no_message(.warn_if_wrong_basin(fake_fit, "stable")))
-  expect_no_warning(expect_no_message(.warn_if_wrong_basin(fake_fit, "ou")))
+  expect_no_warning(expect_no_message(.warn_if_wrong_basin(fake_fit, "some_future_model")))
 })

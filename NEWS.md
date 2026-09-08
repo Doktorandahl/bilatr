@@ -1,4 +1,37 @@
 
+# bilatr 0.4.0
+
+## Breaking changes
+
+* Promoted the experimental `alphanorm` model to `stable`: it is now the
+  model `fit_dyad_ts()`/`fit_panel()`/`compile_bilatr_model()` fit by
+  default, replacing the previous `stable` (the consolidated
+  Dirichlet-multinomial model with `alpha[1]` hard-fixed to 1 and a
+  `mu_theta0`-anchored `theta0` location), which is retired to
+  `inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan` (gitignored, kept
+  for local reference only, no longer registered/fittable). Renamed the
+  experimental `alphanorm_ou` model to `ou`, still experimental,
+  replacing the previous `ou` (an OU/AR(1) variant of the old stable
+  model), similarly retired to
+  `inst/stan/legacy/bilatr_ou_pre_0.4.0.stan`. The promoted `stable`/`ou`
+  identify `alpha`/`mu_intercept` via `sum_to_zero_vector`s with a soft
+  sign anchor on `alpha[1]` (new `anchor_scale`/`compute_log_lik`
+  arguments to [assemble_stan_data()], already present since 0.3.x for
+  the experimental variants) rather than hard-fixing `alpha[1] = 1`; this
+  leaves an exact alpha/theta reflection symmetry that
+  [bilatr_orient()] -- already applied by default in
+  [extract_theta()]/[extract_alpha()]/[extract_mu_intercept()] -- now
+  corrects for the default model too, not just the experimental one.
+  `theta0`'s population mean is pinned at exactly 0 (no separate
+  `mu_theta0`). CSVs from a fit made under the pre-0.4.0 `stable`/`ou`
+  are unaffected and remain fully readable by
+  [diagnose_convergence()]/[extract_theta()]/etc. (nothing about reading
+  raw CmdStan CSVs depends on the registry), but code assuming
+  `mu_theta0`, `mu_intercept_raw`, `alpha[1] == 1`, or
+  `mu_intercept[1] == 0` will need updating for any model *fit* under
+  this release's `stable`/`ou`, since `stan_model = "stable"`/`"ou"` now
+  names a different Stan program than before.
+
 # bilatr 0.3.10
 
 ## Bug fixes

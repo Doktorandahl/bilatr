@@ -2,8 +2,7 @@
 % Please edit documentation in R/orient.R
 \name{.bilatr_flip_variables}
 \alias{.bilatr_flip_variables}
-\title{Variables the alphanorm/alphanorm_ou reflection symmetry ties to
-alpha's sign}
+\title{Variables the stable/ou reflection symmetry ties to alpha's sign}
 \usage{
 .bilatr_flip_variables(stan_model)
 }
@@ -15,8 +14,10 @@ Character vector of variable base names (matched against
 \code{posterior} draws column names via \code{.bilatr_match_draws_columns()}).
 }
 \description{
-\code{character(0)} for every other registered model: their identification
-already fixes \code{alpha[1]}'s sign (\code{alpha[1] = 1}, hard), so they have no
-reflection symmetry to correct.
+\code{character(0)} for any other (hypothetical) registered model whose
+identification instead fixes \code{alpha[1]}'s sign hard (\code{alpha[1] = 1}),
+leaving no reflection symmetry to correct -- as both \code{stable} and \code{ou}
+did themselves before 0.4.0's promotion (see NEWS.md); their pre-0.4.0
+Stan sources are retired to \verb{inst/stan/legacy/}.
 }
 \keyword{internal}

@@ -138,10 +138,11 @@ extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
 
 The hierarchical pooling shows up in the dyad-level parameters, e.g.
 `phi` (one value per dyad, pooled toward `mu_log_phi`/`sigma_log_phi`)
-and `theta0` (pooled toward `mu_theta0`/`sigma_theta0`):
+and `theta0` (pooled toward `sigma_theta0`; its population mean is
+pinned at exactly 0 rather than a separately estimated location):
 
 ```{r}
-fit$summary(variables = c("phi", "theta0", "mu_log_phi", "sigma_log_phi", "mu_theta0", "sigma_theta0"))
+fit$summary(variables = c("phi", "theta0", "mu_log_phi", "sigma_log_phi", "sigma_theta0"))
 ```
 
 ## 5. Diagnose
