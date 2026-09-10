@@ -23,3 +23,6 @@ inst/stan/legacy/
 
 # Local analysis/run scripts, not part of the package.
 runscripts/
+
+# Local audit notes / scratch, not part of the package.
+dev/

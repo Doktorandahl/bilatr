@@ -8,7 +8,7 @@
 }
 \arguments{
 \item{available}{Character vector of all bracket-form variable names
-in the CSV header (\code{names(prepared$dot_name_map)}).}
+in the CSV header (\code{prepared$variables}).}
 
 \item{filters}{Character vector of requested variable names/base names.}
 }

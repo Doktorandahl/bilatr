@@ -2,9 +2,9 @@
 % Please edit documentation in R/fast_csv_read.R
 \name{.fast_read_post_warmup_draws}
 \alias{.fast_read_post_warmup_draws}
-\title{Read named variables' post-warmup draws from prepared CmdStan CSVs}
+\title{Read named variables' post-warmup draws directly from raw CmdStan CSVs}
 \usage{
-.fast_read_post_warmup_draws(prepared, variables, flip = FALSE)
+.fast_read_post_warmup_draws(prepared, variables, flip_vars = character(0))
 }
 \arguments{
 \item{prepared}{Output of \link{.prepare_fast_csv_read}.}
@@ -15,9 +15,15 @@ base name (e.g. \code{"alpha"}, \code{"mu_intercept"}), expanded to every
 indexed element of that name via \link{.expand_bilatr_variable_filters},
 matching \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}}'s own \code{variables} matching.}
 
-\item{flip}{If \code{TRUE}, negate every chain's draws for \code{variables}
-before assembling -- applied pre-summary to the raw values, matching
-\code{\link[=bilatr_orient]{bilatr_orient()}}'s sign correction (see \link{.chunked_summarise_csv}).}
+\item{flip_vars}{Character vector of variable base names
+(\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}'s output) to negate -- matched against
+\code{resolved_vars} via \code{\link[=.bilatr_match_draws_columns]{.bilatr_match_draws_columns()}} and negated on
+each chain's temporary matrix \code{m}, before it is ever assigned into
+\code{arr}. \code{m} is already about to be discarded at that point, so this
+costs nothing extra: no copy, no second pass, no data-frame
+round-trip. \code{character(0)} (the default) negates nothing. Column-
+selective by design (B5): a request mixing \code{theta}/\code{theta_raw} with
+\code{log_lik[d,t]} flips only the columns \code{flip_vars} actually lists.}
 }
 \value{
 A \code{posterior::draws_array}.
@@ -25,16 +31,32 @@ A \code{posterior::draws_array}.
 \description{
 The direct replacement for
 \code{cmdstanr::read_cmdstan_csv(csv_files, variables = variables)$post_warmup_draws}
-used throughout the package's CSV-file-path branches (see
-\link{.prepare_fast_csv_read}'s docs for why). Reads \code{variables} from each
-of \code{prepared}'s comment-stripped files with \code{data.table::fread(file = ...)} -- a real file path, so \code{fread} can \code{mmap()} and parse only the
-\code{select}ed columns, unlike the \verb{cmd=}/piped path this replaces -- then
-keeps only the last \code{num_post_warmup_draws} rows (warmup rows, if
-present, always precede post-warmup rows in a CmdStan CSV, so this is
-exact regardless of whether warmup was saved) and assembles the
-per-chain matrices into a \code{posterior::draws_array} exactly as
-\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} does internally
-(\code{posterior::as_draws_array()} on a list of same-column-name
-matrices).
+used throughout the package's CSV-file-path branches: reads
+\code{variables} straight out of each of \code{prepared$csv_files} with
+\verb{data.table::fread(file = ..., skip = prepared$data_skip[k], nrows = prepared$num_post_warmup_draws, header = FALSE, select = <column positions>)} -- the comment lines before the block are
+skipped by line count, the timing footer is never reached because
+\code{nrows} stops the parser there, and column identity comes from
+\code{prepared$col_index} rather than a header row (there isn't one in the
+slice being read). No intermediate comment-stripped copy of the file
+is ever created.
+}
+\details{
+\code{fread} on a real file path (as opposed to \verb{cmd =}/piped input) still
+touches the whole file once per call -- it samples rows spread across
+the full byte range for column-type detection before honoring
+\code{skip}/\code{nrows} for the actual parse -- so this is not free at
+production scale (the caller's chunking exists to bound how much is
+actually \emph{parsed and kept}, not this per-call file-sized touch; see
+\code{\link[=.compute_chunk_size]{.compute_chunk_size()}}'s docs for how that's now counted). What it
+avoids is \code{cmdstanr::read_cmdstan_csv()}'s \code{cmd = grep} path, which
+additionally has to buffer/copy the file's full non-comment content
+before parsing anything from it.
+
+Builds the result directly as a \code{posterior::draws_array} rather than
+via a list of per-chain matrices: preallocates \code{array(NA_real_, dim = c(n_draws, n_chains, n_vars))} and fills it one chain's \code{as.matrix()}
+at a time (dropping that chain's \code{data.table} immediately after), so
+only one chain's matrix is ever alive alongside the array, rather than
+\code{n_chains} matrices plus whatever copies \code{as_draws_array()} would make
+assembling a list of them.
 }
 \keyword{internal}

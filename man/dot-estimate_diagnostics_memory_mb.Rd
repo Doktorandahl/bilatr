@@ -8,19 +8,19 @@
   n_draws,
   n_chains,
   chunk_size,
-  n_workers,
-  parallel,
-  overhead_factor = 2
+  n_cores,
+  file_mb
 )
 }
 \arguments{
-\item{n_draws, n_chains}{From \link{.stan_csv_dims}.}
+\item{n_draws, n_chains}{From \link{.prepare_fast_csv_read}'s
+\code{num_post_warmup_draws}/\code{n_chains}.}
 
 \item{chunk_size}{Variables per chunk.}
 
-\item{n_workers, parallel}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
 
-\item{overhead_factor}{Fixed safety multiplier; not user-facing.}
+\item{file_mb}{From \link{.prepare_fast_csv_read}.}
 }
 \value{
 Estimated peak memory in MB.

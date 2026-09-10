@@ -7,7 +7,10 @@
 .bilatr_flip_variables(stan_model)
 }
 \arguments{
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
+recognized pre-0.4.0 alias (see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}, called
+here first -- an unrecognized name errors rather than silently
+returning \code{character(0)}, per B1).}
 }
 \value{
 Character vector of variable base names (matched against

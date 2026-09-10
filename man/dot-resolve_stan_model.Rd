@@ -7,7 +7,8 @@
 .resolve_stan_model(name)
 }
 \arguments{
-\item{name}{A name registered in \code{.bilatr_stan_models}.}
+\item{name}{A name registered in \code{.bilatr_stan_models}, or a
+recognized alias (see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}).}
 }
 \value{
 The path to the model's \code{.stan} file (works both from the

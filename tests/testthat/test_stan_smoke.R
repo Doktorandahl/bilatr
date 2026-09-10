@@ -66,6 +66,47 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
   }
 })
 
+test_that("fit_panel_dev() reaches sampling with the pre-0.4.0 'alphanorm' alias (Step 6, verification section 3)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  # before fit_bilatr() canonicalised stan_model itself, this reached
+  # .compile_stan_model() (via .resolve_stan_model(), which
+  # canonicalises) and .warn_if_wrong_basin() (via
+  # .bilatr_flip_variables(), which also canonicalises) fine, but died
+  # in bilatr_init_fn(), which switches on the raw name and has no
+  # "alphanorm" entry of its own
+  events <- make_fake_events()
+  events <- recode_cameo(events, code_col = "EventCode")
+  stan_data <- assemble_stan_data(
+    events,
+    years = 2015:2019,
+    resolution = "yearly",
+    grouping_var = "PentaClass",
+    reference_category = 0,
+    min_n_events = 1
+  )
+
+  .reset_bilatr_alias_messaged()
+  fit <- suppressWarnings(suppressMessages(fit_panel_dev(
+    stan_data,
+    chains = 1,
+    parallel_chains = 1,
+    threads_per_chain = 1,
+    iter_warmup = 25,
+    iter_sampling = 5,
+    seed = 1,
+    opt_level = 1,
+    output_dir = tempdir(),
+    stan_model = "alphanorm",
+    refresh = 0,
+    show_messages = FALSE
+  )))
+  expect_s3_class(fit, "CmdStanMCMC")
+  expect_equal(posterior::ndraws(fit$draws()), 5)
+})
+
 test_that("bilatr_init_fn()'s stable/ou inits pass cmdstanr's init validation", {
   skip_if_no_cmdstan()
   skip_on_cran()

@@ -11,11 +11,13 @@ bilatr_orient(draws, stan_model, variables = NULL)
 includes \code{"alpha[1]"} -- required to determine orientation even if
 \code{"alpha[1]"} itself is not requested via \code{variables}.}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}. Only
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
+recognized pre-0.4.0 alias (see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}). Only
 \code{"stable"}/\code{"ou"} have a reflection symmetry to correct (see
-\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}); for any other name, \code{draws} is returned
-unmodified (restricted to \code{variables}, if supplied), since there is
-nothing to fix.}
+\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}); for any other registered name, \code{draws}
+is returned unmodified (restricted to \code{variables}, if supplied),
+since there is nothing to fix. An unrecognized, non-alias name
+errors instead.}
 
 \item{variables}{Which variables to return. Defaults to every variable
 \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} lists for \code{stan_model}; pass a subset

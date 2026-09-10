@@ -76,7 +76,7 @@ download_gdelt_raw_zip <- function(date, local_folder = "data/gdelt_raw", type =
     warning("GDELT data not available for ", date, call. = FALSE)
     return(invisible(NULL))
   }
-  try(download.file(urls$remote, destfile = urls$local, mode = "wb", quiet = TRUE))
+  try(utils::download.file(urls$remote, destfile = urls$local, mode = "wb", quiet = TRUE))
   invisible(urls$local)
 }
 
@@ -91,7 +91,7 @@ gdelt_export_url <- function(date, local_folder, type) {
   )
   suffix <- if (type == "daily") ".export.CSV.zip" else ".zip"
   list(
-    remote = paste0("http://data.gdeltproject.org/events/", stamp, suffix),
+    remote = paste0("https://data.gdeltproject.org/events/", stamp, suffix),
     local = paste0(local_folder, "/", stamp, ".zip")
   )
 }
@@ -127,7 +127,7 @@ gdelt_export_url <- function(date, local_folder, type) {
 #' @export
 extract_all_relevant_gdelt <- function(file, relevant_actors = c("GOV", "MIL", "SPY")) {
   raw <- readr::read_delim(
-    unz(file, unzip(file, list = TRUE)$Name[1]),
+    unz(file, utils::unzip(file, list = TRUE)$Name[1]),
     num_threads = 1,
     col_names = get_gdelt_column_names(),
     progress = FALSE,
@@ -160,7 +160,7 @@ extract_all_relevant_gdelt <- function(file, relevant_actors = c("GOV", "MIL", "
 #' @export
 get_actor_combos <- function(file) {
   raw <- readr::read_delim(
-    unz(file, unzip(file, list = TRUE)$Name[1]),
+    unz(file, utils::unzip(file, list = TRUE)$Name[1]),
     num_threads = 1,
     col_names = get_gdelt_column_names(),
     progress = FALSE,
@@ -217,7 +217,7 @@ normalize_cameo_code <- function(code) {
 ingest_icews <- function(files, relevant_sectors = relevant_actors_icews()) {
   raw <- furrr::future_map_dfr(files, function(f) {
     readr::read_delim(
-      unz(f, unzip(f, list = TRUE)$Name[1]),
+      unz(f, utils::unzip(f, list = TRUE)$Name[1]),
       num_threads = 1,
       progress = FALSE,
       show_col_types = FALSE

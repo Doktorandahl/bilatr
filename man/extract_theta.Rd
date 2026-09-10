@@ -12,7 +12,7 @@ extract_theta(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L),
+  n_workers = parallelly::availableCores(),
   scratch_dir = NULL
 )
 }
@@ -29,15 +29,21 @@ attribute).}
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
-which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
-\code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
-\code{\link[=fit_panel]{fit_panel()}} always fit.}
+which model produced \code{fit}, or a recognized pre-0.4.0 alias
+(\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to \code{"stable"}/\code{"ou"} with a
+message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) -- an unrecognized name
+errors immediately rather than silently skipping sign orientation.
+See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}
+(\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/\code{\link[=fit_panel]{fit_panel()}} always fit.}
 
-\item{max_memory_mb, chunk_size, parallel, n_workers, scratch_dir}{Only
-used when \code{fit} is CSV file paths; identical in meaning to
+\item{max_memory_mb, chunk_size, parallel, n_workers}{Only used when
+\code{fit} is CSV file paths; identical in meaning to
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s arguments of the same name (including
 the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 \code{theta} alone rather than all of Tier 3.}
+
+\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
@@ -68,28 +74,31 @@ promotion; see NEWS.md).
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --
-reads and summarises \code{theta} in memory-bounded chunks via
-\link{.chunked_summarise_csv} rather than materializing the full draws
-array, for the same production-scale-panel reason \code{diagnose_convergence()}
-needed it. \strong{This trades memory for wall-time, and the exchange rate
-can be steep}: a real benchmark against a production-scale CSV found
-\code{read_cmdstan_csv()} strongly I/O-bound (per-chunk cost barely depends
-on how many columns are requested, so total sweep time scales with
-chunk COUNT, not memory saved) -- see \code{max_memory_mb} below and in
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation. Prefer the in-memory path
-when you already have \code{fit} in memory (no benefit to re-reading), and
-the CSV path's default \code{max_memory_mb} as large as your job's memory
+reads and summarises \code{theta} directly from the raw CSVs in
+memory-bounded chunks via \link{.chunked_summarise_csv_with_orientation}
+rather than materializing the full draws array, for the same
+production-scale-panel reason \code{diagnose_convergence()} needed it.
+\strong{This trades memory for wall-time, and the exchange rate can be
+steep}: reading is single-threaded, and each chunk's cost is roughly
+a full parse of the largest chain file regardless of how many columns
+are requested (see \code{max_memory_mb} below and in
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation), so total sweep time scales
+with chunk COUNT, not memory saved. Prefer the in-memory path when
+you already have \code{fit} in memory (no benefit to re-reading), and the
+CSV path's default \code{max_memory_mb} as large as your job's memory
 allocation can afford, not as small as "safely" possible. Sign
-orientation in this mode requires one small extra read of \code{alpha[1]}
-up front (to determine the flip, applied per chunk before
-summarising, matching the in-memory path's raw-draws flip rather than
-a post-hoc adjustment of already-computed quantiles); the flip only
-happens for \code{stan_model}s with a reflection symmetry, same as the
-in-memory path. This mode only supports the default \code{probs}, since it
-reuses \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s chunked-read helper (which always
-computes a fixed \code{q5}/\code{median}/\code{q95} summary, not user-configurable
-quantiles) rather than re-reading data already summarised once; pass
-an in-memory \code{fit} if you need other quantiles.
+orientation in this mode is decided from the first chunk itself
+(\code{alpha[1]} prepended, read once, dropped before summarising --
+see \link{.chunked_summarise_csv_with_orientation}) rather than a separate
+pass, applied per chunk before summarising, matching the in-memory
+path's raw-draws flip rather than a post-hoc adjustment of
+already-computed quantiles; the flip only happens for \code{stan_model}s
+with a reflection symmetry, same as the in-memory path. This mode
+only supports the default \code{probs}, since it reuses
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s chunked-read helper (which always computes
+a fixed \code{q5}/\code{median}/\code{q95} summary, not user-configurable quantiles)
+rather than re-reading data already summarised once; pass an
+in-memory \code{fit} if you need other quantiles.
 }
 \examples{
 \dontrun{

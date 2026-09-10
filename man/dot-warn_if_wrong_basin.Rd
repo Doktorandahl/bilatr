@@ -16,9 +16,11 @@
 }
 \description{
 Only \code{stable}/\code{ou} have a reflection symmetry a chain's init can land
-on either side of (see \code{R/orient.R}); any other registered model that
-instead hard-fixes \code{alpha[1]} (as both did themselves before 0.4.0's
-promotion; see NEWS.md) is a no-op here.
+on either side of (see \code{R/orient.R}); decided via
+\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} (not a literal \code{c("stable", "ou")} here) so
+this and \code{bilatr_orient()} never disagree about which models need it.
+Any other registered model that instead hard-fixes \code{alpha[1]} (as both
+did themselves before 0.4.0's promotion; see NEWS.md) is a no-op here.
 With single-chain runs (this project's SLURM submission convention --
 see \code{runscripts/submit_bilatr_runs.R}) there is no cross-chain Rhat or
 other diagnostic that would otherwise surface a wrong-basin fit, so

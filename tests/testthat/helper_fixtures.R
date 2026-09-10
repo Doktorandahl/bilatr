@@ -1,3 +1,92 @@
+#' Write a CmdStan-`sample`-shaped CSV by hand: config comment block,
+#' header, optional warmup rows, an "Adaptation terminated" comment
+#' block, `n_draws` post-warmup rows, and a timing-footer comment block
+#' -- the same layout `.scan_stan_csv_header_and_skip()` relies on (see
+#' its roxygen), confirmed against real CmdStan output earlier in
+#' development. Model columns are named `x.1..x.n_cols`; post-warmup
+#' draw `d`'s column `c` holds the value `d * 1e6 + c` -- distinct for
+#' every (draw, column) PAIR, not just every draw -- so a column-mapping
+#' bug (a wrong `col_index`, `fread(select = )` not actually returning
+#' columns in the requested order, a transposed array fill in
+#' [.fast_read_post_warmup_draws]) is detectable from the values alone.
+#' An earlier version of this generator wrote the same value across
+#' every column of a row, which made exactly that class of bug
+#' undetectable: `x[500]` and `x[60000]` reading back equal to each
+#' other held whether or not `select` honored column identity at all.
+#' Warmup rows (if `save_warmup`) hold the constant `-99` in every
+#' column instead, easily distinguished from any real post-warmup value.
+#' In `helper_fixtures.R` (not local to one test file) since it is used
+#' by both `test_fast_csv_read.R` and `test_diagnose_convergence.R`'s
+#' peak-RSS regression guard.
+.make_synthetic_stan_csv <- function(path, n_cols, n_draws, n_warmup = 3L, save_warmup = FALSE) {
+  sampler_cols <- c(
+    "lp__", "accept_stat__", "stepsize__", "treedepth__",
+    "n_leapfrog__", "divergent__", "energy__"
+  )
+  header <- c(sampler_cols, paste0("x.", seq_len(n_cols)))
+
+  con <- file(path, open = "wt")
+  on.exit(close(con), add = TRUE)
+
+  writeLines(c(
+    "# stan_version_major = 2",
+    "# stan_version_minor = 38",
+    "# stan_version_patch = 0",
+    "# model = synthetic_model",
+    "# method = sample (Default)",
+    "#   sample",
+    paste0("#     num_samples = ", n_draws),
+    paste0("#     num_warmup = ", n_warmup),
+    paste0("#     save_warmup = ", if (save_warmup) 1L else 0L),
+    "#     thin = 1 (Default)",
+    "#     adapt",
+    "#       engaged = 1 (Default)",
+    "#     algorithm = hmc (Default)",
+    "#       hmc",
+    "#         engine = nuts (Default)",
+    "#         metric = diag_e (Default)",
+    "#     num_chains = 1 (Default)",
+    "# id = 1 (Default)",
+    "# random",
+    "#   seed = 1",
+    "# output",
+    "#   file = synthetic.csv",
+    "#   sig_figs = 8 (Default)",
+    "# num_threads = 1 (Default)"
+  ), con)
+
+  writeLines(paste(header, collapse = ","), con)
+
+  warmup_row_string <- paste(c(-1, 0.9, 1, 2, 3, 0, 1, rep(-99L, n_cols)), collapse = ",")
+  data_row_string <- function(draw_idx) {
+    vals <- draw_idx * 1000000L + seq_len(n_cols)
+    paste(c(-1, 0.9, 1, 2, 3, 0, 1, vals), collapse = ",")
+  }
+
+  if (save_warmup) {
+    for (i in seq_len(n_warmup)) writeLines(warmup_row_string, con)
+  }
+
+  writeLines(c(
+    "# Adaptation terminated",
+    "# Step size = 1",
+    "# Diagonal elements of inverse mass matrix:",
+    paste0("# ", paste(rep(1, n_cols), collapse = ", "))
+  ), con)
+
+  for (i in seq_len(n_draws)) writeLines(data_row_string(i), con)
+
+  writeLines(c(
+    "# ",
+    "#  Elapsed Time: 0 seconds (Warm-up)",
+    "#                0 seconds (Sampling)",
+    "#                0 seconds (Total)",
+    "# "
+  ), con)
+
+  invisible(path)
+}
+
 skip_if_no_cmdstan <- function() {
   skip_if_not_installed("cmdstanr")
   has_cmdstan <- tryCatch({

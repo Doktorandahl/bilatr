@@ -17,7 +17,7 @@ diagnose_and_extract_bilatr(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L),
+  n_workers = parallelly::availableCores(),
   scratch_dir = NULL
 )
 }
@@ -36,8 +36,12 @@ and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
 Only required when \code{tiers} includes \code{2} and/or \code{3} (Tier 1 has no
 per-dyad structure to join against \code{n_dt}).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
-\code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
+recognized pre-0.4.0 alias (\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to
+\code{"stable"}/\code{"ou"} with a message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) --
+an unrecognized name errors immediately rather than silently
+skipping sign orientation. See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
+\code{.BILATR_DEFAULT_MODEL}.}
 
 \item{rhat_threshold}{Rhat values strictly above this are flagged.
 Defaults to \code{1.01} (Vehtari et al. 2021).}
@@ -58,23 +62,28 @@ passed through to the \code{alpha}/\code{mu_intercept} outputs exactly as in
 attribute, if present.}
 
 \item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory;
-drives the automatically-derived \code{chunk_size} (see \code{chunk_size}
-below) so you don't have to guess a variable count yourself.
-Defaults to \code{8192} (8 GB) -- a guess, not a calibration against your
-hardware, and this function says so via \code{message()} the first time
-you rely on that default rather than setting it explicitly. This is
-a sanity-check number, not a guarantee: actual peak memory depends
-on \code{read_cmdstan_csv()}/\code{summarise_draws()} internals this function
-doesn't control. IMPORTANT, from a real benchmark against a
-production-scale CSV (see \link{.chunked_summarise_csv}): reading is
-strongly I/O-bound, so a SMALLER \code{max_memory_mb} (more, smaller
-chunks) does not make this cheaper -- it can make it dramatically
-\emph{slower}, since each chunk pays nearly the same full-row-scan cost
-regardless of how many columns it keeps, and total wall-time scales
-with chunk count. Prefer the LARGEST \code{max_memory_mb} your job's
-memory allocation can afford; only lower it if memory, not time, is
-the binding constraint.}
+includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory per
+chunk; drives the automatically-derived \code{chunk_size} (see
+\code{chunk_size} below) so you don't have to guess a variable count
+yourself. Defaults to \code{8192} (8 GB) -- a guess, not a calibration
+against your hardware, and this function says so via \code{message()}
+the first time you rely on that default rather than setting it
+explicitly. This is a sanity-check number, not a guarantee: actual
+peak memory depends on \code{data.table::fread()}/\code{summarise_draws()}
+internals this function doesn't control (see
+\code{\link[=.compute_chunk_size]{.compute_chunk_size()}} for the model and its derivation). Reading
+is single-threaded, and each chunk's cost is roughly a full parse
+of the largest chain file regardless of how many variables are
+kept -- \code{max_memory_mb} must be large enough to cover that file
+size, plus a fixed R/package-loading floor, at minimum (this
+\code{stop()}s with a clear message naming the shortfall if it isn't).
+Beyond that, fewer/larger chunks are cheaper in read wall-time, but
+-- see \code{parallel} below -- a larger \code{n_workers} shrinks the
+largest chunk size the SAME \code{max_memory_mb} budget can afford, so
+the two are not independent: prefer the LARGEST \code{max_memory_mb}
+your job's allocation can afford, and check the resolved chunk
+count in the pre-flight \code{message()} before committing to a large
+\code{n_workers} on a tight budget.}
 
 \item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Explicit override: number of Tier 3 variables read per
@@ -84,24 +93,39 @@ calculation (e.g. you've measured actual memory use and want to
 tune it by hand).}
 
 \item{parallel}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. \code{FALSE} (default) processes Tier 3 chunks
-sequentially, one at a time -- this is what makes \code{max_memory_mb}'s
-bound hold regardless of \code{n_workers}. \code{TRUE} processes chunks
-concurrently via \code{furrr::future_map_dfr()}, trading that memory
-bound (now effectively \code{max_memory_mb} times up to \code{n_workers},
-since that many chunks are in memory at once) for wall-clock speed.
-Prefer \code{parallel = FALSE} when memory is already tight (e.g. a
-memory-constrained HPC allocation) and \code{parallel = TRUE} when you
-have memory headroom to spend on speed instead. On Windows this
-falls back from \code{future::multicore} to \code{future::multisession} with
-a loud \code{warning()}, since \code{multisession} copies data to each worker
-rather than sharing it via copy-on-write -- the memory math changes
-substantially, and \code{max_memory_mb} is less trustworthy there.}
+includes \code{3}. Chunks are always read strictly sequentially regardless
+of this argument -- reading is disk-bound and single-threaded no
+matter how many cores are available (see
+\link{.fast_read_post_warmup_draws}), so there is nothing to gain, and
+\code{n_workers} chunks' worth of memory to lose, by reading more than one
+chunk at a time. \code{parallel} instead controls whether the CPU-bound
+part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
+\code{n_workers} cores (via \code{posterior::summarise_draws()}'s \code{.cores}
+argument, which forks \code{n_workers} worker processes) or just one.
+Measured (\code{dev/bench_memory.R}, see \link{.BILATR_CHUNK_CORES_PER_CORE_FACTOR}):
+this genuinely costs memory roughly proportional to \code{n_workers}, not
+a fixed amount regardless of it, and that cost comes out of the SAME
+\code{max_memory_mb} budget the read uses -- so a larger \code{n_workers}
+indirectly means MORE, not fewer, passes over each chain file at a
+fixed \code{max_memory_mb}, trading read wall-time for summary wall-time
+rather than being free on top of it. Worth checking the resolved
+chunk count (in the pre-flight \code{message()}) at your intended
+\code{n_workers} before committing a long run to it -- a very large
+\code{n_workers} on a large \code{n_vars} sweep can end up costing MORE total
+wall-time than a smaller one, if it forces enough extra chunks.}
 
 \item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
-\code{max(1, parallel::detectCores() - 1)}.}
+\code{parallelly::availableCores()}, which -- unlike
+\code{parallel::detectCores()} -- respects a SLURM allocation's
+\code{SLURM_CPUS_PER_TASK} (among other cluster/container schedulers)
+rather than reporting the whole node's core count. See \code{parallel}
+above: this is a genuine memory/wall-time trade-off now, not a
+free choice, so consider an explicit, moderate value (rather than
+the default, which can be large on a big allocation) for a
+memory-constrained job.}
 
-\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}
@@ -116,9 +140,10 @@ same set of CSV files. Calling them separately re-reads overlapping data
 from disk: \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s Tier 3 sweep already covers every
 \code{theta}/\code{theta_raw} column \code{\link[=extract_theta]{extract_theta()}} needs, and its Tier 1/2
 read already covers every \code{alpha}/\code{mu_intercept} column
-\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} need. Since
-\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} is I/O-bound (see \link{.chunked_summarise_csv}),
-each of those extra calls pays close to a full-file-scan cost for data
+\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} need. \code{data.table::fread()}
+touches each file's full byte range once per call regardless of how
+few columns are requested (see \link{.fast_read_post_warmup_draws}), so
+each of those extra calls pays close to a full-file touch for data
 already summarised once. This function reads Tier 1/2 once and Tier 3
 once (chunked, same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}), reorients whichever
 columns \code{\link[=bilatr_orient]{bilatr_orient()}} would flip for \code{stan_model} as part of that
@@ -126,6 +151,15 @@ single read, and derives all four outputs from those two summaries
 rather than re-reading anything.
 }
 \details{
+Total file touches per chain file, at production scale (Tier 3 too
+large for one chunk): one \code{cmdstanr:::read_csv_metadata()} call and
+one row-count validation probe, both in \link{.prepare_fast_csv_read}; one
+read for Tier 1/2 (\code{alpha[1]} included at no extra cost whenever
+tier 1 itself is requested, which is the default); and one per Tier 3
+chunk. When Tier 3 fits in a single chunk (small panels, or a large
+\code{max_memory_mb}), Tier 1/2 is folded into that same read instead of
+being a separate one -- see \code{\link[=.read_and_orient_draws_summary]{.read_and_orient_draws_summary()}}.
+
 Only meaningful for the CSV-file-paths case: an in-memory \code{fit} has no
 repeated-disk-read cost to avoid, so there is nothing to fuse there --
 call the four functions separately instead.
@@ -134,11 +168,13 @@ Rhat/ESS are invariant to a deterministic sign flip, so reorienting
 before summarising never changes anything \code{\link[=diagnose_convergence]{diagnose_convergence()}}
 reports; it only affects the mean/quantile columns, which is exactly
 what \code{\link[=extract_theta]{extract_theta()}}/\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} need
-reoriented anyway. For every currently-registered model, Tier 3 is
-exactly \verb{\{theta, theta_raw\}}, and \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} lists both
-whenever either needs flipping -- so the whole Tier 3 chunked sweep can
-be flipped uniformly, the same way \code{\link[=extract_theta]{extract_theta()}}'s own CSV path
-already does for \code{theta} alone.
+reoriented anyway. Tier 3 is NOT always exactly \verb{\{theta, theta_raw\}}:
+with \code{compute_log_lik = 1} it also includes \code{log_lik[d,t]} (also
+two-indexed), which must never flip even when \code{theta}/\code{theta_raw} in
+the same chunk do. Each Tier 3 chunk is therefore negated
+column-selectively, matching exactly the variables
+\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} lists (see \code{\link[=.chunked_summarise_csv]{.chunked_summarise_csv()}}'s
+\code{flip_vars}), not flipped as a whole uniformly.
 
 Unlike \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}}'s standalone \code{probs}
 argument, the \code{alpha}/\code{mu_intercept} outputs here always carry the same

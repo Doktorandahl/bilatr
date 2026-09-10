@@ -178,9 +178,11 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 #' Warn if a fit's `alpha[1]` landed in the wrong reflection-symmetry basin
 #'
 #' Only `stable`/`ou` have a reflection symmetry a chain's init can land
-#' on either side of (see `R/orient.R`); any other registered model that
-#' instead hard-fixes `alpha[1]` (as both did themselves before 0.4.0's
-#' promotion; see NEWS.md) is a no-op here.
+#' on either side of (see `R/orient.R`); decided via
+#' [.bilatr_flip_variables()] (not a literal `c("stable", "ou")` here) so
+#' this and `bilatr_orient()` never disagree about which models need it.
+#' Any other registered model that instead hard-fixes `alpha[1]` (as both
+#' did themselves before 0.4.0's promotion; see NEWS.md) is a no-op here.
 #' With single-chain runs (this project's SLURM submission convention --
 #' see `runscripts/submit_bilatr_runs.R`) there is no cross-chain Rhat or
 #' other diagnostic that would otherwise surface a wrong-basin fit, so
@@ -193,7 +195,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 #' @return `fit`, invisibly (called for the message/warning side effect).
 #' @keywords internal
 .warn_if_wrong_basin <- function(fit, stan_model) {
-  if (!(stan_model %in% c("stable", "ou"))) {
+  if (length(.bilatr_flip_variables(stan_model)) == 0) {
     return(invisible(fit))
   }
 
@@ -217,6 +219,17 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 
 #' Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
 #' counterparts in R/fit_dev.R
+#'
+#' Canonicalises `stan_model` once, here, so `.compile_stan_model()`,
+#' [bilatr_init_fn()], and [.warn_if_wrong_basin()] all agree on the
+#' same resolved name: before this, a pre-0.4.0 alias
+#' (`"alphanorm"`/`"alphanorm_ou"`) reached [.compile_stan_model()] (via
+#' `.resolve_stan_model()`) and [.warn_if_wrong_basin()] (via
+#' [.bilatr_flip_variables()]) fine, since both canonicalise internally,
+#' but [bilatr_init_fn()] switches on the raw name directly and has no
+#' entry for the alias itself -- `fit_panel_dev(stan_model =
+#' "alphanorm")` reached sampling only by chance of resolving the Stan
+#' file correctly first, then died in the init generator.
 #' @keywords internal
 fit_bilatr <- function(
   stan_data,
@@ -231,6 +244,7 @@ fit_bilatr <- function(
   stan_model = .BILATR_DEFAULT_MODEL,
   ...
 ) {
+  stan_model <- .canonical_stan_model(stan_model)
   mod <- .compile_stan_model(stan_model, opt_level)
   fit <- mod$sample(
     data = stan_data,

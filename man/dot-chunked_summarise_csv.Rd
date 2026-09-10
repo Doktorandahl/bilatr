@@ -8,9 +8,8 @@
   prepared,
   variables,
   chunk_size,
-  parallel,
-  n_workers,
-  flip = FALSE
+  n_cores = 1L,
+  flip_vars = character(0)
 )
 }
 \arguments{
@@ -20,21 +19,31 @@
 
 \item{chunk_size}{Variables per chunk.}
 
-\item{parallel, n_workers}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+\item{n_cores}{Cores for \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}}'s \code{.cores}; \code{1L}
+for a fully sequential run. See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
+\code{parallel}/\code{n_workers} for how a caller arrives at this number.}
 
-\item{flip}{If \code{TRUE}, negate each chunk's raw draws before
-summarising (used by \code{\link[=extract_theta]{extract_theta()}}'s CSV path to apply
-\code{\link[=bilatr_orient]{bilatr_orient()}}'s sign correction; always \code{FALSE} for
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}, since Rhat/ESS are invariant to a
+\item{flip_vars}{Character vector of variable base names to negate
+before summarising (used by \code{\link[=extract_theta]{extract_theta()}}'s CSV path to apply
+\code{\link[=bilatr_orient]{bilatr_orient()}}'s sign correction; \code{character(0)}, the default,
+for \code{\link[=diagnose_convergence]{diagnose_convergence()}}, since Rhat/ESS are invariant to a
 deterministic sign flip and it would be pointless work there).
-Applied pre-summary, per chunk, matching how \code{\link[=bilatr_orient]{bilatr_orient()}}
-flips raw draws for the in-memory path -- not a post-hoc
-transformation of the summary columns, which would need to swap
-the quantile columns (\code{quantile(-X, p) == -quantile(X, 1 - p)}),
-not just negate them.}
+Passed straight through to \code{\link[=.fast_read_post_warmup_draws]{.fast_read_post_warmup_draws()}}, which
+negates matching columns of each chain's temporary matrix before it
+is ever assigned into the read's result array -- not a post-hoc
+transformation of the summary columns (which would need to swap the
+quantile columns, \code{quantile(-X, p) == -quantile(X, 1 - p)}, not just
+negate them), and not a \code{draws_df} round-trip (which would force
+\code{summarise_draws()} to rebuild a \code{draws_array} internally at the
+cost of a second full copy of the chunk -- see
+\code{\link[=.fast_read_post_warmup_draws]{.fast_read_post_warmup_draws()}}'s own docs). Column-selective by
+construction (B5): \code{chunk_vars} can legitimately mix a flip-needing
+variable (\code{theta}/\code{theta_raw}) with one that must NOT flip
+(\code{log_lik[d,t]}, also Tier 3, when \code{compute_log_lik = 1}), and only
+the columns \code{flip_vars} actually lists are ever negated.}
 }
 \value{
-A tibble, the row-bound \code{\link[posterior:draws_summary]{posterior::summarise_draws()}} output
+A tibble, the row-bound \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}} output
 across all chunks.
 }
 \description{
@@ -42,34 +51,18 @@ Shared by \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path
 \code{\link[=extract_theta]{extract_theta()}}'s: reads and summarises \code{variables} in groups of
 \code{chunk_size}, discarding each chunk's draws before moving to the next
 -- this is what keeps peak memory bounded regardless of how many
-variables there are in total. \code{parallel = TRUE} processes chunks
-concurrently via \code{furrr::future_map_dfr()}, trading the sequential
-path's memory bound (now multiplied by \code{n_workers}, since that many
-chunks are in memory at once) for wall-clock speed. The active
-\code{future::plan()} is saved and restored on exit, so this never
-permanently changes the caller's parallel backend.
+variables there are in total. Chunks are always read strictly
+sequentially (reading is disk-bound and single-threaded regardless --
+see \link{.fast_read_post_warmup_draws} -- so there is nothing to gain, and
+several chunks' worth of memory to lose, by reading more than one at a
+time); \code{n_cores} instead parallelises the CPU-bound part, each chunk's
+own \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}} call, via \code{posterior::summarise_draws()}'s
+\code{.cores} argument.
 }
 \details{
-Reads via \link{.fast_read_post_warmup_draws} against \code{prepared}'s
-comment-stripped files (see \link{.prepare_fast_csv_read}), not
-\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} directly: the latter's \code{cmd = grep}
-read re-materializes a full near-complete copy of each chain's raw
-CSV on \emph{every} call (see \link{.prepare_fast_csv_read}'s docs), which
-would otherwise happen once per chunk here -- exactly the redundant,
-memory-model-breaking cost this function's \code{max_memory_mb}/
-\code{chunk_size} accounting is meant to avoid.
-
-Benchmarked against a real production-scale single-chain CSV (~1.9M
-Tier 3 columns): reading is strongly I/O-bound, not parsing-bound --
-per-call wall-time barely depends on how many \code{variables} are
-requested (a 1000x range in chunk size changed per-call time by under
-10\%), because extracting even one column from a row-oriented CSV
-requires scanning the full row width regardless of how many fields
-are kept. Consequence: total sweep time scales with the NUMBER OF
-CHUNKS, not with memory saved -- a small \code{chunk_size} does not make
-this cheaper, it makes it much slower for a given \code{variables} list,
-potentially by orders of magnitude. See \code{max_memory_mb} in
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation, which this benchmark
-motivated.
+Reads each chunk via \link{.fast_read_post_warmup_draws} (see its docs for
+what that read costs per call), discarding the chunk's draws once
+summarised so peak memory reflects one chunk at a time, per
+\code{\link[=.compute_chunk_size]{.compute_chunk_size()}}'s accounting.
 }
 \keyword{internal}

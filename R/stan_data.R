@@ -291,8 +291,9 @@ assemble_stan_data <- function(
     period_weight = period_weight,
     action_weight = action_weight,
     # Consumed only by the experimental ou variant (R/model_registry.R);
-    # a harmless extra entry for stable, whose Stan program doesn't
-    # declare it.
+    # unused by stable, whose Stan program doesn't declare it -- CmdStan
+    # ignores data fields a program doesn't declare, so this is passed
+    # unconditionally rather than branching on stan_model.
     rho_prior_a = rho_prior_a,
     rho_prior_b = rho_prior_b,
     # Consumed by both registered variants; gates a per-dyad-period

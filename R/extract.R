@@ -22,28 +22,31 @@
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
-#' reads and summarises `theta` in memory-bounded chunks via
-#' [.chunked_summarise_csv] rather than materializing the full draws
-#' array, for the same production-scale-panel reason `diagnose_convergence()`
-#' needed it. **This trades memory for wall-time, and the exchange rate
-#' can be steep**: a real benchmark against a production-scale CSV found
-#' `read_cmdstan_csv()` strongly I/O-bound (per-chunk cost barely depends
-#' on how many columns are requested, so total sweep time scales with
-#' chunk COUNT, not memory saved) -- see `max_memory_mb` below and in
-#' [diagnose_convergence()]'s documentation. Prefer the in-memory path
-#' when you already have `fit` in memory (no benefit to re-reading), and
-#' the CSV path's default `max_memory_mb` as large as your job's memory
+#' reads and summarises `theta` directly from the raw CSVs in
+#' memory-bounded chunks via [.chunked_summarise_csv_with_orientation]
+#' rather than materializing the full draws array, for the same
+#' production-scale-panel reason `diagnose_convergence()` needed it.
+#' **This trades memory for wall-time, and the exchange rate can be
+#' steep**: reading is single-threaded, and each chunk's cost is roughly
+#' a full parse of the largest chain file regardless of how many columns
+#' are requested (see `max_memory_mb` below and in
+#' [diagnose_convergence()]'s documentation), so total sweep time scales
+#' with chunk COUNT, not memory saved. Prefer the in-memory path when
+#' you already have `fit` in memory (no benefit to re-reading), and the
+#' CSV path's default `max_memory_mb` as large as your job's memory
 #' allocation can afford, not as small as "safely" possible. Sign
-#' orientation in this mode requires one small extra read of `alpha[1]`
-#' up front (to determine the flip, applied per chunk before
-#' summarising, matching the in-memory path's raw-draws flip rather than
-#' a post-hoc adjustment of already-computed quantiles); the flip only
-#' happens for `stan_model`s with a reflection symmetry, same as the
-#' in-memory path. This mode only supports the default `probs`, since it
-#' reuses [diagnose_convergence()]'s chunked-read helper (which always
-#' computes a fixed `q5`/`median`/`q95` summary, not user-configurable
-#' quantiles) rather than re-reading data already summarised once; pass
-#' an in-memory `fit` if you need other quantiles.
+#' orientation in this mode is decided from the first chunk itself
+#' (`alpha[1]` prepended, read once, dropped before summarising --
+#' see [.chunked_summarise_csv_with_orientation]) rather than a separate
+#' pass, applied per chunk before summarising, matching the in-memory
+#' path's raw-draws flip rather than a post-hoc adjustment of
+#' already-computed quantiles; the flip only happens for `stan_model`s
+#' with a reflection symmetry, same as the in-memory path. This mode
+#' only supports the default `probs`, since it reuses
+#' [diagnose_convergence()]'s chunked-read helper (which always computes
+#' a fixed `q5`/`median`/`q95` summary, not user-configurable quantiles)
+#' rather than re-reading data already summarised once; pass an
+#' in-memory `fit` if you need other quantiles.
 #'
 #' @param fit A `CmdStanMCMC` fit object from [fit_dyad_ts()] or
 #'   [fit_panel()], or a character vector of raw CmdStan CSV file paths
@@ -54,14 +57,19 @@
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
 #' @param stan_model Name registered in `.bilatr_stan_models` identifying
-#'   which model produced `fit`; see [bilatr_orient()]. Defaults to
-#'   `.BILATR_DEFAULT_MODEL` (`"stable"`), matching what [fit_dyad_ts()]/
-#'   [fit_panel()] always fit.
-#' @param max_memory_mb,chunk_size,parallel,n_workers,scratch_dir Only
-#'   used when `fit` is CSV file paths; identical in meaning to
+#'   which model produced `fit`, or a recognized pre-0.4.0 alias
+#'   (`"alphanorm"`/`"alphanorm_ou"`, mapped to `"stable"`/`"ou"` with a
+#'   message; see [.canonical_stan_model()]) -- an unrecognized name
+#'   errors immediately rather than silently skipping sign orientation.
+#'   See [bilatr_orient()]. Defaults to `.BILATR_DEFAULT_MODEL`
+#'   (`"stable"`), matching what [fit_dyad_ts()]/[fit_panel()] always fit.
+#' @param max_memory_mb,chunk_size,parallel,n_workers Only used when
+#'   `fit` is CSV file paths; identical in meaning to
 #'   [diagnose_convergence()]'s arguments of the same name (including
 #'   the one-time default-`max_memory_mb` `message()`), applied here to
 #'   `theta` alone rather than all of Tier 3.
+#' @param scratch_dir Deprecated and ignored since 0.4.1; see
+#'   [diagnose_convergence()].
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, `dyad`, `dyad2`, `year` (and `month`, if applicable),
 #'   the posterior `mean` of theta, and one column per requested quantile.
@@ -77,9 +85,17 @@
 extract_theta <- function(
   fit, stan_data, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL,
   max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L), scratch_dir = NULL
+  n_workers = parallelly::availableCores(), scratch_dir = NULL
 ) {
+  stan_model <- .canonical_stan_model(stan_model)
   max_memory_mb_missing <- missing(max_memory_mb)
+  if (!is.null(scratch_dir)) {
+    warning(
+      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
+      "copy is made any more.",
+      call. = FALSE
+    )
+  }
 
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
@@ -104,26 +120,23 @@ extract_theta <- function(
     }
 
     csv_files <- fit
-    prepared <- .prepare_fast_csv_read(csv_files, scratch_dir)
-    on.exit(.cleanup_fast_csv_read(prepared), add = TRUE)
+    prepared <- .prepare_fast_csv_read(csv_files)
 
-    all_vars <- .stan_csv_variable_names(csv_files[1])
-    var_tiers <- .classify_bilatr_tier(all_vars)
+    var_tiers <- .classify_bilatr_tier(prepared$variables)
     theta_vars <- var_tiers$variable[var_tiers$tier == 3L & startsWith(var_tiers$variable, "theta[")]
 
-    flip <- FALSE
-    if (length(.bilatr_flip_variables(stan_model)) > 0) {
-      alpha1_draws <- .fast_read_post_warmup_draws(prepared, "alpha[1]")
-      flip <- stats::median(posterior::extract_variable(alpha1_draws, "alpha[1]")) < 0
-    }
-
+    n_cores <- if (parallel) n_workers else 1L
     chunk_size_used <- .resolve_chunk_size_and_report(
-      length(theta_vars), csv_files, max_memory_mb, chunk_size, parallel, n_workers,
+      length(theta_vars), prepared, max_memory_mb, chunk_size, n_cores,
       max_memory_mb_missing
     )
-    theta_summ <- .chunked_summarise_csv(
-      prepared, theta_vars, chunk_size_used, parallel, n_workers, flip = flip
-    ) %>%
+    # No standalone alpha[1] pass: orientation is decided from the first
+    # Tier 3 chunk itself (alpha[1] prepended, read once, dropped before
+    # summarising) -- see .chunked_summarise_csv_with_orientation().
+    theta_summ <- .chunked_summarise_csv_with_orientation(
+      prepared, theta_vars, chunk_size_used, n_cores,
+      .bilatr_flip_variables(stan_model)
+    )$summ %>%
       dplyr::select(variable, mean, `5%` = q5, `50%` = median, `95%` = q95)
   } else {
     draws <- fit$draws(variables = c("alpha[1]", "theta"))
@@ -149,29 +162,20 @@ extract_theta <- function(
 #' two already know exactly which (small) set of variable names they
 #' want, so there is no tier enumeration or chunking to do -- just one
 #' plain, unchunked read across all chain files, via
-#' [.prepare_fast_csv_read]/[.fast_read_post_warmup_draws] rather than
-#' [cmdstanr::read_cmdstan_csv()] (see [.prepare_fast_csv_read]'s docs
-#' for why: the latter's `cmd = grep` read re-materializes a full
-#' near-complete copy of each chain's raw CSV on every call, however few
-#' columns are requested). Not free in absolute terms, though: reading
-#' still scans each file's full row width regardless of how few columns
-#' are requested (see [.chunked_summarise_csv]'s docs for the benchmark
-#' this is based on), so this is the minimum possible number of file
-#' scans (one), not an instant lookup -- there is no way to make reading
-#' a handful of columns out of a very wide CSV cheaper than that at the
-#' file-format level.
+#' [.prepare_fast_csv_read]/[.fast_read_post_warmup_draws]. Not free in
+#' absolute terms, though: `data.table::fread()` touches each file's
+#' full byte range once per call regardless of how few columns are
+#' requested (see [.fast_read_post_warmup_draws]'s docs), so this is the
+#' minimum possible number of file touches (one), not an instant lookup.
 #'
 #' @param fit A `CmdStanMCMC`-like fit object, or a character vector of
 #'   CmdStan CSV file paths.
 #' @param variables Character vector of variable names to read.
-#' @param scratch_dir See [diagnose_convergence()]. Only used when `fit`
-#'   is CSV file paths.
 #' @return A `posterior::draws_array`.
 #' @keywords internal
-.get_draws <- function(fit, variables, scratch_dir = NULL) {
+.get_draws <- function(fit, variables) {
   if (is.character(fit)) {
-    prepared <- .prepare_fast_csv_read(fit, scratch_dir)
-    on.exit(.cleanup_fast_csv_read(prepared), add = TRUE)
+    prepared <- .prepare_fast_csv_read(fit)
     .fast_read_post_warmup_draws(prepared, variables)
   } else {
     fit$draws(variables = variables)
@@ -209,8 +213,6 @@ extract_theta <- function(
 #'   `"event_classes"` attribute attached by [assemble_stan_data()]). If
 #'   supplied, an `event_class` column is added alongside the raw action
 #'   index.
-#' @param scratch_dir See [diagnose_convergence()]. Only used when `fit`
-#'   is CSV file paths.
 #' @return A tibble with one row per action type: `action_index`
 #'   (and `event_class` if `event_classes` is supplied), the posterior
 #'   `mean` of alpha, and one column per requested quantile.
@@ -224,7 +226,15 @@ extract_theta <- function(
 #' }
 #' @export
 extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL, scratch_dir = NULL) {
-  draws <- bilatr_orient(.get_draws(fit, "alpha", scratch_dir), stan_model = stan_model, variables = "alpha")
+  stan_model <- .canonical_stan_model(stan_model)
+  if (!is.null(scratch_dir)) {
+    warning(
+      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
+      "copy is made any more.",
+      call. = FALSE
+    )
+  }
+  draws <- bilatr_orient(.get_draws(fit, "alpha"), stan_model = stan_model, variables = "alpha")
 
   out <- posterior::summarise_draws(
     draws,
@@ -271,7 +281,15 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' }
 #' @export
 extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL, scratch_dir = NULL) {
-  draws <- .get_draws(fit, c("alpha[1]", "mu_intercept"), scratch_dir)
+  stan_model <- .canonical_stan_model(stan_model)
+  if (!is.null(scratch_dir)) {
+    warning(
+      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
+      "copy is made any more.",
+      call. = FALSE
+    )
+  }
+  draws <- .get_draws(fit, c("alpha[1]", "mu_intercept"))
   draws <- bilatr_orient(draws, stan_model = stan_model, variables = "mu_intercept")
 
   out <- posterior::summarise_draws(

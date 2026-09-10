@@ -271,44 +271,91 @@ test_that(".dot_name_to_bracket() converts CmdStan raw CSV names to posterior fo
   expect_equal(.dot_name_to_bracket("theta_raw.3.12"), "theta_raw[3,12]")
 })
 
-test_that(".compute_chunk_size() derives a sensible size from a memory budget and scales with n_workers under parallel", {
-  seq_size <- .compute_chunk_size(
-    n_draws = 1000, n_chains = 4, max_memory_mb = 100,
-    n_workers = 1, parallel = FALSE
+test_that(".compute_chunk_size() shrinks with more file_mb headroom lost, and shrinks further, not just once, as n_cores increases", {
+  base_size <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 1
   )
-  expect_gt(seq_size, 0)
+  expect_gt(base_size, 0)
 
-  par_size <- .compute_chunk_size(
-    n_draws = 1000, n_chains = 4, max_memory_mb = 100,
-    n_workers = 4, parallel = TRUE
+  # the same budget, minus a bigger file-sized term, leaves less for
+  # variables
+  smaller_size <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, file_mb = 50, max_memory_mb = 1000, n_cores = 1
   )
-  # same budget spread across 4 concurrently-resident chunks -> ~1/4 the
-  # size (not exactly floor(seq_size / 4): floor() is applied at two
-  # different denominators, so a small integer-rounding slack is expected)
-  expect_lt(abs(seq_size - par_size * 4), 4)
+  expect_lt(smaller_size, base_size)
+
+  # n_cores > 1 forks posterior::summarise_draws() workers (B8's
+  # replacement for the pre-measurement model, which assumed a flat
+  # penalty regardless of the exact core count -- measured, in
+  # dev/bench_memory.R, to scale with n_cores instead): each additional
+  # worker shrinks the chunk size further, not just the first one
+  par_size_2 <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 2
+  )
+  par_size_8 <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 8
+  )
+  par_size_24 <- .compute_chunk_size(
+    n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 24
+  )
+  expect_lt(par_size_2, base_size)
+  expect_lt(par_size_8, par_size_2)
+  expect_lt(par_size_24, par_size_8)
 })
 
-test_that(".compute_chunk_size() clamps to 1 and warns when the budget is too tight", {
-  expect_warning(
-    size <- .compute_chunk_size(
-      n_draws = 1e6, n_chains = 4, max_memory_mb = 1e-6,
-      n_workers = 1, parallel = FALSE
+test_that(".compute_chunk_size() errors clearly when max_memory_mb can't even cover the file-sized-plus-baseline term", {
+  expect_error(
+    .compute_chunk_size(
+      n_draws = 1e6, n_chains = 4, file_mb = 14000, max_memory_mb = 100, n_cores = 1
     ),
-    "too tight"
+    "leaves no room"
   )
-  expect_equal(size, 1L)
+  expect_error(
+    .compute_chunk_size(
+      n_draws = 1e6, n_chains = 4, file_mb = 14000, max_memory_mb = 100, n_cores = 1
+    ),
+    "Allocate at least"
+  )
+  # also insufficient for baseline alone even with a tiny/zero file
+  expect_error(
+    .compute_chunk_size(
+      n_draws = 1, n_chains = 1, file_mb = 0, max_memory_mb = 50, n_cores = 1
+    ),
+    "fixed floor for R and its loaded packages"
+  )
 })
 
 test_that(".estimate_diagnostics_memory_mb() and .compute_chunk_size() invert each other", {
   n_draws <- 500
   n_chains <- 4
-  budget <- 250
-  chunk_size <- .compute_chunk_size(n_draws, n_chains, budget, n_workers = 1, parallel = FALSE)
-  est <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size, n_workers = 1, parallel = FALSE)
+  file_mb <- 10
+  budget <- 2000
+  chunk_size <- .compute_chunk_size(n_draws, n_chains, file_mb, budget, n_cores = 1)
+  est <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size, n_cores = 1, file_mb = file_mb)
   expect_lte(est, budget)
   # one variable larger should just barely exceed the budget (floor() was tight)
-  est_next <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size + 1L, n_workers = 1, parallel = FALSE)
+  est_next <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size + 1L, n_cores = 1, file_mb = file_mb)
   expect_gt(est_next, budget)
+})
+
+test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation", {
+  # ARRAY(3) + PER_CHAIN/n_chains(2/n_chains) + FLIP(1, unconditional --
+  # whether a flip is needed isn't known until after the first chunk is
+  # read), no cores term at n_cores = 1
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 1, n_cores = 1), 3 + 2 + 1)
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 1), 3 + 2 / 4 + 1)
+
+  # n_cores > 1: a one-time STEP (4.5) plus a PER_CORE term (2.5) for
+  # each additional forked worker beyond the first -- measured to scale
+  # with n_cores, not a flat penalty regardless of the exact core count
+  base <- 3 + 2 / 4 + 1
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 2), base + 4.5 + 2.5 * 1)
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 4), base + 4.5 + 2.5 * 3)
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 24), base + 4.5 + 2.5 * 23)
+  expect_lt(
+    .bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 2),
+    .bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 4)
+  )
 })
 
 # --- CSV-path integration: chunked reading against a real CmdStan run ----
@@ -331,13 +378,46 @@ test_that("diagnose_convergence() from CSV files matches the in-memory path exac
   expect_equal(dplyr::arrange(diag_mem$tier2, dyad_id), dplyr::arrange(diag_csv_chunked$tier2, dyad_id))
   expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_chunked$tier3, dyad_id))
 
-  # default max_memory_mb -> everything fits in one chunk for this tiny fixture
+  # default max_memory_mb -> Tier 3 fits in one chunk for this tiny
+  # fixture, so this also exercises .read_diagnostics_summary_from_csv()'s
+  # folded Tier-1/2-plus-Tier-3 single-read path, not just one-chunk
+  # chunking of Tier 3 alone
   diag_csv_unchunked <- suppressWarnings(suppressMessages(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 1:3)))
+  expect_equal(dplyr::arrange(diag_mem$tier1, variable), dplyr::arrange(diag_csv_unchunked$tier1, variable))
+  expect_equal(dplyr::arrange(diag_mem$tier2, dyad_id), dplyr::arrange(diag_csv_unchunked$tier2, dyad_id))
   expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_unchunked$tier3, dyad_id))
 
   # tier labels survive chunking: same dyads, same columns as the in-memory path
   expect_equal(sort(diag_csv_chunked$tier2$dyad_id), sort(diag_mem$tier2$dyad_id))
   expect_setequal(names(diag_csv_chunked$tier3), names(diag_mem$tier3))
+})
+
+test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requested tiers via $draws(variables =), not the whole fit subset afterward (B8)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+
+  diag_tier1_only <- suppressWarnings(diagnose_convergence(fx$fit, tiers = 1))
+  diag_full <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, tiers = 1:3))
+
+  # same Tier 1 result whether or not Tiers 2/3 were also requested --
+  # narrowing $draws(variables =) to Tier 1 alone must not change what
+  # gets computed for it
+  expect_equal(
+    dplyr::arrange(diag_tier1_only$tier1, variable),
+    dplyr::arrange(diag_full$tier1, variable)
+  )
+  expect_null(diag_tier1_only$tier2)
+  expect_null(diag_tier1_only$tier3)
+
+  # the read really was narrowed to Tier 1's own variable set (derived
+  # from $metadata()$variables, never touching a draw) rather than
+  # reading everything and subsetting after
+  tier1_vars <- .classify_bilatr_tier(fx$fit$metadata()$variables)$variable
+  tier1_vars <- tier1_vars[.classify_bilatr_tier(fx$fit$metadata()$variables)$tier == 1L]
+  expect_setequal(diag_tier1_only$tier1$variable, tier1_vars)
 })
 
 test_that("diagnose_convergence() from CSV files: parallel and sequential chunk processing agree numerically", {
@@ -350,14 +430,11 @@ test_that("diagnose_convergence() from CSV files: parallel and sequential chunk 
   diag_seq <- suppressWarnings(suppressMessages(diagnose_convergence(
     fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = FALSE
   )))
-  old_plan <- future::plan()
   diag_par <- suppressWarnings(suppressMessages(diagnose_convergence(
     fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = TRUE, n_workers = 2
   )))
 
   expect_equal(dplyr::arrange(diag_seq$tier3, dyad_id), dplyr::arrange(diag_par$tier3, dyad_id))
-  # the parallel call must not permanently change the caller's future plan
-  expect_equal(class(future::plan()), class(old_plan))
 })
 
 test_that("diagnose_convergence() from CSV files respects tiers = 1 (no n_dt, no Tier 3 read at all)", {
@@ -391,6 +468,71 @@ test_that("diagnose_convergence() from CSV files messages about the max_memory_m
   # the per-run memory-estimate message still fires either way
   expect_message(
     suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, tiers = 3, chunk_size = 3, max_memory_mb = 8192)),
-    "estimated peak memory"
+    "estimated peak"
   )
+})
+
+test_that(".chunked_summarise_csv() with a flip stays within ~1.3x the peak RSS of an otherwise-identical no-flip run (regression guard, verification section 1)", {
+  skip_on_cran()
+  skip_on_ci()
+  skip_if_not_installed("callr")
+  skip_if_not_installed("ps")
+
+  # a moderate synthetic CSV. Checked empirically (dev-only, not part of
+  # this test): at this scale, a reintroduced as_draws_df()/
+  # as.data.frame() round-trip flip (the pre-fix mechanism, ~3.9x
+  # raw_mb) measures a ratio around 1.3-1.34 against this fixed
+  # implementation's ~0.9-1.13 -- separation exists but is not huge, a
+  # consequence of a fixed ~200 MB R/package-loading floor
+  # ([.BILATR_CHUNK_BASELINE_MB]) diluting the relative size of any
+  # raw_mb-proportional regression at any practical (fast-to-test)
+  # scale. This is a deliberately loose, cheap guard against a
+  # regression of that specific SHAPE (see verification section 1),
+  # not a precise measurement -- dev/bench_memory.R is that.
+  n_cols <- 20000L
+  n_draws <- 200L
+  f <- tempfile(fileext = ".csv")
+  on.exit(unlink(f), add = TRUE)
+  .make_synthetic_stan_csv(f, n_cols = n_cols, n_draws = n_draws)
+
+  pkg_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
+
+  # peak RSS is a per-process high-water mark (see dev/bench_memory.R's
+  # own rationale for the same choice): run each configuration in a
+  # fresh callr background process, polling its RSS via the `ps`
+  # package until it exits. n_cores = 1 here (no forking), so a single
+  # process's own RSS is enough -- no process-tree summation needed.
+  measure_peak_mb <- function(flip) {
+    p <- callr::r_bg(
+      function(pkg_root, csv_file, flip) {
+        devtools::load_all(pkg_root, quiet = TRUE)
+        prepared <- .prepare_fast_csv_read(csv_file)
+        variables <- grep("^x\\[", prepared$variables, value = TRUE)
+        flip_vars <- if (flip) "x" else character(0)
+        invisible(.chunked_summarise_csv(
+          prepared, variables,
+          chunk_size = length(variables), n_cores = 1L, flip_vars = flip_vars
+        ))
+      },
+      args = list(pkg_root = pkg_root, csv_file = f, flip = flip)
+    )
+    on.exit(p$kill(), add = TRUE)
+
+    peak_bytes <- 0
+    while (p$is_alive()) {
+      total <- tryCatch(ps::ps_memory_info(ps::ps_handle(p$get_pid()))[["rss"]], error = function(e) 0)
+      peak_bytes <- max(peak_bytes, total)
+      Sys.sleep(0.02)
+    }
+    p$wait()
+    if (!identical(p$get_exit_status(), 0L)) {
+      stop("callr worker (flip = ", flip, ") failed:\n", paste(p$read_all_error_lines(), collapse = "\n"))
+    }
+    peak_bytes / 1e6
+  }
+
+  no_flip_mb <- measure_peak_mb(FALSE)
+  flip_mb <- measure_peak_mb(TRUE)
+
+  expect_lt(flip_mb / no_flip_mb, 1.3)
 })

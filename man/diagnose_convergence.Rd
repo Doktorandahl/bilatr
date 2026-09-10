@@ -13,25 +13,38 @@ diagnose_convergence(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L),
+  n_workers = parallelly::availableCores(),
   scratch_dir = NULL
 )
 }
 \arguments{
-\item{fit}{Either (a) a \code{CmdStanMCMC}/\code{CmdStanFit}-like fit object
-(anything with a \verb{$draws()} method) or a \code{posterior::draws_array}/
-\code{draws_df} -- the whole object is already in memory, so \code{tiers}
-controls what gets summarised but not what gets read, and
-\code{max_memory_mb}/\code{chunk_size}/\code{parallel}/\code{n_workers} are unused; or
-(b) a character vector of raw CmdStan CSV file paths (one per
-chain, e.g. from a completed SLURM run never loaded into this R
-session) -- in this case Tier 1/2 variables are read in one small
-call, and Tier 3 variables (typically the overwhelming majority for
-production-sized panels) are read and summarised in memory-bounded
-chunks via \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}}'s \code{variables} argument,
+\item{fit}{One of three things. (a) A \code{posterior::draws_array}/
+\code{draws_df} -- already fully materialized in memory, so \code{tiers}
+controls what gets summarised but not what gets read (there is
+nothing left to avoid reading), and \code{max_memory_mb}/\code{chunk_size}/
+\code{parallel}/\code{n_workers} are unused. (b) A \code{CmdStanMCMC}/\code{CmdStanFit}-
+like fit object (anything with \verb{$metadata()} and
+\verb{$draws(variables = ...)} methods) -- variable names are read via
+\verb{$metadata()$variables} without touching a single draw, classified
+into tiers, and only the tiers actually requested are read via
+\verb{$draws(variables = keep_vars)}; a quantity outside \code{tiers} is
+therefore never read into memory at all, same as case (c) below.
+\code{max_memory_mb}/\code{chunk_size}/\code{parallel}/\code{n_workers} are still unused
+here -- chunking only applies to the raw-CSV path, since \verb{$draws()}
+already holds whatever it returns as one in-memory array. (c) A
+character vector of raw CmdStan CSV file paths (one per chain, e.g.
+from a completed SLURM run never loaded into this R session) -- in
+this case Tier 1/2 variables are read in one small call, and Tier 3
+variables (typically the overwhelming majority for production-sized
+panels) are read and summarised directly from the raw CSVs in
+memory-bounded chunks (see \link{.fast_read_post_warmup_draws}),
 discarding each chunk's draws before moving to the next, so the
-full draws array is never materialized at once. This is the path
-that matters for production Stan output too large to read normally
+full draws array is never materialized at once. Total file touches
+per chain file: one metadata scan plus one validation probe (both in
+\link{.prepare_fast_csv_read}), one Tier 1/2 read, and one per Tier 3
+chunk -- or, when Tier 3 fits in a single chunk, Tier 1/2 is folded
+into that one read instead of being separate. This is the path that
+matters for production Stan output too large to read normally
 (tested against panels with millions of Tier 3 columns).}
 
 \item{n_dt}{A data frame with a dyad-id column (matching \code{"dyad..."})
@@ -54,23 +67,28 @@ than an empty tibble, so \code{is.null(diag$tier3)} distinguishes "not
 computed" from "computed, nothing to report".}
 
 \item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory;
-drives the automatically-derived \code{chunk_size} (see \code{chunk_size}
-below) so you don't have to guess a variable count yourself.
-Defaults to \code{8192} (8 GB) -- a guess, not a calibration against your
-hardware, and this function says so via \code{message()} the first time
-you rely on that default rather than setting it explicitly. This is
-a sanity-check number, not a guarantee: actual peak memory depends
-on \code{read_cmdstan_csv()}/\code{summarise_draws()} internals this function
-doesn't control. IMPORTANT, from a real benchmark against a
-production-scale CSV (see \link{.chunked_summarise_csv}): reading is
-strongly I/O-bound, so a SMALLER \code{max_memory_mb} (more, smaller
-chunks) does not make this cheaper -- it can make it dramatically
-\emph{slower}, since each chunk pays nearly the same full-row-scan cost
-regardless of how many columns it keeps, and total wall-time scales
-with chunk count. Prefer the LARGEST \code{max_memory_mb} your job's
-memory allocation can afford; only lower it if memory, not time, is
-the binding constraint.}
+includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory per
+chunk; drives the automatically-derived \code{chunk_size} (see
+\code{chunk_size} below) so you don't have to guess a variable count
+yourself. Defaults to \code{8192} (8 GB) -- a guess, not a calibration
+against your hardware, and this function says so via \code{message()}
+the first time you rely on that default rather than setting it
+explicitly. This is a sanity-check number, not a guarantee: actual
+peak memory depends on \code{data.table::fread()}/\code{summarise_draws()}
+internals this function doesn't control (see
+\code{\link[=.compute_chunk_size]{.compute_chunk_size()}} for the model and its derivation). Reading
+is single-threaded, and each chunk's cost is roughly a full parse
+of the largest chain file regardless of how many variables are
+kept -- \code{max_memory_mb} must be large enough to cover that file
+size, plus a fixed R/package-loading floor, at minimum (this
+\code{stop()}s with a clear message naming the shortfall if it isn't).
+Beyond that, fewer/larger chunks are cheaper in read wall-time, but
+-- see \code{parallel} below -- a larger \code{n_workers} shrinks the
+largest chunk size the SAME \code{max_memory_mb} budget can afford, so
+the two are not independent: prefer the LARGEST \code{max_memory_mb}
+your job's allocation can afford, and check the resolved chunk
+count in the pre-flight \code{message()} before committing to a large
+\code{n_workers} on a tight budget.}
 
 \item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Explicit override: number of Tier 3 variables read per
@@ -80,34 +98,41 @@ calculation (e.g. you've measured actual memory use and want to
 tune it by hand).}
 
 \item{parallel}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. \code{FALSE} (default) processes Tier 3 chunks
-sequentially, one at a time -- this is what makes \code{max_memory_mb}'s
-bound hold regardless of \code{n_workers}. \code{TRUE} processes chunks
-concurrently via \code{furrr::future_map_dfr()}, trading that memory
-bound (now effectively \code{max_memory_mb} times up to \code{n_workers},
-since that many chunks are in memory at once) for wall-clock speed.
-Prefer \code{parallel = FALSE} when memory is already tight (e.g. a
-memory-constrained HPC allocation) and \code{parallel = TRUE} when you
-have memory headroom to spend on speed instead. On Windows this
-falls back from \code{future::multicore} to \code{future::multisession} with
-a loud \code{warning()}, since \code{multisession} copies data to each worker
-rather than sharing it via copy-on-write -- the memory math changes
-substantially, and \code{max_memory_mb} is less trustworthy there.}
+includes \code{3}. Chunks are always read strictly sequentially regardless
+of this argument -- reading is disk-bound and single-threaded no
+matter how many cores are available (see
+\link{.fast_read_post_warmup_draws}), so there is nothing to gain, and
+\code{n_workers} chunks' worth of memory to lose, by reading more than one
+chunk at a time. \code{parallel} instead controls whether the CPU-bound
+part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
+\code{n_workers} cores (via \code{posterior::summarise_draws()}'s \code{.cores}
+argument, which forks \code{n_workers} worker processes) or just one.
+Measured (\code{dev/bench_memory.R}, see \link{.BILATR_CHUNK_CORES_PER_CORE_FACTOR}):
+this genuinely costs memory roughly proportional to \code{n_workers}, not
+a fixed amount regardless of it, and that cost comes out of the SAME
+\code{max_memory_mb} budget the read uses -- so a larger \code{n_workers}
+indirectly means MORE, not fewer, passes over each chain file at a
+fixed \code{max_memory_mb}, trading read wall-time for summary wall-time
+rather than being free on top of it. Worth checking the resolved
+chunk count (in the pre-flight \code{message()}) at your intended
+\code{n_workers} before committing a long run to it -- a very large
+\code{n_workers} on a large \code{n_vars} sweep can end up costing MORE total
+wall-time than a smaller one, if it forces enough extra chunks.}
 
 \item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
-\code{max(1, parallel::detectCores() - 1)}.}
+\code{parallelly::availableCores()}, which -- unlike
+\code{parallel::detectCores()} -- respects a SLURM allocation's
+\code{SLURM_CPUS_PER_TASK} (among other cluster/container schedulers)
+rather than reporting the whole node's core count. See \code{parallel}
+above: this is a genuine memory/wall-time trade-off now, not a
+free choice, so consider an explicit, moderate value (rather than
+the default, which can be large on a big allocation) for a
+memory-constrained job.}
 
-\item{scratch_dir}{Only used when \code{fit} is CSV file paths. Directory
-to write a one-time, comment-stripped copy of each chain file into
-before reading (see \link{.prepare_fast_csv_read}). \code{NULL} (the default)
-writes each copy alongside its source file, which is deliberate:
-that's already known-good storage for these (often many-GB) files,
-unlike \code{tempdir()}/\verb{$TMPDIR}, which on some HPC systems is a
-RAM-backed \code{tmpfs} -- silently turning a routine disk read into a
-direct hit against the job's memory allocation. Point this at an
-explicit path only if the CSVs' own directory is unsuitable (e.g.
-quota-constrained, read-only, or a slow network filesystem when
-faster local scratch is available).}
+\item{scratch_dir}{Deprecated and ignored since 0.4.1: reads are made
+directly against the raw CSV files (see \link{.prepare_fast_csv_read}),
+so no scratch copy is ever made any more. Passing a non-\code{NULL}
+value emits a warning.}
 }
 \value{
 A list of class \code{bilatr_diagnostics} with elements:
@@ -152,6 +177,13 @@ matters in practice because Tier 3 (\code{theta}/\code{theta_raw}) typically
 has, by far, the most monitored quantities of the three tiers (one per
 dyad-period); requesting only \code{tiers = 1} or \code{tiers = 1:2} skips
 reading/computing Rhat/ESS for all of them.
+
+Every \code{fit} case (a)-(c) below summarises via the same fixed measure
+set (\code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}}: \code{mean}, \code{quantile2}, \code{median},
+\code{rhat}, \code{ess_bulk}, \code{ess_tail}), not \code{posterior::summarise_draws()}'s
+own defaults (which also compute \code{sd}/\code{mad}, unused by every consumer
+here) -- so the tibble you get back has the same columns regardless
+of which kind of \code{fit} produced it.
 }
 \examples{
 \dontrun{

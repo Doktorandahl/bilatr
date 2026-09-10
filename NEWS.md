@@ -1,4 +1,92 @@
 
+# bilatr 0.4.1
+
+## Bug fixes
+
+* Removed the last intermediate file from the CSV-file-path read path.
+  0.3.10 stopped copying through `tempdir()` but still wrote one
+  comment-stripped `*.csv.nocomments` copy per chain file (by default
+  alongside the source file, or under `scratch_dir`); every
+  CSV-file-path read (`diagnose_convergence()`,
+  `diagnose_and_extract_bilatr()`, `extract_theta()`, `extract_alpha()`,
+  `extract_mu_intercept()`) now reads `data.table::fread(file = ...,
+  skip = ..., nrows = ..., select = ...)` directly against the original
+  CmdStan CSV, with no copy of any kind made at any point. `scratch_dir`
+  is accordingly deprecated (accepted, with a warning, and ignored) on
+  all five functions. Any leftover `*.csv.nocomments` files from a
+  0.3.10 or 0.4.0 run are no longer read or written and can be deleted.
+* Fixed a sign-orientation bug (B5) in the chunked Tier 3 read: a chunk
+  containing both `theta`/`theta_raw` (which the `stable`/`ou`
+  reflection symmetry flips) and `log_lik[d,t]` (which it must not,
+  since `log_lik` isn't a location parameter) previously negated every
+  column in the chunk uniformly whenever any of its columns needed
+  flipping. Only the columns [.bilatr_flip_variables()] actually lists
+  are negated now, so a `compute_log_lik = 1` fit's `log_lik` is never
+  corrupted by orientation regardless of how it happens to fall into
+  chunks alongside `theta`/`theta_raw`.
+* Fixed a bug (B1) where an unrecognized `stan_model` name silently
+  disabled sign orientation instead of raising an error, in
+  [bilatr_orient()], `.warn_if_wrong_basin()` (`fit_dyad_ts()`/
+  `fit_panel()`'s post-sampling basin check), and every function above
+  that accepts `stan_model`. Unknown names now error immediately.
+  Pre-0.4.0 model names (`"alphanorm"`, `"alphanorm_ou"`) are still
+  accepted everywhere `stan_model` is read, resolved to their current
+  names (`"stable"`, `"ou"`), with a message that now fires once per
+  session per alias name rather than on every call. This includes the
+  fitting path: `fit_dyad_ts_dev()`/`fit_panel_dev(stan_model =
+  "alphanorm")` previously died inside the model-specific init
+  generator (which has no entry for the old name) despite resolving the
+  Stan file and the post-sampling basin check correctly; `stan_model` is
+  now canonicalised once, ensuring all three agree.
+* A chain file with fewer post-warmup rows than expected (e.g. a SLURM
+  job that died mid-sampling) is now detected up front, by name, with a
+  clear error (B7) -- previously this surfaced as `posterior`'s generic
+  "must have the same length" error only once chunks were later
+  assembled into a draws array.
+* `diagnose_convergence()`'s in-memory branch, given a `CmdStanMCMC`-
+  like fit object (as opposed to a `posterior::draws` object already in
+  hand), now reads variable names via `$metadata()$variables` and calls
+  `$draws(variables = keep_vars)` for only the requested `tiers` (B8),
+  instead of reading every variable via `$draws()` and subsetting
+  afterward -- `tiers = 1` no longer touches Tier 3 in memory at all,
+  matching what the CSV-file-path branch already did.
+
+## Changes
+
+* `parallel`/`n_workers` (on `diagnose_convergence()`,
+  `diagnose_and_extract_bilatr()`, and `extract_theta()`'s CSV-path
+  mode) now drive `posterior::summarise_draws()`'s `.cores` argument
+  over each chunk's Rhat/rank-normalised-ESS computation, not the read:
+  reading a chunk is disk-bound and single-threaded regardless (see
+  `.fast_read_post_warmup_draws()`), so chunks are always read strictly
+  sequentially. `n_workers` now defaults to
+  `parallelly::availableCores()` rather than
+  `parallel::detectCores()`-based logic, so it respects a SLURM
+  allocation's `SLURM_CPUS_PER_TASK` instead of reporting the whole
+  node. **This is a genuine memory/wall-time trade-off, not a free
+  choice**: forking `n_workers` processes for the summary step measures
+  as costing memory roughly proportional to `n_workers` (not a fixed
+  amount regardless of it), and that cost comes out of the same
+  `max_memory_mb` budget the read uses -- so a larger `n_workers`
+  indirectly means MORE, not fewer, passes over each chain file at a
+  fixed `max_memory_mb`. Check the resolved chunk count in the
+  pre-flight `message()` before committing a long run to a large
+  `n_workers`.
+* The `max_memory_mb`/`chunk_size` memory model was re-derived against
+  measured peak RSS (`dev/bench_memory.R`, not shipped with the
+  package), not just re-derived from reading the new code, and now
+  accounts for two things the initial 0.4.1 model missed: a fixed
+  ~200 MB floor for R and its loaded packages (`baseline`, alongside
+  the existing file-sized term -- neither shrinks with `chunk_size`),
+  and the per-worker forking cost above. The pre-flight `message()`
+  reports the resolved chunk count/size and the estimated peak broken
+  into its baseline, file-sized, and per-chunk terms separately.
+* Added a minimum version bound, `posterior (>= 1.0.0)`, for the
+  `.cores` argument this release relies on. Removed `future` from
+  `Imports` (unused since the `parallel`/`n_workers` change above,
+  which stopped this package's own code from calling it); `furrr`
+  remains, still used by `ingest_icews()`.
+
 # bilatr 0.4.0
 
 ## Breaking changes

@@ -4,40 +4,52 @@
 \alias{.prepare_fast_csv_read}
 \title{Prepare a set of raw CmdStan CSV files for repeated, memory-bounded reads}
 \usage{
-.prepare_fast_csv_read(csv_files, scratch_dir = NULL)
+.prepare_fast_csv_read(csv_files)
 }
 \arguments{
 \item{csv_files}{Character vector of raw CmdStan CSV file paths (one
 per chain).}
-
-\item{scratch_dir}{Directory to write the comment-stripped copies
-into. \code{NULL} (the default) writes each copy alongside its source
-file (\code{dirname(csv_file)}) -- deliberately, since that's already
-known-good storage for these (often many-GB) files, unlike
-\code{tempdir()}, which on some HPC systems is a RAM-backed \code{tmpfs} (see
-\link{.strip_stan_csv_comments}). Pass an explicit path (e.g. fast local
-scratch) if the output directory's filesystem is quota-constrained,
-read-only, or otherwise unsuitable for a temporary same-size copy of
-each chain file.}
 }
 \value{
-A list with \code{clean_files} (comment-stripped copies, one per
-\code{csv_files} entry, same order), \code{dot_name_map} (a named character
-vector mapping every posterior-style variable name to its raw
-dot-form CSV column name), and \code{num_post_warmup_draws}.
+A list with \code{csv_files} (as given), \code{variables} (all
+monitored quantities, bracket form, e.g. \code{"theta[3,12]"}),
+\code{dot_name_map} (named character vector: bracket name -> raw
+dot-form CSV column name, e.g. \code{"theta.3.12"}), \code{col_index} (named
+integer vector: bracket name -> 1-based column position in the raw
+CSV header -- sampler-diagnostic columns like \code{accept_stat__}
+occupy earlier positions and are counted in this numbering even
+though they're never named in \code{variables}), \code{num_post_warmup_draws},
+\code{n_chains}, \code{data_skip} (integer vector, one per \code{csv_files} entry,
+for \code{fread(skip = )}), and \code{file_mb} (the LARGEST \code{csv_files} entry's
+size in MB -- \code{fread()} reads one file at a time, so this is the
+file-sized memory floor any single read pays regardless of
+\code{chunk_size}; see \code{\link[=.compute_chunk_size]{.compute_chunk_size()}}).
 }
 \description{
 The one-time setup shared by every CSV-file-path entry point
 (\code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}},
 \code{\link[=extract_theta]{extract_theta()}}, \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} via
-\link{.get_draws}): comment-strips each chain file exactly once (see
-\link{.strip_stan_csv_comments}) and reads the header metadata needed to
-slice out post-warmup rows and map posterior-style variable names
-(\code{"theta[3,12]"}) back to the raw CSV's dot-form column names
-(\code{"theta.3.12"}). Everything downstream -- the Tier 1/2 read, the
-\code{alpha[1]} flip check, every chunk of a Tier 3 sweep -- reads from the
-resulting cleaned files via \link{.fast_read_post_warmup_draws} instead of
-\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}}, so the expensive comment-stripping
-pass happens once per chain file per call, not once per chunk.
+\link{.get_draws}). Calls \code{cmdstanr:::read_csv_metadata()} exactly once
+(on \code{csv_files[1]}; every chain of the same run shares the same
+variable/column layout, matching what
+\code{cmdstanr::read_cmdstan_csv()} itself assumes) and scans each file
+once (see \link{.scan_stan_csv_header_and_skip}) for the line offset of
+its first post-warmup draw. Everything downstream --
+\link{.fast_read_post_warmup_draws} for the Tier 1/2 read, the \code{alpha[1]}
+flip check, and every Tier 3 chunk -- reads \code{variables} directly out
+of the raw CSV at that offset via \code{data.table::fread(file = ..., skip = ..., nrows = ...)}, never a comment-stripped copy: no scratch
+file is written anywhere, and no file is read more than once per
+variable subset requested (see individual entry points for exactly
+how many read passes each makes).
+}
+\details{
+Also validates, per file, that at least \code{num_post_warmup_draws} rows
+actually follow the computed offset (a chain killed mid-sampling
+produces fewer), via a single-column \code{fread(skip=, nrows=)} probe --
+\code{fread} already has to touch the whole file once per call regardless
+of how few columns are selected (see \link{.fast_read_post_warmup_draws}'s
+docs), so this probe's real cost is that one file-sized touch, same
+as any other read of the file, not something a slower line-by-line
+scan would avoid.
 }
 \keyword{internal}

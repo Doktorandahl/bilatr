@@ -5,3 +5,4 @@
 ^inst/stan/legacy$
 ^\.Rproj\.user$
 ^.*\.Rproj$
+^dev$

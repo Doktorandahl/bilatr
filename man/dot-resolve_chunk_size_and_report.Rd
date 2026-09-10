@@ -6,11 +6,10 @@
 \usage{
 .resolve_chunk_size_and_report(
   n_vars,
-  csv_files,
+  prepared,
   max_memory_mb,
   chunk_size,
-  parallel,
-  n_workers,
+  n_cores,
   max_memory_mb_missing
 )
 }
@@ -19,8 +18,12 @@
 the reporting message only; does not affect the chunk_size
 calculation itself).}
 
-\item{csv_files, max_memory_mb, chunk_size, parallel, n_workers}{See
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+\item{prepared}{Output of \link{.prepare_fast_csv_read} (for \code{n_draws},
+\code{n_chains}, \code{file_mb}).}
+
+\item{max_memory_mb, chunk_size}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
 
 \item{max_memory_mb_missing}{Whether the caller left \code{max_memory_mb}
 at its default (via \code{missing()} in the calling function).}
@@ -31,14 +34,15 @@ The resolved integer chunk size.
 \description{
 Shared by \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s and \code{\link[=extract_theta]{extract_theta()}}'s CSV-path
 branches. If \code{max_memory_mb} was left at its default, emits a one-time
-\code{message()} naming the I/O-bound wall-time/memory tradeoff a real
-benchmark against a production-scale CSV found (see
-\link{.chunked_summarise_csv}): a smaller \code{chunk_size} does NOT make
-reading cheaper -- it multiplies wall-time roughly by the number of
-chunks, since each chunk pays nearly the same full-row-scan cost
-regardless of how many columns it keeps. A second \code{message()}, always
-emitted, reports the resolved chunk count/size and estimated peak
-memory, so a caller can see the actual tradeoff being made before a
-long run commits to it.
+\code{message()} explaining the new cost model: reading is single-threaded
+and each chunk's cost is roughly a full parse of the largest chain
+file regardless of how many variables are kept (see
+\link{.fast_read_post_warmup_draws}), so fewer, larger chunks are cheaper
+in wall-time, and the CPU-bound summary step's wall-time (not memory)
+is what \code{n_workers}/\code{parallel} trade against. A second \code{message()},
+always emitted, reports the resolved chunk count/size and the
+estimated peak broken into its file-sized and per-chunk terms
+separately (see \code{\link[=.compute_chunk_size]{.compute_chunk_size()}}), so a caller can see the
+actual budget being spent before a long run commits to it.
 }
 \keyword{internal}

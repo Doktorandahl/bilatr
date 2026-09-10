@@ -27,12 +27,15 @@ index.}
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
-which model produced \code{fit}; see \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
-\code{.BILATR_DEFAULT_MODEL} (\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/
-\code{\link[=fit_panel]{fit_panel()}} always fit.}
+which model produced \code{fit}, or a recognized pre-0.4.0 alias
+(\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to \code{"stable"}/\code{"ou"} with a
+message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) -- an unrecognized name
+errors immediately rather than silently skipping sign orientation.
+See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}
+(\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/\code{\link[=fit_panel]{fit_panel()}} always fit.}
 
-\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}. Only used when \code{fit}
-is CSV file paths.}
+\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}

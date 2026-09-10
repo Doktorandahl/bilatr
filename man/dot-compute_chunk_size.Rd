@@ -4,23 +4,17 @@
 \alias{.compute_chunk_size}
 \title{Derive a Tier 3 chunk size (variables per chunk) from a memory budget}
 \usage{
-.compute_chunk_size(
-  n_draws,
-  n_chains,
-  max_memory_mb,
-  n_workers,
-  parallel,
-  overhead_factor = 2
-)
+.compute_chunk_size(n_draws, n_chains, file_mb, max_memory_mb, n_cores)
 }
 \arguments{
-\item{n_draws, n_chains}{From \link{.stan_csv_dims}.}
+\item{n_draws, n_chains}{From \link{.prepare_fast_csv_read}'s
+\code{num_post_warmup_draws}/\code{n_chains}.}
+
+\item{file_mb}{From \link{.prepare_fast_csv_read}.}
 
 \item{max_memory_mb}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
-\item{n_workers, parallel}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
-
-\item{overhead_factor}{Fixed safety multiplier; not user-facing.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
 }
 \value{
 Integer chunk size, at least \code{1}.
@@ -28,12 +22,15 @@ Integer chunk size, at least \code{1}.
 \description{
 Solves, for \code{chunk_size}, the same memory model
 \link{.estimate_diagnostics_memory_mb} reports in the other direction:
-peak memory (MB) ~= \verb{n_draws * n_chains * chunk_size * 8 bytes * overhead_factor * (n_workers if parallel else 1) / 1e6}.
-\code{overhead_factor} (default \code{2}) is a fixed safety margin for
-\code{read_cmdstan_csv()}'s intermediate structures and
-\code{summarise_draws()}'s own working memory, which a raw
-8-bytes-per-double count understates -- this is meant as a
-sanity-check number, not a guarantee (see \code{max_memory_mb} in
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation).
+peak memory (MB) ~= \code{baseline_mb + file_mb + raw_mb * k}, \code{raw_mb = n_draws * n_chains * chunk_size * 8 / 1e6}, \code{k} from
+\code{\link[=.bilatr_chunk_overhead_multiplier]{.bilatr_chunk_overhead_multiplier()}}. \code{baseline_mb}
+(\link{.BILATR_CHUNK_BASELINE_MB}) and \code{file_mb} are both fixed costs
+\code{chunk_size} cannot shrink away -- \code{fread()} touches the largest
+chain file's full byte range on every call, however few columns are
+selected (see \link{.fast_read_post_warmup_draws}), and R plus its loaded
+packages cost the same regardless of how much of any file is read --
+so \code{max_memory_mb} must cover both before any budget is left for
+variables at all; if it doesn't, this \code{stop()}s rather than silently
+returning a \code{chunk_size} that can never keep the job under budget.
 }
 \keyword{internal}

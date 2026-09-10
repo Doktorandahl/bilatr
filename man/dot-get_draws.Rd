@@ -4,16 +4,13 @@
 \alias{.get_draws}
 \title{Read named variables from either an in-memory fit or raw CmdStan CSVs}
 \usage{
-.get_draws(fit, variables, scratch_dir = NULL)
+.get_draws(fit, variables)
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC}-like fit object, or a character vector of
 CmdStan CSV file paths.}
 
 \item{variables}{Character vector of variable names to read.}
-
-\item{scratch_dir}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}. Only used when \code{fit}
-is CSV file paths.}
 }
 \value{
 A \code{posterior::draws_array}.
@@ -25,16 +22,10 @@ Shared one-line dispatch behind \code{\link[=extract_alpha]{extract_alpha()}}/
 two already know exactly which (small) set of variable names they
 want, so there is no tier enumeration or chunking to do -- just one
 plain, unchunked read across all chain files, via
-\link{.prepare_fast_csv_read}/\link{.fast_read_post_warmup_draws} rather than
-\code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}} (see \link{.prepare_fast_csv_read}'s docs
-for why: the latter's \code{cmd = grep} read re-materializes a full
-near-complete copy of each chain's raw CSV on every call, however few
-columns are requested). Not free in absolute terms, though: reading
-still scans each file's full row width regardless of how few columns
-are requested (see \link{.chunked_summarise_csv}'s docs for the benchmark
-this is based on), so this is the minimum possible number of file
-scans (one), not an instant lookup -- there is no way to make reading
-a handful of columns out of a very wide CSV cheaper than that at the
-file-format level.
+\link{.prepare_fast_csv_read}/\link{.fast_read_post_warmup_draws}. Not free in
+absolute terms, though: \code{data.table::fread()} touches each file's
+full byte range once per call regardless of how few columns are
+requested (see \link{.fast_read_post_warmup_draws}'s docs), so this is the
+minimum possible number of file touches (one), not an instant lookup.
 }
 \keyword{internal}

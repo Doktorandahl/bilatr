@@ -99,6 +99,34 @@ test_that("extract_alpha()/extract_mu_intercept() from CSV files carry event_cla
   expect_equal(alpha_csv$event_class, alpha_mem$event_class)
 })
 
+test_that("extract_alpha() errors informatively on an unrecognized stan_model (B1)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  expect_error(
+    extract_alpha(fx$csv_files, stan_model = "nonsense"),
+    "Unknown stan_model"
+  )
+})
+
+test_that("extract_alpha() with the pre-0.4.0 'alphanorm' alias matches stan_model = 'stable' exactly and emits the alias message", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  stable_result <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable"))
+
+  .reset_bilatr_alias_messaged()
+  expect_message(
+    alias_result <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "alphanorm")),
+    "pre-0.4.0 name of 'stable'"
+  )
+  expect_equal(alias_result, stable_result)
+})
+
 # --- reflection-symmetry flip: CSV path must apply the same raw-draws flip --
 
 test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'s flip identically to the in-memory path", {

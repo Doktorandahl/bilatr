@@ -98,20 +98,37 @@ test_that("bilatr_orient() does not flip when alpha[1]'s median is already posit
   expect_equal(posterior::extract_variable(oriented, "theta[1,1]"), extra[["theta[1,1]"]])
 })
 
-test_that("bilatr_orient()/.bilatr_flip_variables() default to no-op for a model with no registered reflection symmetry", {
-  # both currently-registered models (stable, ou) DO have a reflection
-  # symmetry since 0.4.0's promotion (see NEWS.md) -- this exercises the
-  # switch()'s defensive character(0) fallback for anything else, e.g. a
-  # hypothetical future model whose identification hard-fixes alpha[1]
-  # instead, the way stable/ou themselves did before that promotion.
+test_that(".bilatr_flip_variables()/bilatr_orient() error on an unrecognized stan_model rather than silently no-op (B1)", {
+  # B1: an unrecognized stan_model used to make .bilatr_flip_variables()
+  # return character(0) -- indistinguishable from "this model has no
+  # reflection symmetry" -- silently disabling orientation for a
+  # wrong-basin fit with no error or warning. Both now go through
+  # .canonical_stan_model() first, which errors instead.
+  expect_error(.bilatr_flip_variables("some_unregistered_model"), "Unknown stan_model")
+
   set.seed(4)
   n <- 10
   extra <- list(`alpha[1]` = stats::rnorm(n, -3, 0.1), `alpha[2]` = stats::rnorm(n, 1, 0.1))
   draws <- .make_synthetic_draws(extra)
+  expect_error(
+    bilatr_orient(draws, stan_model = "some_unregistered_model", variables = "alpha"),
+    "Unknown stan_model"
+  )
+})
 
-  expect_equal(.bilatr_flip_variables("some_future_model"), character(0))
-  oriented <- bilatr_orient(draws, stan_model = "some_future_model", variables = "alpha")
-  expect_equal(posterior::extract_variable(oriented, "alpha[1]"), extra[["alpha[1]"]])
+test_that(".bilatr_flip_variables() accepts the pre-0.4.0 alphanorm/alphanorm_ou aliases and matches stable/ou exactly", {
+  .reset_bilatr_alias_messaged()
+  expect_message(
+    alphanorm_flip <- .bilatr_flip_variables("alphanorm"),
+    "pre-0.4.0 name of 'stable'"
+  )
+  expect_identical(alphanorm_flip, .bilatr_flip_variables("stable"))
+
+  expect_message(
+    alphanorm_ou_flip <- .bilatr_flip_variables("alphanorm_ou"),
+    "pre-0.4.0 name of 'ou'"
+  )
+  expect_identical(alphanorm_ou_flip, .bilatr_flip_variables("ou"))
 })
 
 test_that("bilatr_orient() errors informatively if alpha[1] is not present in draws", {
@@ -189,18 +206,32 @@ test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_or
   expect_no_warning(expect_message(.warn_if_wrong_basin(fit_right, "stable"), "Posterior median of alpha\\[1\\]"))
 })
 
-test_that(".warn_if_wrong_basin() is a no-op for a model without a reflection symmetry", {
+test_that(".warn_if_wrong_basin() errors on an unrecognized stan_model rather than silently no-op (B1)", {
+  # both currently-registered models (stable, ou) DO have a reflection
+  # symmetry since 0.4.0's promotion (see NEWS.md); .warn_if_wrong_basin()
+  # now decides via .bilatr_flip_variables(), which itself validates
+  # stan_model through .canonical_stan_model() -- an unrecognized name
+  # errors rather than being silently treated as "no reflection
+  # symmetry, nothing to check" (B1). In practice this stan_model has
+  # already been validated by .compile_stan_model() earlier in
+  # fit_bilatr(), so this case shouldn't arise from a real call, but the
+  # guard must not paper over it if it somehow did.
+  fake_fit <- list(draws = function(...) stop("should not be called"))
+  expect_error(.warn_if_wrong_basin(fake_fit, "some_unregistered_model"), "Unknown stan_model")
+})
+
+test_that(".warn_if_wrong_basin() accepts the pre-0.4.0 alphanorm/alphanorm_ou aliases", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
-  # both currently-registered models (stable, ou) DO have a reflection
-  # symmetry since 0.4.0's promotion (see NEWS.md), so neither is a no-op
-  # case any more -- this exercises the early-return guard for anything
-  # else, e.g. a hypothetical future model whose identification
-  # hard-fixes alpha[1] instead. A fake fit whose $draws() would error if
-  # ever called confirms the function returns early without even
-  # inspecting draws.
+  # a fake fit whose $draws() would error if ever called -- confirms
+  # .warn_if_wrong_basin() treats the alias exactly like its canonical
+  # name (both are flip-variable models, so this does NOT return early;
+  # it must reach $draws())
   fake_fit <- list(draws = function(...) stop("should not be called"))
-  expect_no_warning(expect_no_message(.warn_if_wrong_basin(fake_fit, "some_future_model")))
+  expect_error(
+    suppressMessages(.warn_if_wrong_basin(fake_fit, "alphanorm")),
+    "should not be called"
+  )
 })

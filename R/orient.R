@@ -29,11 +29,15 @@
 #' did themselves before 0.4.0's promotion (see NEWS.md); their pre-0.4.0
 #' Stan sources are retired to `inst/stan/legacy/`.
 #'
-#' @param stan_model Name registered in `.bilatr_stan_models`.
+#' @param stan_model Name registered in `.bilatr_stan_models`, or a
+#'   recognized pre-0.4.0 alias (see [.canonical_stan_model()], called
+#'   here first -- an unrecognized name errors rather than silently
+#'   returning `character(0)`, per B1).
 #' @return Character vector of variable base names (matched against
 #'   `posterior` draws column names via `.bilatr_match_draws_columns()`).
 #' @keywords internal
 .bilatr_flip_variables <- function(stan_model) {
+  stan_model <- .canonical_stan_model(stan_model)
   switch(
     stan_model,
     stable = c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw"),
@@ -75,11 +79,13 @@
 #' @param draws A `posterior` draws object (e.g. from `fit$draws()`) that
 #'   includes `"alpha[1]"` -- required to determine orientation even if
 #'   `"alpha[1]"` itself is not requested via `variables`.
-#' @param stan_model Name registered in `.bilatr_stan_models`. Only
+#' @param stan_model Name registered in `.bilatr_stan_models`, or a
+#'   recognized pre-0.4.0 alias (see [.canonical_stan_model()]). Only
 #'   `"stable"`/`"ou"` have a reflection symmetry to correct (see
-#'   [.bilatr_flip_variables()]); for any other name, `draws` is returned
-#'   unmodified (restricted to `variables`, if supplied), since there is
-#'   nothing to fix.
+#'   [.bilatr_flip_variables()]); for any other registered name, `draws`
+#'   is returned unmodified (restricted to `variables`, if supplied),
+#'   since there is nothing to fix. An unrecognized, non-alias name
+#'   errors instead.
 #' @param variables Which variables to return. Defaults to every variable
 #'   [.bilatr_flip_variables()] lists for `stan_model`; pass a subset
 #'   (e.g. `"theta"`) when only that one is needed downstream.
@@ -89,6 +95,7 @@
 #'   negative.
 #' @keywords internal
 bilatr_orient <- function(draws, stan_model, variables = NULL) {
+  stan_model <- .canonical_stan_model(stan_model)
   flip_vars <- .bilatr_flip_variables(stan_model)
   requested <- variables %||% flip_vars
 

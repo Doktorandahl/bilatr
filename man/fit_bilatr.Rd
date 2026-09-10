@@ -20,7 +20,14 @@ fit_bilatr(
 )
 }
 \description{
-Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-counterparts in R/fit_dev.R
+Canonicalises \code{stan_model} once, here, so \code{.compile_stan_model()},
+\code{\link[=bilatr_init_fn]{bilatr_init_fn()}}, and \code{\link[=.warn_if_wrong_basin]{.warn_if_wrong_basin()}} all agree on the
+same resolved name: before this, a pre-0.4.0 alias
+(\code{"alphanorm"}/\code{"alphanorm_ou"}) reached \code{\link[=.compile_stan_model]{.compile_stan_model()}} (via
+\code{.resolve_stan_model()}) and \code{\link[=.warn_if_wrong_basin]{.warn_if_wrong_basin()}} (via
+\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}) fine, since both canonicalise internally,
+but \code{\link[=bilatr_init_fn]{bilatr_init_fn()}} switches on the raw name directly and has no
+entry for the alias itself -- \code{fit_panel_dev(stan_model = "alphanorm")} reached sampling only by chance of resolving the Stan
+file correctly first, then died in the init generator.
 }
 \keyword{internal}

@@ -334,74 +334,207 @@
   paste0(parts[1], "[", paste(parts[-1], collapse = ","), "]")
 }
 
-#' Get posterior-style variable names from a CmdStan CSV without reading
-#' any draws
+#' Memory-model constant: a fixed floor for R and its loaded packages
 #'
-#' Uses `cmdstanr:::read_csv_metadata()` (unexported -- if a future
-#' cmdstanr release changes or removes it, this needs revisiting), which
-#' scans a CSV's header/comment lines only. This bounds R's memory
-#' regardless of file size (draws are never touched), though not
-#' necessarily wall-clock time on a very large file, since the scan is
-#' still sequential over the whole file on disk.
-#'
-#' @param csv_file A single CmdStan CSV file path (any one chain's file;
-#'   variable structure is identical across chains of the same run).
-#' @return Character vector of variable names in posterior/bracket form.
+#' Unlike every other `.BILATR_CHUNK_*` constant, this is not a
+#' multiplier of `raw_mb` -- it is a fixed number of MB, added once
+#' alongside `file_mb` in [.compute_chunk_size()]/
+#' [.estimate_diagnostics_memory_mb()], because it does not shrink with
+#' chunk size any more than `file_mb` does: it is the cost of `library(
+#' bilatr)` and its dependencies (`cmdstanr`, `data.table`, `posterior`,
+#' `dplyr`, etc.) simply being loaded, before a single byte of any CSV
+#' is read. Measured via `dev/bench_memory.R` (2026-09; `devtools::
+#' load_all()` alone, R 4.5.2, macOS): ~160 MB peak RSS; set to 200 here
+#' for margin against a heavier dependency set on a different R/package
+#' version. If your own session or job already has substantially more
+#' loaded before calling into this package, this floor will
+#' under-count it -- it models a fresh `Rscript` invocation, which is
+#' what every SLURM job in this package's own `runscripts/` does.
 #' @keywords internal
-.stan_csv_variable_names <- function(csv_file) {
-  meta <- cmdstanr:::read_csv_metadata(csv_file)
-  vapply(meta$variables, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
-}
+.BILATR_CHUNK_BASELINE_MB <- 200
 
-#' Cheaply get per-chain draw count and chain count from CmdStan CSVs
+#' Memory-model constant: the preallocated result array, the fread parse
+#' buffer, and the one chain matrix in flight, combined
 #'
-#' `n_draws` comes from the same header-only metadata read as
-#' [.stan_csv_variable_names]; `n_chains` is simply `length(csv_files)`
-#' (one file per chain, per this package's own SLURM submission
-#' convention -- see `runscripts/submit_bilatr_runs.R`), not the
-#' `num_chains` metadata field, which records only the single chain each
-#' individual CSV file's own run was configured for.
-#'
-#' @param csv_files Character vector of CmdStan CSV file paths.
-#' @return A list with `n_draws` and `n_chains`.
+#' See [.bilatr_chunk_overhead_multiplier()] for how this and the other
+#' `.BILATR_CHUNK_*_FACTOR` constants combine into the `k` multiplier
+#' [.compute_chunk_size()]/[.estimate_diagnostics_memory_mb()] apply to a
+#' chunk's raw byte count (`raw_mb = n_draws * n_chains * chunk_size * 8
+#' / 1e6`). Re-derived (2026-09, `dev/bench_memory.R`, R 4.5.2, macOS)
+#' against the array-native flip (no more `as_draws_df()` round-trip --
+#' see `NEWS.md`), from two measurements at `n_cores = 1`, no flip: a
+#' single-chain, 60,000-Tier-3-column, 300-draw synthetic CSV
+#' (`raw_mb = 144`, `file_mb` ~= 202) measured 1002 MB peak RSS, and the
+#' same shape at 2 chains (`raw_mb = 288`) measured 1409 MB. Subtracting
+#' [.BILATR_CHUNK_BASELINE_MB] (measured separately) and `file_mb` from
+#' each and solving the two-chain-count system for `ARRAY +
+#' PER_CHAIN / n_chains` gives `ARRAY ~= 2.8`, `PER_CHAIN ~= 1.6`;
+#' rounded up here for margin. Read alone (before Step 1's flip fix)
+#' measured close to the old estimate (the read chain itself is
+#' unchanged by that fix), so this jump from the old `ARRAY = 1` is
+#' `summarise_draws()`'s own working set (rank-normalisation, split-Rhat,
+#' bulk/tail ESS all build same-shaped intermediate arrays), which the
+#' pre-refactor model never isolated from the read.
 #' @keywords internal
-.stan_csv_dims <- function(csv_files) {
-  meta <- cmdstanr:::read_csv_metadata(csv_files[1])
-  list(n_draws = meta$iter_sampling, n_chains = length(csv_files))
+.BILATR_CHUNK_ARRAY_FACTOR <- 3
+
+#' Memory-model constant: `fread()`'s parse buffer and the one chain
+#' matrix in flight, together sized for a single chain
+#'
+#' Applied as `.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains` (each term is
+#' `n_draws * chunk_size * 8`, i.e. `raw_mb / n_chains`, not `raw_mb`
+#' itself) -- see [.bilatr_chunk_overhead_multiplier()] and
+#' [.BILATR_CHUNK_ARRAY_FACTOR]'s docs for the joint derivation.
+#' @keywords internal
+.BILATR_CHUNK_PER_CHAIN_FACTOR <- 2
+
+#' Memory-model constant: the post-Step-1 array-native sign flip's
+#' residual cost
+#'
+#' Applied unconditionally (not just when a flip actually happens):
+#' whether `alpha[1]`'s posterior median is negative isn't known until
+#' after the first chunk is read, so [.compute_chunk_size()] must budget
+#' for the possibility on every call, not just the calls that end up
+#' needing it. Since [.fast_read_post_warmup_draws()]'s `flip_vars`
+#' negates `flip_pos` columns of `m` in place before it's assigned into
+#' `arr` (no extra copy there), and [.chunked_summarise_csv_with_orientation()]/
+#' [.read_and_orient_draws_summary()]'s array-native
+#' `draws[, , flip_cols] <- -draws[, , flip_cols, drop = FALSE]` negates
+#' only the matched subset of an already-materialized array, the
+#' remaining cost is R's own copy-on-modify for that replacement.
+#' Measured (2026-09, `dev/bench_memory.R`): flip added ~91-142 MB over
+#' otherwise-identical no-flip runs (~0.6-1.0x `raw_mb`) -- far below
+#' the ~3.9x `raw_mb` the pre-Step-1 `as_draws_df()` round-trip cost
+#' (see `dev/refactor_verification_2026-09-10.md` section 1), but not
+#' zero, so (per that document's own instruction) a term stays here
+#' rather than assuming it away.
+#' @keywords internal
+.BILATR_CHUNK_FLIP_FACTOR <- 1
+
+#' Memory-model constant: the one-time cost of `posterior::
+#' summarise_draws()` forking at all (`.cores > 1`)
+#'
+#' Applied once, whenever `n_cores > 1`, together with
+#' [.BILATR_CHUNK_CORES_PER_CORE_FACTOR] -- see
+#' [.bilatr_chunk_overhead_multiplier()]. Measured, not assumed: see
+#' that constant's docs for why this and the per-core term replace the
+#' old single flat `CORES_FACTOR` (which this package's own pinned
+#' tests, before this measurement, asserted was identical from
+#' `n_cores = 2` through `24` -- that assumption was never measured
+#' against a real fork and was wrong).
+#' @keywords internal
+.BILATR_CHUNK_CORES_STEP_FACTOR <- 4.5
+
+#' Memory-model constant: the additional cost of each forked worker
+#' beyond the first, when `.cores > 1`
+#'
+#' `posterior::summarise_draws(.cores = k)` forks `k` worker processes
+#' via `parallel::mclapply()`, each computing rank-normalised Rhat/bulk
+#' ESS/tail ESS (each of which builds several same-shaped intermediate
+#' arrays) over its own slice of variables. This is NOT a flat cost
+#' regardless of `n_cores`, as the pre-measurement model assumed:
+#' measured (2026-09, `dev/bench_memory.R`, single chain, 60,000
+#' Tier-3 columns, 300 draws, no flip, peak RSS summed across the whole
+#' process tree via the `ps` package -- `/usr/bin/time`'s own child-RSS
+#' accounting does not see a further-forked grandchild's memory, and
+#' was confirmed empirically to under-count this exact case) at
+#' `n_cores` = 1/2/4/8: 1002 / 1822 / 2378 / 3571 MB. Fitting `extra
+#' beyond n_cores = 1 baseline = STEP + PER_CORE * (n_cores - 1)` in
+#' units of `raw_mb` (144 MB here) across the 2->4 and 4->8 intervals
+#' gives `PER_CORE ~= 1.9-2.1`, consistently; `STEP ~= 3.0-3.3`. Both
+#' rounded up here for margin. Summing RSS across a fork tree likely
+#' over-counts pages the OS still shares copy-on-write between workers
+#' (a SLURM cgroup would charge shared pages once, not once per
+#' process), so this constant is a conservative upper bound, not a
+#' precise physical-memory figure -- an acceptable direction of error
+#' for a job-sizing floor, given the alternative is under-counting and
+#' risking exactly the OOM this package's memory model exists to
+#' prevent. **Only measured up to `n_cores = 8`**: a caller sizing a job
+#' with `n_workers` well beyond that (the audit's own per-chain example
+#' used 24) is extrapolating this linear term 3x past its measured
+#' range -- validate with `dev/bench_memory.R` at your actual `n_cores`
+#' before trusting the estimate for a real SLURM allocation that large.
+#' @keywords internal
+.BILATR_CHUNK_CORES_PER_CORE_FACTOR <- 2.5
+
+#' The `k` memory-model multiplier [.compute_chunk_size()]/
+#' [.estimate_diagnostics_memory_mb()] apply to a chunk's raw byte count
+#'
+#' The post-[.fast_read_post_warmup_draws] pipeline holds, per chunk of
+#' `v` variables: the preallocated `array(n_draws, n_chains, v)` plus
+#' `summarise_draws()`'s own working set, both sized for the full
+#' `n_chains` array (`.BILATR_CHUNK_ARRAY_FACTOR`, ~3x `raw_mb`);
+#' `fread()`'s parse buffer and one chain's resulting matrix, each sized
+#' for ONE chain (`raw_mb / n_chains`, i.e.
+#' `.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains`); the array-native sign
+#' flip's residual cost, budgeted unconditionally
+#' (`.BILATR_CHUNK_FLIP_FACTOR`, see its own docs for why); and, only
+#' when `n_cores > 1`, `posterior::summarise_draws()`'s forked-worker
+#' cost -- a one-time step
+#' (`.BILATR_CHUNK_CORES_STEP_FACTOR`) plus a per-additional-worker term
+#' (`.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)`), NOT a flat
+#' penalty regardless of the exact core count (see that constant's docs
+#' -- this replaced an assumption that was never measured and was
+#' wrong).
+#'
+#' @param n_chains From [.prepare_fast_csv_read].
+#' @param n_cores See [diagnose_convergence()]'s `parallel`/`n_workers`.
+#' @return The multiplier `k`, in units of `raw_mb`.
+#' @keywords internal
+.bilatr_chunk_overhead_multiplier <- function(n_chains, n_cores) {
+  .BILATR_CHUNK_ARRAY_FACTOR +
+    .BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains +
+    .BILATR_CHUNK_FLIP_FACTOR +
+    (if (n_cores > 1) {
+      .BILATR_CHUNK_CORES_STEP_FACTOR + .BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)
+    } else {
+      0
+    })
 }
 
 #' Derive a Tier 3 chunk size (variables per chunk) from a memory budget
 #'
 #' Solves, for `chunk_size`, the same memory model
 #' [.estimate_diagnostics_memory_mb] reports in the other direction:
-#' peak memory (MB) ~= `n_draws * n_chains * chunk_size * 8 bytes *
-#' overhead_factor * (n_workers if parallel else 1) / 1e6`.
-#' `overhead_factor` (default `2`) is a fixed safety margin for
-#' `read_cmdstan_csv()`'s intermediate structures and
-#' `summarise_draws()`'s own working memory, which a raw
-#' 8-bytes-per-double count understates -- this is meant as a
-#' sanity-check number, not a guarantee (see `max_memory_mb` in
-#' [diagnose_convergence()]'s documentation).
+#' peak memory (MB) ~= `baseline_mb + file_mb + raw_mb * k`, `raw_mb =
+#' n_draws * n_chains * chunk_size * 8 / 1e6`, `k` from
+#' [.bilatr_chunk_overhead_multiplier()]. `baseline_mb`
+#' ([.BILATR_CHUNK_BASELINE_MB]) and `file_mb` are both fixed costs
+#' `chunk_size` cannot shrink away -- `fread()` touches the largest
+#' chain file's full byte range on every call, however few columns are
+#' selected (see [.fast_read_post_warmup_draws]), and R plus its loaded
+#' packages cost the same regardless of how much of any file is read --
+#' so `max_memory_mb` must cover both before any budget is left for
+#' variables at all; if it doesn't, this `stop()`s rather than silently
+#' returning a `chunk_size` that can never keep the job under budget.
 #'
-#' @param n_draws,n_chains From [.stan_csv_dims].
+#' @param n_draws,n_chains From [.prepare_fast_csv_read]'s
+#'   `num_post_warmup_draws`/`n_chains`.
+#' @param file_mb From [.prepare_fast_csv_read].
 #' @param max_memory_mb See [diagnose_convergence()].
-#' @param n_workers,parallel See [diagnose_convergence()].
-#' @param overhead_factor Fixed safety multiplier; not user-facing.
+#' @param n_cores See [diagnose_convergence()]'s `parallel`/`n_workers`.
 #' @return Integer chunk size, at least `1`.
 #' @keywords internal
-.compute_chunk_size <- function(n_draws, n_chains, max_memory_mb, n_workers, parallel, overhead_factor = 2) {
-  denom <- n_draws * n_chains * 8 * overhead_factor * (if (parallel) n_workers else 1)
-  chunk_size <- floor((max_memory_mb * 1e6) / denom)
-  if (chunk_size < 1) {
-    warning(
-      "max_memory_mb (", max_memory_mb, ") is too tight to fit even 1 ",
-      "variable per chunk at this n_draws/n_chains/n_workers combination; ",
-      "using chunk_size = 1. Per-chunk read overhead will dominate runtime.",
+.compute_chunk_size <- function(n_draws, n_chains, file_mb, max_memory_mb, n_cores) {
+  k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
+  per_var_mb <- n_draws * n_chains * 8 * k / 1e6
+  budget_mb <- max_memory_mb - file_mb - .BILATR_CHUNK_BASELINE_MB
+
+  if (budget_mb < per_var_mb) {
+    stop(
+      "max_memory_mb (", round(max_memory_mb), " MB) leaves no room for ",
+      "even one Tier 3 variable per chunk: the largest chain file (~",
+      round(file_mb), " MB) is mapped in full during every read, and ~",
+      .BILATR_CHUNK_BASELINE_MB, " MB is a fixed floor for R and its ",
+      "loaded packages -- both before any variables are selected, ",
+      "regardless of chunk_size. Allocate at least ",
+      ceiling(file_mb + .BILATR_CHUNK_BASELINE_MB + per_var_mb),
+      " MB for this job.",
       call. = FALSE
     )
-    chunk_size <- 1L
   }
-  as.integer(chunk_size)
+
+  as.integer(floor(budget_mb / per_var_mb))
 }
 
 #' Estimate peak memory (MB) for a given Tier 3 chunk size
@@ -414,9 +547,40 @@
 #' @param chunk_size Variables per chunk.
 #' @return Estimated peak memory in MB.
 #' @keywords internal
-.estimate_diagnostics_memory_mb <- function(n_draws, n_chains, chunk_size, n_workers, parallel, overhead_factor = 2) {
-  bytes <- n_draws * n_chains * chunk_size * 8 * overhead_factor * (if (parallel) n_workers else 1)
-  bytes / 1e6
+.estimate_diagnostics_memory_mb <- function(n_draws, n_chains, chunk_size, n_cores, file_mb) {
+  k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
+  raw_mb <- n_draws * n_chains * chunk_size * 8 / 1e6
+  .BILATR_CHUNK_BASELINE_MB + file_mb + raw_mb * k
+}
+
+#' Summarise draws with the fixed measure set the CSV-path functions use
+#'
+#' `mean`, [posterior::quantile2()] (default `q5`/`q95`), `median`,
+#' `rhat`, `ess_bulk`, `ess_tail` -- every column `.compute_tier1()`/
+#' `.compute_tier2()`/`.compute_tier3()` (which each select their own
+#' fixed subset regardless of what else is present) and
+#' `diagnose_and_extract_bilatr()`'s `extract_from_summ()`/
+#' `action_extract()` (which need `mean`/`q5`/`median`/`q95` by name)
+#' actually use. `posterior::summarise_draws()`'s own defaults also
+#' compute `sd` and `mad`, silently discarded by every caller today --
+#' dropping them isn't free at the scale this package targets
+#' (~1.9M Tier 3 variables per chain), so this is used everywhere a CSV
+#' chunk gets summarised instead of relying on the defaults.
+#'
+#' @param draws A `posterior::draws_array`/`draws_df` to summarise.
+#' @param n_cores Passed through to `summarise_draws()`'s `.cores`:
+#'   `posterior::summarise_draws.draws()` splits `draws`' variables into
+#'   `n_cores` slices and forks one process per slice
+#'   (`parallel::mclapply()`, copy-on-write on Unix), so this parallelises
+#'   the CPU-bound Rhat/ESS computation, not the (sequential, disk-bound)
+#'   read that produced `draws`.
+#' @return A tibble, one row per variable in `draws`.
+#' @keywords internal
+.summarise_bilatr_draws <- function(draws, n_cores = 1L) {
+  posterior::summarise_draws(
+    draws, "mean", posterior::quantile2, "median", "rhat", "ess_bulk", "ess_tail",
+    .cores = n_cores
+  )
 }
 
 #' Read and summarise CSV variables in memory-bounded chunks
@@ -425,146 +589,203 @@
 #' [extract_theta()]'s: reads and summarises `variables` in groups of
 #' `chunk_size`, discarding each chunk's draws before moving to the next
 #' -- this is what keeps peak memory bounded regardless of how many
-#' variables there are in total. `parallel = TRUE` processes chunks
-#' concurrently via `furrr::future_map_dfr()`, trading the sequential
-#' path's memory bound (now multiplied by `n_workers`, since that many
-#' chunks are in memory at once) for wall-clock speed. The active
-#' `future::plan()` is saved and restored on exit, so this never
-#' permanently changes the caller's parallel backend.
+#' variables there are in total. Chunks are always read strictly
+#' sequentially (reading is disk-bound and single-threaded regardless --
+#' see [.fast_read_post_warmup_draws] -- so there is nothing to gain, and
+#' several chunks' worth of memory to lose, by reading more than one at a
+#' time); `n_cores` instead parallelises the CPU-bound part, each chunk's
+#' own [.summarise_bilatr_draws()] call, via `posterior::summarise_draws()`'s
+#' `.cores` argument.
 #'
-#' Reads via [.fast_read_post_warmup_draws] against `prepared`'s
-#' comment-stripped files (see [.prepare_fast_csv_read]), not
-#' [cmdstanr::read_cmdstan_csv()] directly: the latter's `cmd = grep`
-#' read re-materializes a full near-complete copy of each chain's raw
-#' CSV on *every* call (see [.prepare_fast_csv_read]'s docs), which
-#' would otherwise happen once per chunk here -- exactly the redundant,
-#' memory-model-breaking cost this function's `max_memory_mb`/
-#' `chunk_size` accounting is meant to avoid.
-#'
-#' Benchmarked against a real production-scale single-chain CSV (~1.9M
-#' Tier 3 columns): reading is strongly I/O-bound, not parsing-bound --
-#' per-call wall-time barely depends on how many `variables` are
-#' requested (a 1000x range in chunk size changed per-call time by under
-#' 10%), because extracting even one column from a row-oriented CSV
-#' requires scanning the full row width regardless of how many fields
-#' are kept. Consequence: total sweep time scales with the NUMBER OF
-#' CHUNKS, not with memory saved -- a small `chunk_size` does not make
-#' this cheaper, it makes it much slower for a given `variables` list,
-#' potentially by orders of magnitude. See `max_memory_mb` in
-#' [diagnose_convergence()]'s documentation, which this benchmark
-#' motivated.
+#' Reads each chunk via [.fast_read_post_warmup_draws] (see its docs for
+#' what that read costs per call), discarding the chunk's draws once
+#' summarised so peak memory reflects one chunk at a time, per
+#' [.compute_chunk_size()]'s accounting.
 #'
 #' @param prepared Output of [.prepare_fast_csv_read].
 #' @param variables Character vector of variable names to summarise.
 #' @param chunk_size Variables per chunk.
-#' @param parallel,n_workers See [diagnose_convergence()].
-#' @param flip If `TRUE`, negate each chunk's raw draws before
-#'   summarising (used by [extract_theta()]'s CSV path to apply
-#'   [bilatr_orient()]'s sign correction; always `FALSE` for
-#'   [diagnose_convergence()], since Rhat/ESS are invariant to a
+#' @param n_cores Cores for [.summarise_bilatr_draws()]'s `.cores`; `1L`
+#'   for a fully sequential run. See [diagnose_convergence()]'s
+#'   `parallel`/`n_workers` for how a caller arrives at this number.
+#' @param flip_vars Character vector of variable base names to negate
+#'   before summarising (used by [extract_theta()]'s CSV path to apply
+#'   [bilatr_orient()]'s sign correction; `character(0)`, the default,
+#'   for [diagnose_convergence()], since Rhat/ESS are invariant to a
 #'   deterministic sign flip and it would be pointless work there).
-#'   Applied pre-summary, per chunk, matching how [bilatr_orient()]
-#'   flips raw draws for the in-memory path -- not a post-hoc
-#'   transformation of the summary columns, which would need to swap
-#'   the quantile columns (`quantile(-X, p) == -quantile(X, 1 - p)`),
-#'   not just negate them.
-#' @return A tibble, the row-bound [posterior::summarise_draws()] output
+#'   Passed straight through to [.fast_read_post_warmup_draws()], which
+#'   negates matching columns of each chain's temporary matrix before it
+#'   is ever assigned into the read's result array -- not a post-hoc
+#'   transformation of the summary columns (which would need to swap the
+#'   quantile columns, `quantile(-X, p) == -quantile(X, 1 - p)`, not just
+#'   negate them), and not a `draws_df` round-trip (which would force
+#'   `summarise_draws()` to rebuild a `draws_array` internally at the
+#'   cost of a second full copy of the chunk -- see
+#'   [.fast_read_post_warmup_draws()]'s own docs). Column-selective by
+#'   construction (B5): `chunk_vars` can legitimately mix a flip-needing
+#'   variable (`theta`/`theta_raw`) with one that must NOT flip
+#'   (`log_lik[d,t]`, also Tier 3, when `compute_log_lik = 1`), and only
+#'   the columns `flip_vars` actually lists are ever negated.
+#' @return A tibble, the row-bound [.summarise_bilatr_draws()] output
 #'   across all chunks.
 #' @keywords internal
-.chunked_summarise_csv <- function(prepared, variables, chunk_size, parallel, n_workers, flip = FALSE) {
+.chunked_summarise_csv <- function(prepared, variables, chunk_size, n_cores = 1L, flip_vars = character(0)) {
   chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
 
   summarise_one_chunk <- function(chunk_vars) {
-    draws <- .fast_read_post_warmup_draws(prepared, chunk_vars, flip = flip)
-    posterior::summarise_draws(draws)
+    draws <- .fast_read_post_warmup_draws(prepared, chunk_vars, flip_vars = flip_vars)
+    .summarise_bilatr_draws(draws, n_cores = n_cores)
   }
 
-  if (!parallel) {
-    return(purrr::map_dfr(chunks, summarise_one_chunk))
+  purrr::map_dfr(chunks, summarise_one_chunk)
+}
+
+#' Chunked-summarise a Tier 3 (or theta-only) variable set, determining
+#' sign orientation from the first chunk instead of a separate `alpha[1]`
+#' read
+#'
+#' Shared by [diagnose_and_extract_bilatr()] and [extract_theta()]'s CSV
+#' branches for the case where no Tier 1/2 read is already happening to
+#' piggyback `alpha[1]` onto (i.e. `tiers` excludes both 1 and 2, or
+#' `extract_theta()`, which never reads anything but `theta`). If
+#' `flip_vars` is empty (the model has no reflection symmetry) or
+#' `variables` is empty, this is exactly [.chunked_summarise_csv()] with
+#' `flip = FALSE` -- no `alpha[1]` read at all. Otherwise, `"alpha[1]"`
+#' is prepended to the FIRST chunk only (unless it's already in it),
+#' read once unflipped; its posterior median decides `flip`; that
+#' chunk's `flip_vars`-matching columns (see
+#' [.bilatr_match_draws_columns()]) are negated directly on the
+#' `draws_array` (mirroring [.read_and_orient_draws_summary()]'s
+#' array-native flip -- no `draws_df` round-trip, which would force
+#' `summarise_draws()` to rebuild a `draws_array` internally at the cost
+#' of a second full copy) and, if `"alpha[1]"` was only added for this
+#' orientation check, its row is dropped from the first chunk's summary
+#' afterward, the same way [.read_and_orient_draws_summary()] does it;
+#' every remaining chunk is then read via [.chunked_summarise_csv()]
+#' with `flip` already known. A full sweep still costs exactly one read
+#' per chunk, with no extra pass just to check `alpha[1]`'s sign.
+#'
+#' @param prepared Output of [.prepare_fast_csv_read].
+#' @param variables Character vector of Tier 3 (or theta-only) variable
+#'   names to summarise.
+#' @param chunk_size Variables per chunk.
+#' @param n_cores See [.chunked_summarise_csv()].
+#' @param flip_vars Output of [.bilatr_flip_variables()] for the model
+#'   being read.
+#' @return A list with `summ` (the row-bound summary tibble, same shape
+#'   [.chunked_summarise_csv()] returns) and `flip` (logical, the
+#'   orientation decision -- for a caller that also needs to flip a
+#'   Tier 1/2 read using the same decision).
+#' @keywords internal
+.chunked_summarise_csv_with_orientation <- function(prepared, variables, chunk_size, n_cores, flip_vars) {
+  if (length(flip_vars) == 0 || length(variables) == 0) {
+    return(list(
+      summ = .chunked_summarise_csv(prepared, variables, chunk_size, n_cores),
+      flip = FALSE
+    ))
   }
 
-  old_plan <- future::plan()
-  on.exit(future::plan(old_plan), add = TRUE)
+  first_chunk_vars <- utils::head(variables, chunk_size)
+  rest_vars <- utils::tail(variables, -length(first_chunk_vars))
 
-  if (.Platform$OS.type == "unix") {
-    future::plan(future::multicore, workers = n_workers)
+  alpha1_injected <- !("alpha[1]" %in% first_chunk_vars)
+  read_vars <- if (alpha1_injected) c("alpha[1]", first_chunk_vars) else first_chunk_vars
+  first_draws <- .fast_read_post_warmup_draws(prepared, read_vars)
+  flip <- stats::median(posterior::extract_variable(first_draws, "alpha[1]")) < 0
+
+  if (flip) {
+    flip_cols <- .bilatr_match_draws_columns(posterior::variables(first_draws), flip_vars)
+    if (length(flip_cols) > 0) {
+      first_draws[, , flip_cols] <- -first_draws[, , flip_cols, drop = FALSE]
+    }
+  }
+  first_summ <- .summarise_bilatr_draws(first_draws, n_cores = n_cores)
+  if (alpha1_injected) {
+    first_summ <- dplyr::filter(first_summ, variable != "alpha[1]")
+  }
+
+  rest_summ <- if (length(rest_vars) > 0) {
+    .chunked_summarise_csv(prepared, rest_vars, chunk_size, n_cores, flip_vars = if (flip) flip_vars else character(0))
   } else {
-    warning(
-      "parallel = TRUE on Windows falls back to future::multisession, ",
-      "which copies data to each worker rather than sharing it via ",
-      "copy-on-write (unlike future::multicore on Unix-like systems); ",
-      "peak memory will run higher than the max_memory_mb estimate ",
-      "assumes. Consider parallel = FALSE if memory is tight.",
-      call. = FALSE
-    )
-    future::plan(future::multisession, workers = n_workers)
+    NULL
   }
 
-  furrr::future_map_dfr(chunks, summarise_one_chunk)
+  list(summ = dplyr::bind_rows(first_summ, rest_summ), flip = flip)
 }
 
 #' Resolve a chunk size for a CSV-file-path chunked read, and report it
 #'
 #' Shared by [diagnose_convergence()]'s and [extract_theta()]'s CSV-path
 #' branches. If `max_memory_mb` was left at its default, emits a one-time
-#' `message()` naming the I/O-bound wall-time/memory tradeoff a real
-#' benchmark against a production-scale CSV found (see
-#' [.chunked_summarise_csv]): a smaller `chunk_size` does NOT make
-#' reading cheaper -- it multiplies wall-time roughly by the number of
-#' chunks, since each chunk pays nearly the same full-row-scan cost
-#' regardless of how many columns it keeps. A second `message()`, always
-#' emitted, reports the resolved chunk count/size and estimated peak
-#' memory, so a caller can see the actual tradeoff being made before a
-#' long run commits to it.
+#' `message()` explaining the new cost model: reading is single-threaded
+#' and each chunk's cost is roughly a full parse of the largest chain
+#' file regardless of how many variables are kept (see
+#' [.fast_read_post_warmup_draws]), so fewer, larger chunks are cheaper
+#' in wall-time, and the CPU-bound summary step's wall-time (not memory)
+#' is what `n_workers`/`parallel` trade against. A second `message()`,
+#' always emitted, reports the resolved chunk count/size and the
+#' estimated peak broken into its file-sized and per-chunk terms
+#' separately (see [.compute_chunk_size()]), so a caller can see the
+#' actual budget being spent before a long run commits to it.
 #'
 #' @param n_vars Number of variables the chunked sweep will cover (for
 #'   the reporting message only; does not affect the chunk_size
 #'   calculation itself).
-#' @param csv_files,max_memory_mb,chunk_size,parallel,n_workers See
-#'   [diagnose_convergence()].
+#' @param prepared Output of [.prepare_fast_csv_read] (for `n_draws`,
+#'   `n_chains`, `file_mb`).
+#' @param max_memory_mb,chunk_size See [diagnose_convergence()].
+#' @param n_cores See [diagnose_convergence()]'s `parallel`/`n_workers`.
 #' @param max_memory_mb_missing Whether the caller left `max_memory_mb`
 #'   at its default (via `missing()` in the calling function).
 #' @return The resolved integer chunk size.
 #' @keywords internal
 .resolve_chunk_size_and_report <- function(
-  n_vars, csv_files, max_memory_mb, chunk_size, parallel, n_workers,
+  n_vars, prepared, max_memory_mb, chunk_size, n_cores,
   max_memory_mb_missing
 ) {
-  dims <- .stan_csv_dims(csv_files)
+  n_draws <- prepared$num_post_warmup_draws
+  n_chains <- prepared$n_chains
+  file_mb <- prepared$file_mb
 
   if (max_memory_mb_missing) {
     message(
       "Using the default max_memory_mb = ", max_memory_mb, " (",
-      round(max_memory_mb / 1024, 1), " GB). Reading is I/O-bound, not ",
-      "parsing-bound: a benchmark against a production-scale CSV found ",
-      "per-chunk wall-time barely depends on how many variables are ",
-      "requested (a 1000x range in chunk size changed per-call time by ",
-      "under 10%), because extracting even one column from a row-",
-      "oriented CSV means scanning the full row regardless of how much ",
-      "of it is kept. So chunk COUNT, not chunk size, drives total ",
-      "wall-time: a smaller max_memory_mb produces more chunks and can ",
-      "multiply total time by orders of magnitude for a modest memory ",
-      "saving. Prefer the LARGEST max_memory_mb your job's memory ",
-      "allocation can afford; only lower it if memory, not time, is the ",
-      "binding constraint."
+      round(max_memory_mb / 1024, 1), " GB). Reading is single-threaded: ",
+      "each chunk's cost is roughly a full parse of the largest chain ",
+      "file regardless of how many variables are kept (see ",
+      "?.fast_read_post_warmup_draws), so fewer, larger chunks are ",
+      "cheaper in wall-time -- prefer the LARGEST max_memory_mb your ",
+      "job's memory allocation can afford. `parallel`/`n_workers` trade ",
+      "wall-time in the summary step (Rhat/rank-normalised ESS) against ",
+      "memory, NOT independent of chunk_size: forking n_workers costs ",
+      "memory roughly proportional to n_workers (see ",
+      "?.bilatr_chunk_overhead_multiplier), which comes out of this same ",
+      "budget and can force smaller/more chunks -- check the resolved ",
+      "chunk count below before committing a large n_workers to a long run."
     )
   }
 
   chunk_size_used <- chunk_size %||% .compute_chunk_size(
-    n_draws = dims$n_draws, n_chains = dims$n_chains,
-    max_memory_mb = max_memory_mb, n_workers = n_workers, parallel = parallel
+    n_draws = n_draws, n_chains = n_chains, file_mb = file_mb,
+    max_memory_mb = max_memory_mb, n_cores = n_cores
   )
 
-  est_mb <- .estimate_diagnostics_memory_mb(
-    n_draws = dims$n_draws, n_chains = dims$n_chains,
-    chunk_size = chunk_size_used, n_workers = n_workers, parallel = parallel
-  )
+  # The resolved chunk_size can exceed n_vars (the whole sweep fits in
+  # one chunk with room to spare); report against the variable count
+  # actually read in that case, not the theoretical, unused capacity.
+  k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
+  effective_chunk <- min(chunk_size_used, n_vars)
+  raw_mb <- n_draws * n_chains * effective_chunk * 8 / 1e6
+  est_mb <- .BILATR_CHUNK_BASELINE_MB + file_mb + raw_mb * k
   message(
     n_vars, " variable(s) in ",
     ceiling(n_vars / chunk_size_used), " chunk(s) of ",
-    chunk_size_used, " variable(s) each; estimated peak memory ~",
-    round(est_mb), " MB",
-    if (parallel) paste0(" across ", n_workers, " worker(s)") else "", "."
+    chunk_size_used, " variable(s) each; estimated peak ~", round(est_mb),
+    " MB (", .BILATR_CHUNK_BASELINE_MB, " MB R/package baseline + ",
+    round(file_mb), " MB file-sized term + ", round(raw_mb),
+    " MB raw chunk x ", signif(k, 3), " multiplier)",
+    if (n_cores > 1) paste0(" [", n_cores, " core(s) for summarising]") else "",
+    "."
   )
 
   chunk_size_used
@@ -587,7 +808,6 @@
 #'   at its default (via `missing()` in [diagnose_convergence()]) --
 #'   gates the one-time "this is a default, not a calibrated value"
 #'   message.
-#' @param scratch_dir See [diagnose_convergence()].
 #' @return A tibble in the same shape [diagnose_convergence()]'s
 #'   in-memory branch produces: [posterior::summarise_draws()] columns
 #'   left-joined with [.classify_bilatr_tier]'s `tier`/`dyad_id`/
@@ -595,33 +815,46 @@
 #' @keywords internal
 .read_diagnostics_summary_from_csv <- function(
   csv_files, tiers, max_memory_mb, chunk_size, parallel, n_workers,
-  max_memory_mb_missing, scratch_dir = NULL
+  max_memory_mb_missing
 ) {
-  prepared <- .prepare_fast_csv_read(csv_files, scratch_dir)
-  on.exit(.cleanup_fast_csv_read(prepared), add = TRUE)
+  prepared <- .prepare_fast_csv_read(csv_files)
 
-  all_vars <- .stan_csv_variable_names(csv_files[1])
-  var_tiers <- .classify_bilatr_tier(all_vars)
+  var_tiers <- .classify_bilatr_tier(prepared$variables)
   keep_tiers <- var_tiers[var_tiers$tier %in% tiers, ]
 
   tier12_vars <- keep_tiers$variable[keep_tiers$tier %in% c(1L, 2L)]
   tier3_vars <- keep_tiers$variable[keep_tiers$tier == 3L]
 
-  tier12_summ <- if (length(tier12_vars) > 0) {
-    draws <- .fast_read_post_warmup_draws(prepared, tier12_vars)
-    posterior::summarise_draws(draws)
+  n_cores <- if (parallel) n_workers else 1L
+
+  chunk_size_used <- if (length(tier3_vars) > 0) {
+    .resolve_chunk_size_and_report(
+      length(tier3_vars), prepared, max_memory_mb, chunk_size, n_cores,
+      max_memory_mb_missing
+    )
   } else {
     NULL
   }
+  # No sign orientation to worry about here (Rhat/ESS are flip-invariant,
+  # unlike diagnose_and_extract_bilatr()'s equivalent), so folding
+  # Tier 1/2 and Tier 3 together when Tier 3 fits one chunk anyway is
+  # just a single unconditional read.
+  tier3_fits_one_chunk <- length(tier3_vars) > 0 && length(tier3_vars) <= chunk_size_used
 
-  tier3_summ <- if (length(tier3_vars) > 0) {
-    chunk_size_used <- .resolve_chunk_size_and_report(
-      length(tier3_vars), csv_files, max_memory_mb, chunk_size, parallel, n_workers,
-      max_memory_mb_missing
-    )
-    .chunked_summarise_csv(prepared, tier3_vars, chunk_size_used, parallel, n_workers)
+  tier12_summ <- NULL
+  tier3_summ <- NULL
+
+  if (length(tier12_vars) > 0 && tier3_fits_one_chunk) {
+    draws <- .fast_read_post_warmup_draws(prepared, c(tier12_vars, tier3_vars))
+    tier12_summ <- .summarise_bilatr_draws(draws, n_cores = n_cores)
   } else {
-    NULL
+    if (length(tier12_vars) > 0) {
+      draws <- .fast_read_post_warmup_draws(prepared, tier12_vars)
+      tier12_summ <- .summarise_bilatr_draws(draws, n_cores = n_cores)
+    }
+    if (length(tier3_vars) > 0) {
+      tier3_summ <- .chunked_summarise_csv(prepared, tier3_vars, chunk_size_used, n_cores)
+    }
   }
 
   summ_raw <- dplyr::bind_rows(tier12_summ, tier3_summ)
@@ -655,20 +888,40 @@
 #' dyad-period); requesting only `tiers = 1` or `tiers = 1:2` skips
 #' reading/computing Rhat/ESS for all of them.
 #'
-#' @param fit Either (a) a `CmdStanMCMC`/`CmdStanFit`-like fit object
-#'   (anything with a `$draws()` method) or a `posterior::draws_array`/
-#'   `draws_df` -- the whole object is already in memory, so `tiers`
-#'   controls what gets summarised but not what gets read, and
-#'   `max_memory_mb`/`chunk_size`/`parallel`/`n_workers` are unused; or
-#'   (b) a character vector of raw CmdStan CSV file paths (one per
-#'   chain, e.g. from a completed SLURM run never loaded into this R
-#'   session) -- in this case Tier 1/2 variables are read in one small
-#'   call, and Tier 3 variables (typically the overwhelming majority for
-#'   production-sized panels) are read and summarised in memory-bounded
-#'   chunks via [cmdstanr::read_cmdstan_csv()]'s `variables` argument,
+#' Every `fit` case (a)-(c) below summarises via the same fixed measure
+#' set ([.summarise_bilatr_draws()]: `mean`, `quantile2`, `median`,
+#' `rhat`, `ess_bulk`, `ess_tail`), not `posterior::summarise_draws()`'s
+#' own defaults (which also compute `sd`/`mad`, unused by every consumer
+#' here) -- so the tibble you get back has the same columns regardless
+#' of which kind of `fit` produced it.
+#'
+#' @param fit One of three things. (a) A `posterior::draws_array`/
+#'   `draws_df` -- already fully materialized in memory, so `tiers`
+#'   controls what gets summarised but not what gets read (there is
+#'   nothing left to avoid reading), and `max_memory_mb`/`chunk_size`/
+#'   `parallel`/`n_workers` are unused. (b) A `CmdStanMCMC`/`CmdStanFit`-
+#'   like fit object (anything with `$metadata()` and
+#'   `$draws(variables = ...)` methods) -- variable names are read via
+#'   `$metadata()$variables` without touching a single draw, classified
+#'   into tiers, and only the tiers actually requested are read via
+#'   `$draws(variables = keep_vars)`; a quantity outside `tiers` is
+#'   therefore never read into memory at all, same as case (c) below.
+#'   `max_memory_mb`/`chunk_size`/`parallel`/`n_workers` are still unused
+#'   here -- chunking only applies to the raw-CSV path, since `$draws()`
+#'   already holds whatever it returns as one in-memory array. (c) A
+#'   character vector of raw CmdStan CSV file paths (one per chain, e.g.
+#'   from a completed SLURM run never loaded into this R session) -- in
+#'   this case Tier 1/2 variables are read in one small call, and Tier 3
+#'   variables (typically the overwhelming majority for production-sized
+#'   panels) are read and summarised directly from the raw CSVs in
+#'   memory-bounded chunks (see [.fast_read_post_warmup_draws]),
 #'   discarding each chunk's draws before moving to the next, so the
-#'   full draws array is never materialized at once. This is the path
-#'   that matters for production Stan output too large to read normally
+#'   full draws array is never materialized at once. Total file touches
+#'   per chain file: one metadata scan plus one validation probe (both in
+#'   [.prepare_fast_csv_read]), one Tier 1/2 read, and one per Tier 3
+#'   chunk -- or, when Tier 3 fits in a single chunk, Tier 1/2 is folded
+#'   into that one read instead of being separate. This is the path that
+#'   matters for production Stan output too large to read normally
 #'   (tested against panels with millions of Tier 3 columns).
 #' @param n_dt A data frame with a dyad-id column (matching `"dyad..."`)
 #'   and an observation-count column (matching `"n_dt"`/`"n_obs"`/
@@ -686,23 +939,28 @@
 #'   than an empty tibble, so `is.null(diag$tier3)` distinguishes "not
 #'   computed" from "computed, nothing to report".
 #' @param max_memory_mb Only used when `fit` is CSV file paths and `tiers`
-#'   includes `3`. Target ceiling, in MB, for Tier 3's peak memory;
-#'   drives the automatically-derived `chunk_size` (see `chunk_size`
-#'   below) so you don't have to guess a variable count yourself.
-#'   Defaults to `8192` (8 GB) -- a guess, not a calibration against your
-#'   hardware, and this function says so via `message()` the first time
-#'   you rely on that default rather than setting it explicitly. This is
-#'   a sanity-check number, not a guarantee: actual peak memory depends
-#'   on `read_cmdstan_csv()`/`summarise_draws()` internals this function
-#'   doesn't control. IMPORTANT, from a real benchmark against a
-#'   production-scale CSV (see [.chunked_summarise_csv]): reading is
-#'   strongly I/O-bound, so a SMALLER `max_memory_mb` (more, smaller
-#'   chunks) does not make this cheaper -- it can make it dramatically
-#'   *slower*, since each chunk pays nearly the same full-row-scan cost
-#'   regardless of how many columns it keeps, and total wall-time scales
-#'   with chunk count. Prefer the LARGEST `max_memory_mb` your job's
-#'   memory allocation can afford; only lower it if memory, not time, is
-#'   the binding constraint.
+#'   includes `3`. Target ceiling, in MB, for Tier 3's peak memory per
+#'   chunk; drives the automatically-derived `chunk_size` (see
+#'   `chunk_size` below) so you don't have to guess a variable count
+#'   yourself. Defaults to `8192` (8 GB) -- a guess, not a calibration
+#'   against your hardware, and this function says so via `message()`
+#'   the first time you rely on that default rather than setting it
+#'   explicitly. This is a sanity-check number, not a guarantee: actual
+#'   peak memory depends on `data.table::fread()`/`summarise_draws()`
+#'   internals this function doesn't control (see
+#'   [.compute_chunk_size()] for the model and its derivation). Reading
+#'   is single-threaded, and each chunk's cost is roughly a full parse
+#'   of the largest chain file regardless of how many variables are
+#'   kept -- `max_memory_mb` must be large enough to cover that file
+#'   size, plus a fixed R/package-loading floor, at minimum (this
+#'   `stop()`s with a clear message naming the shortfall if it isn't).
+#'   Beyond that, fewer/larger chunks are cheaper in read wall-time, but
+#'   -- see `parallel` below -- a larger `n_workers` shrinks the
+#'   largest chunk size the SAME `max_memory_mb` budget can afford, so
+#'   the two are not independent: prefer the LARGEST `max_memory_mb`
+#'   your job's allocation can afford, and check the resolved chunk
+#'   count in the pre-flight `message()` before committing to a large
+#'   `n_workers` on a tight budget.
 #' @param chunk_size Only used when `fit` is CSV file paths and `tiers`
 #'   includes `3`. Explicit override: number of Tier 3 variables read per
 #'   chunk. `NULL` (the default) derives this from `max_memory_mb`
@@ -710,32 +968,39 @@
 #'   calculation (e.g. you've measured actual memory use and want to
 #'   tune it by hand).
 #' @param parallel Only used when `fit` is CSV file paths and `tiers`
-#'   includes `3`. `FALSE` (default) processes Tier 3 chunks
-#'   sequentially, one at a time -- this is what makes `max_memory_mb`'s
-#'   bound hold regardless of `n_workers`. `TRUE` processes chunks
-#'   concurrently via `furrr::future_map_dfr()`, trading that memory
-#'   bound (now effectively `max_memory_mb` times up to `n_workers`,
-#'   since that many chunks are in memory at once) for wall-clock speed.
-#'   Prefer `parallel = FALSE` when memory is already tight (e.g. a
-#'   memory-constrained HPC allocation) and `parallel = TRUE` when you
-#'   have memory headroom to spend on speed instead. On Windows this
-#'   falls back from `future::multicore` to `future::multisession` with
-#'   a loud `warning()`, since `multisession` copies data to each worker
-#'   rather than sharing it via copy-on-write -- the memory math changes
-#'   substantially, and `max_memory_mb` is less trustworthy there.
+#'   includes `3`. Chunks are always read strictly sequentially regardless
+#'   of this argument -- reading is disk-bound and single-threaded no
+#'   matter how many cores are available (see
+#'   [.fast_read_post_warmup_draws]), so there is nothing to gain, and
+#'   `n_workers` chunks' worth of memory to lose, by reading more than one
+#'   chunk at a time. `parallel` instead controls whether the CPU-bound
+#'   part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
+#'   `n_workers` cores (via `posterior::summarise_draws()`'s `.cores`
+#'   argument, which forks `n_workers` worker processes) or just one.
+#'   Measured (`dev/bench_memory.R`, see [.BILATR_CHUNK_CORES_PER_CORE_FACTOR]):
+#'   this genuinely costs memory roughly proportional to `n_workers`, not
+#'   a fixed amount regardless of it, and that cost comes out of the SAME
+#'   `max_memory_mb` budget the read uses -- so a larger `n_workers`
+#'   indirectly means MORE, not fewer, passes over each chain file at a
+#'   fixed `max_memory_mb`, trading read wall-time for summary wall-time
+#'   rather than being free on top of it. Worth checking the resolved
+#'   chunk count (in the pre-flight `message()`) at your intended
+#'   `n_workers` before committing a long run to it -- a very large
+#'   `n_workers` on a large `n_vars` sweep can end up costing MORE total
+#'   wall-time than a smaller one, if it forces enough extra chunks.
 #' @param n_workers Only used when `parallel = TRUE`. Defaults to
-#'   `max(1, parallel::detectCores() - 1)`.
-#' @param scratch_dir Only used when `fit` is CSV file paths. Directory
-#'   to write a one-time, comment-stripped copy of each chain file into
-#'   before reading (see [.prepare_fast_csv_read]). `NULL` (the default)
-#'   writes each copy alongside its source file, which is deliberate:
-#'   that's already known-good storage for these (often many-GB) files,
-#'   unlike `tempdir()`/`$TMPDIR`, which on some HPC systems is a
-#'   RAM-backed `tmpfs` -- silently turning a routine disk read into a
-#'   direct hit against the job's memory allocation. Point this at an
-#'   explicit path only if the CSVs' own directory is unsuitable (e.g.
-#'   quota-constrained, read-only, or a slow network filesystem when
-#'   faster local scratch is available).
+#'   `parallelly::availableCores()`, which -- unlike
+#'   `parallel::detectCores()` -- respects a SLURM allocation's
+#'   `SLURM_CPUS_PER_TASK` (among other cluster/container schedulers)
+#'   rather than reporting the whole node's core count. See `parallel`
+#'   above: this is a genuine memory/wall-time trade-off now, not a
+#'   free choice, so consider an explicit, moderate value (rather than
+#'   the default, which can be large on a big allocation) for a
+#'   memory-constrained job.
+#' @param scratch_dir Deprecated and ignored since 0.4.1: reads are made
+#'   directly against the raw CSV files (see [.prepare_fast_csv_read]),
+#'   so no scratch copy is ever made any more. Passing a non-`NULL`
+#'   value emits a warning.
 #' @return A list of class `bilatr_diagnostics` with elements:
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
@@ -776,10 +1041,17 @@ diagnose_convergence <- function(
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
-  n_workers = max(1L, parallel::detectCores() - 1L),
+  n_workers = parallelly::availableCores(),
   scratch_dir = NULL
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
+  if (!is.null(scratch_dir)) {
+    warning(
+      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
+      "copy is made any more.",
+      call. = FALSE
+    )
+  }
 
   tiers <- .validate_tiers(tiers)
   if (any(c(2L, 3L) %in% tiers) && is.null(n_dt)) {
@@ -793,14 +1065,22 @@ diagnose_convergence <- function(
 
   if (is.character(fit)) {
     summ <- .read_diagnostics_summary_from_csv(
-      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing,
-      scratch_dir
+      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing
     )
-  } else {
-    draws <- if (posterior::is_draws(fit)) fit else fit$draws()
-    var_tiers <- .classify_bilatr_tier(posterior::variables(draws))
+  } else if (posterior::is_draws(fit)) {
+    var_tiers <- .classify_bilatr_tier(posterior::variables(fit))
     keep_vars <- var_tiers$variable[var_tiers$tier %in% tiers]
-    summ <- posterior::summarise_draws(posterior::subset_draws(draws, variable = keep_vars))
+    summ <- .summarise_bilatr_draws(posterior::subset_draws(fit, variable = keep_vars))
+    summ <- dplyr::left_join(summ, var_tiers, by = "variable")
+  } else {
+    # A CmdStanMCMC-like fit object still backed by its own CSV files:
+    # $metadata()$variables lists every posterior-style variable name
+    # without touching a single draw, so tiers not requested can be
+    # excluded from $draws()'s own read via `variables =`, instead of
+    # reading everything and subsetting afterward.
+    var_tiers <- .classify_bilatr_tier(fit$metadata()$variables)
+    keep_vars <- var_tiers$variable[var_tiers$tier %in% tiers]
+    summ <- .summarise_bilatr_draws(fit$draws(variables = keep_vars))
     summ <- dplyr::left_join(summ, var_tiers, by = "variable")
   }
 
