@@ -20,4 +20,21 @@ tests, before this measurement, asserted was identical from
 \code{n_cores = 2} through \code{24} -- that assumption was never measured
 against a real fork and was wrong).
 }
+\details{
+\strong{PENDING RE-FIT (0.4.2), NOT YET DONE}: the measurement below sums
+RSS across the fork tree, which double-counts copy-on-write shared
+pages a SLURM cgroup only charges once -- \code{dev/bench_memory.R} was
+corrected (0.4.2) to poll summed Pss and the cgroup's own peak-usage
+counter instead (see that file's header), and a small Linux
+measurement using the corrected poller found roughly 3.8x \code{raw_mb} at
+the first extra worker and ~2.6x \code{raw_mb} per worker after that --
+both LOWER than the 4.5/2.5 below, consistent with this constant
+being ~1.5-2x conservative in the \code{n_cores > 1} range. This value has
+NOT yet been updated to reflect that: doing so needs a full
+Linux-sourced run of the corrected benchmark (this constant's own
+derivation below is macOS sum-RSS, and the jobs it sizes run on
+Linux/SLURM), which had not happened as of 0.4.2's release. Treat the
+current 4.5 as a documented-conservative placeholder, not a
+recalibrated figure, until that run happens.
+}
 \keyword{internal}

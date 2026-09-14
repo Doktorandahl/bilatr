@@ -26,9 +26,11 @@ validate_reference_class <- function(value, classes, arg_name) {
 #'
 #' Puts `reference_category` first (if supplied and present), with all other
 #' classes sorted alphabetically after it. This ordering is what implements
-#' the model's identification constraint on the R side: `alpha[1] = 1`
-#' anchors on the first column. All remaining `alpha[2:A]` are freely
-#' estimated.
+#' the model's identification constraint on the R side: `stable`/`ou` build
+#' `alpha[1]` (the first column) to be positive by construction (see each
+#' `.stan` file's header, `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`),
+#' so the reference/neutral class anchors alpha's sign and scale. All
+#' remaining `alpha[2:A]` are freely estimated.
 #'
 #' @param classes Vector of observed event-class values.
 #' @param reference_category Value to place first, or `NULL`.
@@ -58,9 +60,11 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #'   (actor1 -> actor2); if `FALSE`, actor order is ignored and dyads are
 #'   collapsed to an unordered pair.
 #' @param reference_category Value of `grouping_var` to place first in
-#'   the class ordering (the model's scale-reference / neutral action,
-#'   `alpha[1] = 1`). If `NULL` or not present in the data, ignored with a
-#'   warning. All other action classes' discrimination is freely estimated.
+#'   the class ordering (the model's scale/sign-reference, neutral
+#'   action: `stable`/`ou` build `alpha[1]` positive by construction --
+#'   see [order_event_classes()]). If `NULL` or not present in the data,
+#'   ignored with a warning. All other action classes' discrimination is
+#'   freely estimated.
 #' @return A data frame with columns `dyad`, `year` (and `month` if
 #'   `resolution = "monthly"`), one `EventClass_<value>` column per
 #'   observed class (ordered per `reference_category`), and `total_events`.

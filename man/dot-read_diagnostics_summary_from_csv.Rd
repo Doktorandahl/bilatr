@@ -11,7 +11,8 @@
   chunk_size,
   parallel,
   n_workers,
-  max_memory_mb_missing
+  max_memory_mb_missing,
+  read_seconds = NULL
 )
 }
 \arguments{

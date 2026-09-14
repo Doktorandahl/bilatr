@@ -51,11 +51,13 @@ Pulls posterior summaries of the global action-type intercepts
 softmax level-shift.
 }
 \details{
-\code{mu_intercept} is unaffected by stable/ou's reflection symmetry
-(\verb{alpha .* theta} is invariant under the joint negation, so
-\code{mu_intercept} never needs to flip; see \code{\link[=bilatr_orient]{bilatr_orient()}}) -- \code{fit} is
-passed through it anyway, for a single consistent code path across the
-\verb{extract_*()} functions, but it is always a no-op here.
+\code{mu_intercept} never flips under the alpha/theta reflection symmetry
+(\verb{alpha .* theta} is invariant under the joint negation; see
+\code{\link[=bilatr_orient]{bilatr_orient()}}), so \code{"alpha[1]"} is only read alongside it when
+\code{stan_model} still has that symmetry to check (the retired
+\code{stable_soft_anchor}/\code{ou_soft_anchor}) -- for \code{stable}/\code{ou}, since
+0.4.2, \code{\link[=bilatr_orient]{bilatr_orient()}} is skipped entirely and \code{mu_intercept} is
+read alone.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths,
 for the same post-hoc/no-in-memory-fit case described in

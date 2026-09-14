@@ -1,4 +1,75 @@
 
+# bilatr 0.4.2
+
+## Breaking changes
+
+* `stable`/`ou` now identify `alpha[1]`'s sign BY CONSTRUCTION instead of
+  with a soft anchor. Previously, `alpha_raw` was a free
+  `sum_to_zero_vector[A]` with a soft penalty
+  (`target += log_inv_logit(alpha[1] * inv(anchor_scale))`) nudging
+  `alpha[1]` positive; that penalty made the target correctly specified
+  but could not move a chain across the alpha/theta reflection
+  symmetry's likelihood barrier (thousands of nats) once warmup had
+  landed it in a basin, so independently-initialized chains could
+  disagree on sign with no diagnostic recourse short of post-hoc
+  relabeling. `alpha_raw` is now built from `real<lower=0> alpha_raw_1`
+  (the reference/neutral class) plus free middle elements
+  (`vector[A - 2] alpha_raw_mid`), making `alpha[1] > 0` structural: no
+  reflection symmetry remains, cross-chain Rhat on `alpha`/`theta` is
+  meaningful again, and no post-hoc relabeling is needed. `anchor_scale`
+  is no longer declared by (or consumed by) `stable`/`ou`, though
+  `assemble_stan_data()` keeps supplying it unconditionally (CmdStan
+  ignores data a program doesn't declare).
+* The pre-0.4.2 `stable`/`ou` programs (free `sum_to_zero_vector`
+  `alpha_raw`, soft anchor) are retired to `inst/stan/legacy/` and
+  registered as `stable_soft_anchor`/`ou_soft_anchor` (`status =
+  "legacy"`), kept only so CmdStan output produced before 0.4.2 stays
+  readable via `bilatr_orient()`. Fits made under the new `stable`/`ou`
+  are **not parameter-comparable** to fits made under the retired
+  programs -- this is a re-parameterization, not merely a relabeling
+  (verified to agree on `alpha`/`theta`/`mu_intercept` after orienting
+  the legacy fit, on a same-data comparison; see `dev/
+  claude_code_prompt_0.4.2_identification.md`). The pre-0.4.0
+  `"alphanorm"`/`"alphanorm_ou"` aliases now resolve to these legacy
+  entries (previously `"stable"`/`"ou"`), since every fit ever made
+  under those alias names necessarily predates this change.
+
+## Changes
+
+* `bilatr_orient()` is deprecated: retained only for reading/re-deriving
+  CmdStan output from the retired `stable_soft_anchor`/`ou_soft_anchor`
+  programs, slated for removal once those runs are gone.
+  `.bilatr_flip_variables()` returns `character(0)` for `stable`/`ou`
+  accordingly, and every call site (`extract_theta()`, `extract_alpha()`,
+  `extract_mu_intercept()`, `.warn_if_wrong_basin()`) now skips
+  `bilatr_orient()`/the `alpha[1]` read it needs entirely for those two
+  models, rather than calling it as a no-op.
+* Corrected the CSV-path memory model's benchmark methodology
+  (`dev/bench_memory.R`): it previously summed RSS across the
+  `parallel::mclapply()` fork tree, which double-counts copy-on-write
+  shared pages a SLURM cgroup only charges once -- measured to overstate
+  the cgroup-enforced peak by 1.8-2.1x at `n_cores` 2/4. The poller now
+  sums Pss (`/proc/<pid>/smaps_rollup`) and additionally reads the
+  cgroup's own peak-usage counter on Linux; on other platforms it falls
+  back to the old sum-RSS figure, now explicitly labeled an upper bound.
+  `.BILATR_CHUNK_CORES_STEP_FACTOR`/`.BILATR_CHUNK_CORES_PER_CORE_FACTOR`
+  are not yet re-fit from this corrected methodology (needs a Linux run;
+  see their updated docs) -- treat them as a documented-conservative
+  placeholder for now. `.BILATR_CHUNK_BASELINE_MB` (previously a
+  hardcoded 200) is now measured at runtime from the calling process's
+  own memory footprint, floored at 200 for platforms where that fails.
+* Added `.bilatr_worker_tradeoff()`: reports estimated wall time and
+  core-seconds across candidate `n_workers` for a CSV-path chunked
+  sweep, since chunk count rises with `n_workers` (chunk size shrinks to
+  fit the same memory budget) and each chunk is a full re-parse of the
+  largest chain file -- past some point more workers make both wall
+  time and core-seconds worse, not just core-seconds. `diagnose_convergence()`/
+  `extract_theta()`/`diagnose_and_extract_bilatr()` gain an optional
+  `read_seconds` argument (from the caller's own logs) that, when
+  supplied, checks a small neighborhood around the chosen `n_workers`
+  and names a level that would give both lower wall time and lower
+  core-seconds, if one exists.
+
 # bilatr 0.4.1
 
 ## Bug fixes

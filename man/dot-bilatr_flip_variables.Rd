@@ -2,7 +2,8 @@
 % Please edit documentation in R/orient.R
 \name{.bilatr_flip_variables}
 \alias{.bilatr_flip_variables}
-\title{Variables the stable/ou reflection symmetry ties to alpha's sign}
+\title{Variables the legacy \code{stable_soft_anchor}/\code{ou_soft_anchor} reflection
+symmetry ties to alpha's sign}
 \usage{
 .bilatr_flip_variables(stan_model)
 }
@@ -17,10 +18,14 @@ Character vector of variable base names (matched against
 \code{posterior} draws column names via \code{.bilatr_match_draws_columns()}).
 }
 \description{
-\code{character(0)} for any other (hypothetical) registered model whose
-identification instead fixes \code{alpha[1]}'s sign hard (\code{alpha[1] = 1}),
-leaving no reflection symmetry to correct -- as both \code{stable} and \code{ou}
-did themselves before 0.4.0's promotion (see NEWS.md); their pre-0.4.0
-Stan sources are retired to \verb{inst/stan/legacy/}.
+\code{character(0)} for \code{stable}/\code{ou} (0.4.2+): those programs build
+\code{alpha[1]} to be positive by construction (see each \code{.stan} file's
+header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), which removes
+the reflection symmetry entirely rather than leaving something to
+correct after the fact. Only the retired \code{stable_soft_anchor}/
+\code{ou_soft_anchor} programs (registered \code{status = "legacy"}; what
+\code{stable}/\code{ou} were named 0.4.0-0.4.1) still have one, since their free
+\code{sum_to_zero_vector} alpha with only a soft sign anchor cannot
+guarantee a chain lands in the \code{alpha[1] > 0} basin.
 }
 \keyword{internal}

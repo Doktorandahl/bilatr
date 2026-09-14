@@ -5,7 +5,7 @@ test_that("extract_theta() from CSV files matches the in-memory path exactly, se
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model, ordinary (right-basin) init
+  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
   theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data))
 
   theta_csv <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -111,29 +111,41 @@ test_that("extract_alpha() errors informatively on an unrecognized stan_model (B
   )
 })
 
-test_that("extract_alpha() with the pre-0.4.0 'alphanorm' alias matches stan_model = 'stable' exactly and emits the alias message", {
+test_that("extract_alpha() with the pre-0.4.0 'alphanorm' alias matches stan_model = 'stable_soft_anchor' exactly and emits the alias message", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
+  # Since 0.4.2, "alphanorm" resolves to the legacy "stable_soft_anchor"
+  # entry, not to the current "stable" (which means something different
+  # now -- see R/model_registry.R). The fixture's CSVs were produced
+  # under "stable" either way; this test only checks that the alias
+  # resolves to (and behaves identically to) its documented legacy
+  # target, not that the fixture's fit is itself a stable_soft_anchor
+  # one.
   fx <- make_csv_diagnostics_fixture()
-  stable_result <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable"))
+  legacy_result <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable_soft_anchor"))
 
   .reset_bilatr_alias_messaged()
   expect_message(
     alias_result <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "alphanorm")),
-    "pre-0.4.0 name of 'stable'"
+    "pre-0.4.0 name of 'stable_soft_anchor'"
   )
-  expect_equal(alias_result, stable_result)
+  expect_equal(alias_result, legacy_result)
 })
 
 # --- reflection-symmetry flip: CSV path must apply the same raw-draws flip --
 
-test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'s flip identically to the in-memory path", {
+test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'s flip identically to the in-memory path (legacy stable_soft_anchor)", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
+  # Repointed to the legacy stable_soft_anchor program (0.4.2): the
+  # current "stable" identifies alpha[1]'s sign by construction and has
+  # no reflection symmetry (and no free alpha_raw parameter) left to
+  # exercise this flip against -- see inst/stan/bilatr_alphanorm.stan's
+  # header.
   D <- 6
   Tn <- 4
   A <- 4
@@ -155,7 +167,7 @@ test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     # pin the chain near its (deliberately wrong-basin) init, per
@@ -171,18 +183,18 @@ test_that("extract_theta()/extract_alpha() from CSV files apply bilatr_orient()'
   alpha1_raw <- posterior::extract_variable(fx$fit$draws("alpha[1]"), "alpha[1]")
   expect_lt(stats::median(alpha1_raw), 0)
 
-  theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data, stan_model = "stable"))
+  theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data, stan_model = "stable_soft_anchor"))
   theta_csv <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
   expect_equal(
     dplyr::arrange(theta_mem, dyad_id, time_index),
     dplyr::arrange(theta_csv, dyad_id, time_index)
   )
   # both must have been reoriented to the canonical positive alpha[1]
-  alpha_csv <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable"))
+  alpha_csv <- suppressWarnings(extract_alpha(fx$csv_files, stan_model = "stable_soft_anchor"))
   expect_gt(alpha_csv$mean[1], 0)
 
-  alpha_mem <- suppressWarnings(extract_alpha(fx$fit, stan_model = "stable"))
+  alpha_mem <- suppressWarnings(extract_alpha(fx$fit, stan_model = "stable_soft_anchor"))
   expect_equal(alpha_mem$mean[1], alpha_csv$mean[1])
 })

@@ -19,8 +19,9 @@ argument.
 Initial values are model-specific: \code{stan_model} selects among the
 registered models' distinct parameter sets (a non-centered
 \code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy,
-\code{alpha[1] = 1} vs. \code{sum_to_zero_vector} alpha normalization, etc.).
-Unrecognised names are rejected upstream by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}}, so
-the \code{stop()} below should be unreachable in practice.
+\verb{alpha_raw_1 <lower=0>} vs. legacy \code{sum_to_zero_vector} alpha
+normalization, etc.). Unrecognised names are rejected upstream by
+\code{\link[=.resolve_stan_model]{.resolve_stan_model()}}, so the \code{stop()} below should be unreachable in
+practice.
 }
 \keyword{internal}

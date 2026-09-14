@@ -3,7 +3,9 @@
 \docType{data}
 \name{.BILATR_CHUNK_BASELINE_MB}
 \alias{.BILATR_CHUNK_BASELINE_MB}
-\title{Memory-model constant: a fixed floor for R and its loaded packages}
+\title{Memory-model constant: a documented FLOOR for R and its loaded packages,
+used only where the runtime measurement in
+\code{\link[=.bilatr_estimate_chunk_baseline_mb]{.bilatr_estimate_chunk_baseline_mb()}} is unavailable}
 \format{
 An object of class \code{numeric} of length 1.
 }
@@ -17,11 +19,14 @@ alongside \code{file_mb} in \code{\link[=.compute_chunk_size]{.compute_chunk_siz
 \code{\link[=.estimate_diagnostics_memory_mb]{.estimate_diagnostics_memory_mb()}}, because it does not shrink with
 chunk size any more than \code{file_mb} does: it is the cost of \code{library( bilatr)} and its dependencies (\code{cmdstanr}, \code{data.table}, \code{posterior},
 \code{dplyr}, etc.) simply being loaded, before a single byte of any CSV
-is read. Measured via \code{dev/bench_memory.R} (2026-09; \code{devtools:: load_all()} alone, R 4.5.2, macOS): ~160 MB peak RSS; set to 200 here
-for margin against a heavier dependency set on a different R/package
-version. If your own session or job already has substantially more
-loaded before calling into this package, this floor will
-under-count it -- it models a fresh \code{Rscript} invocation, which is
-what every SLURM job in this package's own \verb{runscripts/} does.
+is read. 200 was measured via \code{dev/bench_memory.R} on exactly ONE
+machine (2026-09; \code{devtools::load_all()} alone, R 4.5.2, macOS: ~160
+MB peak RSS, rounded up for margin) -- an artefact of that machine's R
+build and loaded namespaces, not a universal constant, and the reason
+\code{\link[=.bilatr_estimate_chunk_baseline_mb]{.bilatr_estimate_chunk_baseline_mb()}} measures the CALLER's own process
+instead of assuming this number applies. This value is retained only
+as the floor that measurement falls back to when it fails (a platform
+without \verb{/proc}, or \code{gc()} itself erroring), so the model never
+silently under-counts to zero.
 }
 \keyword{internal}

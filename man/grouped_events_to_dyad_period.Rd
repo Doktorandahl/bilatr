@@ -27,9 +27,11 @@ named by \code{grouping_var}.}
 collapsed to an unordered pair.}
 
 \item{reference_category}{Value of \code{grouping_var} to place first in
-the class ordering (the model's scale-reference / neutral action,
-\code{alpha[1] = 1}). If \code{NULL} or not present in the data, ignored with a
-warning. All other action classes' discrimination is freely estimated.}
+the class ordering (the model's scale/sign-reference, neutral
+action: \code{stable}/\code{ou} build \code{alpha[1]} positive by construction --
+see \code{\link[=order_event_classes]{order_event_classes()}}). If \code{NULL} or not present in the data,
+ignored with a warning. All other action classes' discrimination is
+freely estimated.}
 }
 \value{
 A data frame with columns \code{dyad}, \code{year} (and \code{month} if

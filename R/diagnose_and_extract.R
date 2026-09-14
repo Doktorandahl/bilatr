@@ -132,7 +132,8 @@ diagnose_and_extract_bilatr <- function(
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
   event_classes = attr(stan_data, "event_classes"),
   max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = parallelly::availableCores(), scratch_dir = NULL
+  n_workers = parallelly::availableCores(), scratch_dir = NULL,
+  read_seconds = NULL
 ) {
   stan_model <- .canonical_stan_model(stan_model)
   if (!is.character(csv_files)) {
@@ -197,7 +198,7 @@ diagnose_and_extract_bilatr <- function(
   chunk_size_used <- if (length(tier3_vars) > 0) {
     .resolve_chunk_size_and_report(
       length(tier3_vars), prepared, max_memory_mb, chunk_size, n_cores,
-      max_memory_mb_missing
+      max_memory_mb_missing, read_seconds = read_seconds
     )
   } else {
     NULL

@@ -13,7 +13,8 @@ extract_theta(
   chunk_size = NULL,
   parallel = FALSE,
   n_workers = parallelly::availableCores(),
-  scratch_dir = NULL
+  scratch_dir = NULL,
+  read_seconds = NULL
 )
 }
 \arguments{
@@ -44,6 +45,9 @@ the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 
 \item{scratch_dir}{Deprecated and ignored since 0.4.1; see
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+
+\item{read_seconds}{Only used when \code{fit} is CSV file paths; identical
+in meaning to \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s argument of the same name.}
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
@@ -59,18 +63,15 @@ the human-readable dyad identifiers (\code{dyad}, the undirected \code{dyad2},
 single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=fit_panel]{fit_panel()}}) fits.
 }
 \details{
-Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
-\code{theta}'s sign always reflects the canonical orientation (higher theta
-= better relations) regardless of which reflection-symmetry basin the
-sampler actually landed in. This matters for the default \code{stan_model}
-(\code{"stable"}) itself, not just the experimental \code{"ou"}: both normalize
-\code{alpha} via a \code{sum_to_zero_vector} with only a \emph{soft} sign anchor on
-\code{alpha[1]} (see \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s \code{anchor_scale}), so a chain's
-init can still land in the wrong-sign basin; this reorientation is
-what makes the result correct regardless. A no-op only for a
-hypothetical \code{stan_model} whose identification hard-fixes \code{alpha[1]}'s
-sign instead (as \code{stable}/\code{ou} themselves did before 0.4.0's
-promotion; see NEWS.md).
+Since 0.4.2, \code{stable}/\code{ou} build \code{alpha[1]} to be positive by
+construction (see each \code{.stan} file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), so \code{theta} is already in its canonical
+orientation (higher theta = better relations) and this function skips
+\code{\link[=bilatr_orient]{bilatr_orient()}} entirely for them -- no draws-through-orientation
+round trip, since \code{.bilatr_flip_variables(stan_model)} is
+\code{character(0)}. Only the retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
+\code{stan_model}s (their free \code{sum_to_zero_vector} alpha with a soft sign
+anchor leaves a real reflection symmetry a chain's init can land on
+either side of) still get routed through \code{\link[=bilatr_orient]{bilatr_orient()}} here.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --

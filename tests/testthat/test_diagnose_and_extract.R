@@ -6,7 +6,7 @@ test_that("diagnose_and_extract_bilatr() matches calling the four functions sepa
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model, ordinary (right-basin) init
+  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
 
   diag_ref <- suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, chunk_size = 3))
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -51,7 +51,7 @@ test_that("diagnose_and_extract_bilatr() folds Tier 1/2 and Tier 3 into one read
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model, ordinary (right-basin) init
+  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
 
   diag_ref <- suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, chunk_size = 3))
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -133,7 +133,7 @@ test_that("diagnose_and_extract_bilatr() orients alpha/theta/mu_intercept identi
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -144,17 +144,17 @@ test_that("diagnose_and_extract_bilatr() orients alpha/theta/mu_intercept identi
   expect_lt(stats::median(alpha1_raw), 0)
 
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
   alpha_ref <- suppressWarnings(extract_alpha(
-    fx$csv_files, stan_model = "stable", probs = c(0.05, 0.5, 0.95)
+    fx$csv_files, stan_model = "stable_soft_anchor", probs = c(0.05, 0.5, 0.95)
   ))
   mu_ref <- suppressWarnings(extract_mu_intercept(
-    fx$csv_files, stan_model = "stable", probs = c(0.05, 0.5, 0.95)
+    fx$csv_files, stan_model = "stable_soft_anchor", probs = c(0.05, 0.5, 0.95)
   ))
 
   fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
 
   expect_equal(
@@ -174,7 +174,7 @@ test_that("diagnose_and_extract_bilatr() orients alpha/theta/mu_intercept identi
   )
 })
 
-test_that("diagnose_and_extract_bilatr() with the pre-0.4.0 'alphanorm' alias orients identically to stan_model = 'stable' (B1)", {
+test_that("diagnose_and_extract_bilatr() with the pre-0.4.0 'alphanorm' alias orients identically to stan_model = 'stable_soft_anchor' (B1)", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -196,7 +196,7 @@ test_that("diagnose_and_extract_bilatr() with the pre-0.4.0 'alphanorm' alias or
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -206,7 +206,7 @@ test_that("diagnose_and_extract_bilatr() with the pre-0.4.0 'alphanorm' alias or
   expect_lt(stats::median(alpha1_raw), 0)
 
   stable_result <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
 
   .reset_bilatr_alias_messaged()
@@ -214,7 +214,7 @@ test_that("diagnose_and_extract_bilatr() with the pre-0.4.0 'alphanorm' alias or
     alias_result <- suppressWarnings(diagnose_and_extract_bilatr(
       fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "alphanorm", chunk_size = 3
     )),
-    "pre-0.4.0 name of 'stable'"
+    "pre-0.4.0 name of 'stable_soft_anchor'"
   )
 
   expect_equal(alias_result$theta, stable_result$theta)
@@ -245,7 +245,7 @@ test_that("diagnose_and_extract_bilatr() orients correctly in the folded Tier-1/
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -255,10 +255,10 @@ test_that("diagnose_and_extract_bilatr() orients correctly in the folded Tier-1/
   expect_lt(stats::median(alpha1_raw), 0)
 
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
   alpha_ref <- suppressWarnings(extract_alpha(
-    fx$csv_files, stan_model = "stable", probs = c(0.05, 0.5, 0.95)
+    fx$csv_files, stan_model = "stable_soft_anchor", probs = c(0.05, 0.5, 0.95)
   ))
 
   # default chunk_size: Tier 3 fits in one chunk, so this exercises the
@@ -266,7 +266,7 @@ test_that("diagnose_and_extract_bilatr() orients correctly in the folded Tier-1/
   # not the separate-reads branch the other orientation test above uses
   # (chunk_size = 3)
   fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable"
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable_soft_anchor"
   )))
 
   expect_equal(
@@ -302,7 +302,7 @@ test_that(".chunked_summarise_csv() flips only theta/theta_raw within a chunk th
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 1, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -320,7 +320,7 @@ test_that(".chunked_summarise_csv() flips only theta/theta_raw within a chunk th
   expect_gt(length(theta_vars), 0)
   expect_gt(length(log_lik_vars), 0)
 
-  flip_vars <- .bilatr_flip_variables("stable")
+  flip_vars <- .bilatr_flip_variables("stable_soft_anchor")
 
   # a single chunk holding every Tier 3 variable, so theta/theta_raw
   # (flip_vars) and log_lik (not in flip_vars) get negated within the
@@ -371,7 +371,7 @@ test_that("diagnose_and_extract_bilatr(tiers = 3) still orients theta via the fi
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -381,13 +381,13 @@ test_that("diagnose_and_extract_bilatr(tiers = 3) still orients theta via the fi
   expect_lt(stats::median(alpha1_raw), 0)
 
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
 
   # tiers = 3 alone: no Tier 1/2 read at all, so orientation must come
   # from the first-Tier3-chunk path (.chunked_summarise_csv_with_orientation())
   fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable",
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable_soft_anchor",
     tiers = 3, chunk_size = 3
   )))
 
@@ -424,7 +424,7 @@ test_that("diagnose_and_extract_bilatr(tiers = c(2, 3)) orients theta via the in
   }
 
   fx <- make_csv_diagnostics_fixture(
-    stan_model = "stable",
+    stan_model = "stable_soft_anchor",
     init = bad_init,
     extra_data = list(compute_log_lik = 0, anchor_scale = 0.1),
     adapt_engaged = FALSE, step_size = 0.001, max_treedepth = 2,
@@ -434,13 +434,13 @@ test_that("diagnose_and_extract_bilatr(tiers = c(2, 3)) orients theta via the in
   expect_lt(stats::median(alpha1_raw), 0)
 
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, stan_model = "stable", chunk_size = 3
+    fx$csv_files, fx$stan_data, stan_model = "stable_soft_anchor", chunk_size = 3
   )))
 
   # tiers = c(2, 3): tier12_vars is Tier-2-only (non-empty), so alpha[1]
   # is injected into THAT read for orientation, then dropped afterward
   fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable",
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, stan_model = "stable_soft_anchor",
     tiers = c(2, 3), chunk_size = 3
   )))
 

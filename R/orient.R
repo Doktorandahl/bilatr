@@ -1,33 +1,49 @@
-# Post-hoc sign relabelling for stable/ou's alpha/theta reflection
-# symmetry (promoted from alphanorm/alphanorm_ou in 0.4.0; see NEWS.md).
+# LEGACY-ONLY since 0.4.2 (see NEWS.md). Post-hoc sign relabelling for the
+# retired stable_soft_anchor/ou_soft_anchor programs' alpha/theta
+# reflection symmetry (those programs are what stable/ou were named
+# 0.4.0-0.4.1; promoted from alphanorm/alphanorm_ou in 0.4.0).
 #
-# stable/ou normalize alpha via a sum_to_zero_vector with no
-# fixed element, which leaves an exact reflection symmetry: negating alpha
-# together with theta and their shared upstream raw parameters leaves the
-# likelihood, every prior, and the sum_to_zero_vector Jacobian unchanged
-# (see each model's .stan file header, "REFLECTION SYMMETRY"). Those
-# models' soft sign anchor (anchor_scale data field) makes the TARGET
-# correctly specified, but does not make a chain visit the correct basin:
-# the two modes are separated by a likelihood barrier of thousands of
-# nats, so whichever basin a chain's init happened to land in is the one
-# it reports. bilatr_init_fn() (R/fit.R) biases inits toward the
-# alpha[1] > 0 basin, and fit_bilatr() warns post-sampling if a fit still
-# came back in the wrong one -- but neither is a hard guarantee for every
-# init/data/seed combination. bilatr_orient() is the deterministic
-# fallback that always works regardless of which basin the sampler found:
-# given ANY posterior draws from one of these two models, it checks the
-# posterior median of alpha[1] and negates every quantity the reflection
-# symmetry ties to alpha's sign if that median is negative. The
-# relabelling is exact -- a genuine symmetry of the posterior -- not an
-# approximation.
+# stable_soft_anchor/ou_soft_anchor normalize alpha via a free
+# sum_to_zero_vector with no fixed element, which leaves an exact
+# reflection symmetry: negating alpha together with theta and their
+# shared upstream raw parameters leaves the likelihood, every prior, and
+# the sum_to_zero_vector Jacobian unchanged (see each retired model's
+# .stan file header, "REFLECTION SYMMETRY"). Those models' soft sign
+# anchor (anchor_scale data field) makes the TARGET correctly specified,
+# but does not make a chain visit the correct basin: the two modes are
+# separated by a likelihood barrier of thousands of nats, so whichever
+# basin a chain's init happened to land in is the one it reports.
+# bilatr_orient() is the deterministic fallback that always works
+# regardless of which basin the sampler found: given ANY posterior draws
+# from one of these two LEGACY models, it checks the posterior median of
+# alpha[1] and negates every quantity the reflection symmetry ties to
+# alpha's sign if that median is negative. The relabelling is exact -- a
+# genuine symmetry of the posterior -- not an approximation.
+#
+# The current stable/ou programs (0.4.2+) instead build alpha[1] to be
+# positive BY CONSTRUCTION (see each .stan file's header,
+# "IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION"), which removes this
+# reflection symmetry entirely rather than reweighting it -- there is
+# nothing left for this file's machinery to fix for those two models, so
+# .bilatr_flip_variables() returns character(0) for them and every
+# extract_*() call site skips bilatr_orient() rather than calling it as a
+# no-op. This file, and bilatr_orient() itself, are retained only to
+# read/re-derive CmdStan output produced before 0.4.2 (registered as
+# stable_soft_anchor/ou_soft_anchor), and are slated for removal once
+# those runs are gone.
 
-#' Variables the stable/ou reflection symmetry ties to alpha's sign
+#' Variables the legacy `stable_soft_anchor`/`ou_soft_anchor` reflection
+#' symmetry ties to alpha's sign
 #'
-#' `character(0)` for any other (hypothetical) registered model whose
-#' identification instead fixes `alpha[1]`'s sign hard (`alpha[1] = 1`),
-#' leaving no reflection symmetry to correct -- as both `stable` and `ou`
-#' did themselves before 0.4.0's promotion (see NEWS.md); their pre-0.4.0
-#' Stan sources are retired to `inst/stan/legacy/`.
+#' `character(0)` for `stable`/`ou` (0.4.2+): those programs build
+#' `alpha[1]` to be positive by construction (see each `.stan` file's
+#' header, `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`), which removes
+#' the reflection symmetry entirely rather than leaving something to
+#' correct after the fact. Only the retired `stable_soft_anchor`/
+#' `ou_soft_anchor` programs (registered `status = "legacy"`; what
+#' `stable`/`ou` were named 0.4.0-0.4.1) still have one, since their free
+#' `sum_to_zero_vector` alpha with only a soft sign anchor cannot
+#' guarantee a chain lands in the `alpha[1] > 0` basin.
 #'
 #' @param stan_model Name registered in `.bilatr_stan_models`, or a
 #'   recognized pre-0.4.0 alias (see [.canonical_stan_model()], called
@@ -40,8 +56,8 @@
   stan_model <- .canonical_stan_model(stan_model)
   switch(
     stan_model,
-    stable = c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw"),
-    ou = c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw"),
+    stable_soft_anchor = c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw"),
+    ou_soft_anchor = c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw"),
     character(0)
   )
 }
@@ -68,6 +84,18 @@
 
 #' Reorient posterior draws so `alpha[1]` has the canonical (positive) sign
 #'
+#' **Deprecated as of 0.4.2**, in favor of doing nothing: `stable`/`ou`
+#' build `alpha[1]` to be positive by construction (see each `.stan`
+#' file's header, `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`),
+#' leaving no reflection symmetry for this function to correct. It is
+#' retained only for reading/re-deriving CmdStan output produced by the
+#' pre-0.4.2 `stable_soft_anchor`/`ou_soft_anchor` programs, and is
+#' slated for removal once those runs are gone -- this is not enforced
+#' with [base::.Deprecated()], which would fire warnings on that
+#' legitimate legacy use; every current call site (`extract_*()`,
+#' `R/diagnose_and_extract.R`) already checks [.bilatr_flip_variables()]
+#' first and skips calling this function entirely for `stable`/`ou`.
+#'
 #' `mu_intercept`, `phi`, and every scale/dispersion/ratio quantity
 #' (`sigma_theta0`/`sigma_mu`, `process_noise`, `sd_stat`, `rho`,
 #' `mu_log_*`, `sigma_log_*`, `within_between_ratio`) are always left
@@ -81,8 +109,9 @@
 #'   `"alpha[1]"` itself is not requested via `variables`.
 #' @param stan_model Name registered in `.bilatr_stan_models`, or a
 #'   recognized pre-0.4.0 alias (see [.canonical_stan_model()]). Only
-#'   `"stable"`/`"ou"` have a reflection symmetry to correct (see
-#'   [.bilatr_flip_variables()]); for any other registered name, `draws`
+#'   `"stable_soft_anchor"`/`"ou_soft_anchor"` have a reflection symmetry
+#'   to correct (see [.bilatr_flip_variables()]); for any other
+#'   registered name (including the current `"stable"`/`"ou"`), `draws`
 #'   is returned unmodified (restricted to `variables`, if supplied),
 #'   since there is nothing to fix. An unrecognized, non-alias name
 #'   errors instead.

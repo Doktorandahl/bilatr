@@ -334,7 +334,9 @@
   paste0(parts[1], "[", paste(parts[-1], collapse = ","), "]")
 }
 
-#' Memory-model constant: a fixed floor for R and its loaded packages
+#' Memory-model constant: a documented FLOOR for R and its loaded packages,
+#' used only where the runtime measurement in
+#' [.bilatr_estimate_chunk_baseline_mb()] is unavailable
 #'
 #' Unlike every other `.BILATR_CHUNK_*` constant, this is not a
 #' multiplier of `raw_mb` -- it is a fixed number of MB, added once
@@ -343,15 +345,66 @@
 #' chunk size any more than `file_mb` does: it is the cost of `library(
 #' bilatr)` and its dependencies (`cmdstanr`, `data.table`, `posterior`,
 #' `dplyr`, etc.) simply being loaded, before a single byte of any CSV
-#' is read. Measured via `dev/bench_memory.R` (2026-09; `devtools::
-#' load_all()` alone, R 4.5.2, macOS): ~160 MB peak RSS; set to 200 here
-#' for margin against a heavier dependency set on a different R/package
-#' version. If your own session or job already has substantially more
-#' loaded before calling into this package, this floor will
-#' under-count it -- it models a fresh `Rscript` invocation, which is
-#' what every SLURM job in this package's own `runscripts/` does.
+#' is read. 200 was measured via `dev/bench_memory.R` on exactly ONE
+#' machine (2026-09; `devtools::load_all()` alone, R 4.5.2, macOS: ~160
+#' MB peak RSS, rounded up for margin) -- an artefact of that machine's R
+#' build and loaded namespaces, not a universal constant, and the reason
+#' [.bilatr_estimate_chunk_baseline_mb()] measures the CALLER's own process
+#' instead of assuming this number applies. This value is retained only
+#' as the floor that measurement falls back to when it fails (a platform
+#' without `/proc`, or `gc()` itself erroring), so the model never
+#' silently under-counts to zero.
 #' @keywords internal
 .BILATR_CHUNK_BASELINE_MB <- 200
+
+#' Measure the caller's own process memory footprint, for use as the
+#' memory model's baseline term
+#'
+#' Replaces a hardcoded assumption ([.BILATR_CHUNK_BASELINE_MB]) with an
+#' actual reading of the current process: on Linux, `VmRSS` from
+#' `/proc/self/status` (the same per-process resident-memory figure the
+#' rest of this package's benchmarking uses); everywhere else, `sum(gc()[
+#' , "(Mb)"])` (Ncells + Vcells currently used) as a portable fallback --
+#' cruder (R's own view of its heap, not the OS's view of the whole
+#' process, so it can miss non-R allocations made by loaded C libraries)
+#' but available anywhere. Whichever succeeds is floored at
+#' [.BILATR_CHUNK_BASELINE_MB] so a session that happens to measure
+#' lighter than that (e.g. right after a `gc()`) doesn't understate the
+#' margin the constant was chosen to provide, and a measurement that
+#' fails outright (unreadable `/proc`, `gc()` erroring) falls back to it
+#' entirely rather than propagating `NA` into the memory model.
+#'
+#' @return Estimated baseline memory in MB.
+#' @keywords internal
+.bilatr_estimate_chunk_baseline_mb <- function() {
+  measured <- tryCatch(
+    {
+      if (identical(Sys.info()[["sysname"]], "Linux") && file.exists("/proc/self/status")) {
+        status <- readLines("/proc/self/status")
+        vmrss_line <- grep("^VmRSS:", status, value = TRUE)
+        if (length(vmrss_line) == 1) {
+          kb <- as.numeric(sub("[^0-9]+([0-9]+).*", "\\1", vmrss_line))
+          kb / 1024
+        } else {
+          NA_real_
+        }
+      } else {
+        NA_real_
+      }
+    },
+    error = function(e) NA_real_
+  )
+
+  if (is.na(measured)) {
+    measured <- tryCatch(sum(gc()[, "(Mb)"]), error = function(e) NA_real_)
+  }
+
+  if (is.na(measured)) {
+    .BILATR_CHUNK_BASELINE_MB
+  } else {
+    max(measured, .BILATR_CHUNK_BASELINE_MB)
+  }
+}
 
 #' Memory-model constant: the preallocated result array, the fread parse
 #' buffer, and the one chain matrix in flight, combined
@@ -422,6 +475,22 @@
 #' tests, before this measurement, asserted was identical from
 #' `n_cores = 2` through `24` -- that assumption was never measured
 #' against a real fork and was wrong).
+#'
+#' **PENDING RE-FIT (0.4.2), NOT YET DONE**: the measurement below sums
+#' RSS across the fork tree, which double-counts copy-on-write shared
+#' pages a SLURM cgroup only charges once -- `dev/bench_memory.R` was
+#' corrected (0.4.2) to poll summed Pss and the cgroup's own peak-usage
+#' counter instead (see that file's header), and a small Linux
+#' measurement using the corrected poller found roughly 3.8x `raw_mb` at
+#' the first extra worker and ~2.6x `raw_mb` per worker after that --
+#' both LOWER than the 4.5/2.5 below, consistent with this constant
+#' being ~1.5-2x conservative in the `n_cores > 1` range. This value has
+#' NOT yet been updated to reflect that: doing so needs a full
+#' Linux-sourced run of the corrected benchmark (this constant's own
+#' derivation below is macOS sum-RSS, and the jobs it sizes run on
+#' Linux/SLURM), which had not happened as of 0.4.2's release. Treat the
+#' current 4.5 as a documented-conservative placeholder, not a
+#' recalibrated figure, until that run happens.
 #' @keywords internal
 .BILATR_CHUNK_CORES_STEP_FACTOR <- 4.5
 
@@ -454,6 +523,13 @@
 #' used 24) is extrapolating this linear term 3x past its measured
 #' range -- validate with `dev/bench_memory.R` at your actual `n_cores`
 #' before trusting the estimate for a real SLURM allocation that large.
+#'
+#' **PENDING RE-FIT (0.4.2), NOT YET DONE**: see
+#' [.BILATR_CHUNK_CORES_STEP_FACTOR]'s docs -- the corrected (Pss/cgroup)
+#' benchmark suggests ~2.6 here, consistent with this constant's 2.5
+#' within measurement noise (unlike the step term, which moved more).
+#' Still pending a full Linux-sourced re-fit before treating either as
+#' recalibrated rather than the pre-correction placeholder.
 #' @keywords internal
 .BILATR_CHUNK_CORES_PER_CORE_FACTOR <- 2.5
 
@@ -518,17 +594,18 @@
 .compute_chunk_size <- function(n_draws, n_chains, file_mb, max_memory_mb, n_cores) {
   k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
   per_var_mb <- n_draws * n_chains * 8 * k / 1e6
-  budget_mb <- max_memory_mb - file_mb - .BILATR_CHUNK_BASELINE_MB
+  baseline_mb <- .bilatr_estimate_chunk_baseline_mb()
+  budget_mb <- max_memory_mb - file_mb - baseline_mb
 
   if (budget_mb < per_var_mb) {
     stop(
       "max_memory_mb (", round(max_memory_mb), " MB) leaves no room for ",
       "even one Tier 3 variable per chunk: the largest chain file (~",
       round(file_mb), " MB) is mapped in full during every read, and ~",
-      .BILATR_CHUNK_BASELINE_MB, " MB is a fixed floor for R and its ",
-      "loaded packages -- both before any variables are selected, ",
-      "regardless of chunk_size. Allocate at least ",
-      ceiling(file_mb + .BILATR_CHUNK_BASELINE_MB + per_var_mb),
+      round(baseline_mb), " MB is this process's own measured baseline ",
+      "(R and its loaded packages) -- both before any variables are ",
+      "selected, regardless of chunk_size. Allocate at least ",
+      ceiling(file_mb + baseline_mb + per_var_mb),
       " MB for this job.",
       call. = FALSE
     )
@@ -550,7 +627,7 @@
 .estimate_diagnostics_memory_mb <- function(n_draws, n_chains, chunk_size, n_cores, file_mb) {
   k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
   raw_mb <- n_draws * n_chains * chunk_size * 8 / 1e6
-  .BILATR_CHUNK_BASELINE_MB + file_mb + raw_mb * k
+  .bilatr_estimate_chunk_baseline_mb() + file_mb + raw_mb * k
 }
 
 #' Summarise draws with the fixed measure set the CSV-path functions use
@@ -713,6 +790,96 @@
   list(summ = dplyr::bind_rows(first_summ, rest_summ), flip = flip)
 }
 
+#' Report the wall-time/core-hour trade-off across candidate `n_workers`
+#'
+#' Chunk size shrinks as `n_cores` rises (forking `n_workers` costs memory
+#' roughly proportional to `n_workers`, out of the same `max_memory_mb`
+#' budget -- see [.bilatr_chunk_overhead_multiplier()]), and each chunk's
+#' read is a full parse of the largest chain file (see
+#' [.fast_read_post_warmup_draws]) -- so raising `n_workers` doesn't just
+#' speed up the CPU-bound summary step, it also forces MORE chunks, i.e.
+#' more full-file re-parses. Past some point this makes wall time worse,
+#' not better, and core-seconds (`n_workers * wall time`) rise
+#' monotonically with `n_workers` even where wall time itself is still
+#' falling -- nothing before this helper made either consequence visible
+#' to a caller sizing a job.
+#'
+#' For each candidate in `worker_levels`, resolves `chunk_size` ([.compute_chunk_size()])
+#' and the resulting `n_chunks = ceiling(n_vars / chunk_size)`, estimated
+#' peak memory ([.estimate_diagnostics_memory_mb()]), estimated wall time
+#' `n_chunks * read_seconds + n_vars * summarise_seconds_per_variable /
+#' n_workers`, and estimated core-seconds (`n_workers * wall time`). A
+#' `n_workers` level whose budget can't fit even one variable per chunk
+#' (see [.compute_chunk_size()]'s own `stop()`) is reported as infeasible
+#' (`NA` `chunk_size`/`n_chunks`/wall/core-seconds) rather than erroring
+#' the whole table.
+#'
+#' @param n_vars Number of Tier 3 variables the sweep will cover.
+#' @param n_draws,n_chains,file_mb From [.prepare_fast_csv_read].
+#' @param max_memory_mb See [diagnose_convergence()].
+#' @param worker_levels Candidate `n_workers` values to evaluate. Defaults
+#'   to `c(1, 2, 4, 8, 16, 24)`; the
+#'   [.BILATR_CHUNK_CORES_PER_CORE_FACTOR]/[.BILATR_CHUNK_CORES_STEP_FACTOR]
+#'   memory-model constants this helper's peak-MB estimate depends on are
+#'   only measured up to `n_cores = 8`, so treat levels above that as an
+#'   extrapolation (see those constants' docs).
+#' @param read_seconds Wall-time (seconds) for ONE chunk's read -- a full
+#'   parse of the largest chain file, roughly independent of chunk size
+#'   (see [.fast_read_post_warmup_draws]). No default: this is the one
+#'   input this helper cannot estimate on its own, and the whole
+#'   wall-time column is only as good as it is. Take it from your own
+#'   job's logs (a `diagnose_convergence()`/`extract_theta()` run against
+#'   the same files reports its own read time), not a guess.
+#' @param summarise_seconds_per_variable Wall-time (seconds) for the
+#'   CPU-bound summary step ([posterior::summarise_draws()]'s
+#'   rank-normalised Rhat/bulk-tail-ESS), per Tier 3 variable, on ONE
+#'   core. Defaults to `0.0026` (~2.6 ms/variable), measured against this
+#'   package's own Tier 3 sweep (`dev/bench_memory.R`, 2026-09); scales
+#'   with however expensive computing those statistics is for your
+#'   posterior (number of draws, mostly), so treat the default as a
+#'   starting point, not a calibration for your own data.
+#' @return A tibble, one row per `worker_levels` entry: `n_workers`,
+#'   `chunk_size`, `n_chunks`, `peak_mb`, `wall_seconds`, `core_seconds`
+#'   (the last four `NA` where infeasible).
+#' @keywords internal
+.bilatr_worker_tradeoff <- function(
+  n_vars, n_draws, n_chains, file_mb, max_memory_mb,
+  worker_levels = c(1, 2, 4, 8, 16, 24),
+  read_seconds,
+  summarise_seconds_per_variable = 0.0026
+) {
+  rows <- lapply(worker_levels, function(n_workers) {
+    chunk_size <- tryCatch(
+      .compute_chunk_size(
+        n_draws = n_draws, n_chains = n_chains, file_mb = file_mb,
+        max_memory_mb = max_memory_mb, n_cores = n_workers
+      ),
+      error = function(e) NA_integer_
+    )
+    if (is.na(chunk_size)) {
+      return(tibble::tibble(
+        n_workers = n_workers, chunk_size = NA_integer_, n_chunks = NA_integer_,
+        peak_mb = NA_real_, wall_seconds = NA_real_, core_seconds = NA_real_
+      ))
+    }
+
+    n_chunks <- ceiling(n_vars / chunk_size)
+    effective_chunk <- min(chunk_size, n_vars)
+    peak_mb <- .estimate_diagnostics_memory_mb(
+      n_draws = n_draws, n_chains = n_chains, chunk_size = effective_chunk,
+      n_cores = n_workers, file_mb = file_mb
+    )
+    wall_seconds <- n_chunks * read_seconds + n_vars * summarise_seconds_per_variable / n_workers
+
+    tibble::tibble(
+      n_workers = n_workers, chunk_size = chunk_size, n_chunks = n_chunks,
+      peak_mb = peak_mb, wall_seconds = wall_seconds, core_seconds = n_workers * wall_seconds
+    )
+  })
+
+  dplyr::bind_rows(rows)
+}
+
 #' Resolve a chunk size for a CSV-file-path chunked read, and report it
 #'
 #' Shared by [diagnose_convergence()]'s and [extract_theta()]'s CSV-path
@@ -726,7 +893,13 @@
 #' always emitted, reports the resolved chunk count/size and the
 #' estimated peak broken into its file-sized and per-chunk terms
 #' separately (see [.compute_chunk_size()]), so a caller can see the
-#' actual budget being spent before a long run commits to it.
+#' actual budget being spent before a long run commits to it. A third
+#' `message()`, only when `read_seconds` is supplied, names a
+#' `n_workers` level (via [.bilatr_worker_tradeoff()]) that would give
+#' both lower estimated wall time AND lower estimated core-seconds than
+#' the chosen `n_cores`, if one exists in a small grid around it --
+#' silently skipped without `read_seconds`, since wall-time can't be
+#' estimated at all without it (see that helper's docs).
 #'
 #' @param n_vars Number of variables the chunked sweep will cover (for
 #'   the reporting message only; does not affect the chunk_size
@@ -737,11 +910,13 @@
 #' @param n_cores See [diagnose_convergence()]'s `parallel`/`n_workers`.
 #' @param max_memory_mb_missing Whether the caller left `max_memory_mb`
 #'   at its default (via `missing()` in the calling function).
+#' @param read_seconds Optional; see [.bilatr_worker_tradeoff()]. `NULL`
+#'   (the default) skips the trade-off message entirely.
 #' @return The resolved integer chunk size.
 #' @keywords internal
 .resolve_chunk_size_and_report <- function(
   n_vars, prepared, max_memory_mb, chunk_size, n_cores,
-  max_memory_mb_missing
+  max_memory_mb_missing, read_seconds = NULL
 ) {
   n_draws <- prepared$num_post_warmup_draws
   n_chains <- prepared$n_chains
@@ -774,19 +949,53 @@
   # one chunk with room to spare); report against the variable count
   # actually read in that case, not the theoretical, unused capacity.
   k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
+  baseline_mb <- .bilatr_estimate_chunk_baseline_mb()
   effective_chunk <- min(chunk_size_used, n_vars)
   raw_mb <- n_draws * n_chains * effective_chunk * 8 / 1e6
-  est_mb <- .BILATR_CHUNK_BASELINE_MB + file_mb + raw_mb * k
+  est_mb <- baseline_mb + file_mb + raw_mb * k
   message(
     n_vars, " variable(s) in ",
     ceiling(n_vars / chunk_size_used), " chunk(s) of ",
     chunk_size_used, " variable(s) each; estimated peak ~", round(est_mb),
-    " MB (", .BILATR_CHUNK_BASELINE_MB, " MB R/package baseline + ",
+    " MB (", round(baseline_mb), " MB R/package baseline (measured) + ",
     round(file_mb), " MB file-sized term + ", round(raw_mb),
     " MB raw chunk x ", signif(k, 3), " multiplier)",
     if (n_cores > 1) paste0(" [", n_cores, " core(s) for summarising]") else "",
     "."
   )
+
+  if (!is.null(read_seconds)) {
+    # A small neighborhood around the chosen n_cores, not just {1,
+    # n_cores}: dominance (lower wall time AND lower core-seconds) is
+    # common between ADJACENT levels on the high side of the wall-time-
+    # minimizing point (e.g. n_workers = 16 dominating 24), but rare
+    # between 1 and a large n_cores directly, since low n_workers
+    # typically trades better core-seconds for worse wall time rather
+    # than dominating outright.
+    grid <- sort(unique(pmax(1, c(1, n_cores, round(n_cores / 2), n_cores * 2))))
+    tradeoff <- .bilatr_worker_tradeoff(
+      n_vars = n_vars, n_draws = n_draws, n_chains = n_chains, file_mb = file_mb,
+      max_memory_mb = max_memory_mb, worker_levels = grid, read_seconds = read_seconds
+    )
+    current <- tradeoff[tradeoff$n_workers == n_cores, ]
+    if (nrow(current) == 1 && !is.na(current$wall_seconds)) {
+      better <- tradeoff[
+        !is.na(tradeoff$wall_seconds) & tradeoff$n_workers != n_cores &
+          tradeoff$wall_seconds < current$wall_seconds &
+          tradeoff$core_seconds < current$core_seconds,
+      ]
+      if (nrow(better) > 0) {
+        best <- better[which.min(better$wall_seconds), ]
+        message(
+          "n_workers = ", best$n_workers, " is estimated to give BOTH lower ",
+          "wall time (", round(best$wall_seconds), "s vs ", round(current$wall_seconds),
+          "s) and lower core-seconds (", round(best$core_seconds), " vs ",
+          round(current$core_seconds), ") than the current n_workers = ", n_cores,
+          " -- see .bilatr_worker_tradeoff() for the full grid."
+        )
+      }
+    }
+  }
 
   chunk_size_used
 }
@@ -815,7 +1024,7 @@
 #' @keywords internal
 .read_diagnostics_summary_from_csv <- function(
   csv_files, tiers, max_memory_mb, chunk_size, parallel, n_workers,
-  max_memory_mb_missing
+  max_memory_mb_missing, read_seconds = NULL
 ) {
   prepared <- .prepare_fast_csv_read(csv_files)
 
@@ -830,7 +1039,7 @@
   chunk_size_used <- if (length(tier3_vars) > 0) {
     .resolve_chunk_size_and_report(
       length(tier3_vars), prepared, max_memory_mb, chunk_size, n_cores,
-      max_memory_mb_missing
+      max_memory_mb_missing, read_seconds = read_seconds
     )
   } else {
     NULL
@@ -987,7 +1196,11 @@
 #'   chunk count (in the pre-flight `message()`) at your intended
 #'   `n_workers` before committing a long run to it -- a very large
 #'   `n_workers` on a large `n_vars` sweep can end up costing MORE total
-#'   wall-time than a smaller one, if it forces enough extra chunks.
+#'   wall-time than a smaller one, if it forces enough extra chunks. More
+#'   workers is NOT monotonically better on either axis: pass
+#'   `read_seconds` (below) to see the actual trade-off
+#'   ([.bilatr_worker_tradeoff()]) for your job rather than guessing at
+#'   it from this description alone.
 #' @param n_workers Only used when `parallel = TRUE`. Defaults to
 #'   `parallelly::availableCores()`, which -- unlike
 #'   `parallel::detectCores()` -- respects a SLURM allocation's
@@ -1001,6 +1214,16 @@
 #'   directly against the raw CSV files (see [.prepare_fast_csv_read]),
 #'   so no scratch copy is ever made any more. Passing a non-`NULL`
 #'   value emits a warning.
+#' @param read_seconds Only used when `fit` is CSV file paths and `tiers`
+#'   includes `3`. Optional wall-time (seconds) for ONE chunk's read,
+#'   from your own job's logs -- see [.bilatr_worker_tradeoff()], which
+#'   this is passed straight through to. `NULL` (the default) skips the
+#'   trade-off entirely: there is no way to estimate wall time at all
+#'   without it, so nothing is reported rather than guessed. When
+#'   supplied, an extra `message()` names a `n_workers` level that would
+#'   give both lower estimated wall time and lower estimated
+#'   core-seconds than your current `n_workers`, if the small grid
+#'   checked (`n_workers` itself, `1`, half, and double) finds one.
 #' @return A list of class `bilatr_diagnostics` with elements:
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
@@ -1042,7 +1265,8 @@ diagnose_convergence <- function(
   chunk_size = NULL,
   parallel = FALSE,
   n_workers = parallelly::availableCores(),
-  scratch_dir = NULL
+  scratch_dir = NULL,
+  read_seconds = NULL
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
   if (!is.null(scratch_dir)) {
@@ -1065,7 +1289,8 @@ diagnose_convergence <- function(
 
   if (is.character(fit)) {
     summ <- .read_diagnostics_summary_from_csv(
-      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing
+      fit, tiers, max_memory_mb, chunk_size, parallel, n_workers, max_memory_mb_missing,
+      read_seconds = read_seconds
     )
   } else if (posterior::is_draws(fit)) {
     var_tiers <- .classify_bilatr_tier(posterior::variables(fit))

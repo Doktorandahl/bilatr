@@ -18,7 +18,8 @@ diagnose_and_extract_bilatr(
   chunk_size = NULL,
   parallel = FALSE,
   n_workers = parallelly::availableCores(),
-  scratch_dir = NULL
+  scratch_dir = NULL,
+  read_seconds = NULL
 )
 }
 \arguments{
@@ -112,7 +113,11 @@ rather than being free on top of it. Worth checking the resolved
 chunk count (in the pre-flight \code{message()}) at your intended
 \code{n_workers} before committing a long run to it -- a very large
 \code{n_workers} on a large \code{n_vars} sweep can end up costing MORE total
-wall-time than a smaller one, if it forces enough extra chunks.}
+wall-time than a smaller one, if it forces enough extra chunks. More
+workers is NOT monotonically better on either axis: pass
+\code{read_seconds} (below) to see the actual trade-off
+(\code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}) for your job rather than guessing at
+it from this description alone.}
 
 \item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
 \code{parallelly::availableCores()}, which -- unlike
@@ -126,6 +131,17 @@ memory-constrained job.}
 
 \item{scratch_dir}{Deprecated and ignored since 0.4.1; see
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+
+\item{read_seconds}{Only used when \code{fit} is CSV file paths and \code{tiers}
+includes \code{3}. Optional wall-time (seconds) for ONE chunk's read,
+from your own job's logs -- see \code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}, which
+this is passed straight through to. \code{NULL} (the default) skips the
+trade-off entirely: there is no way to estimate wall time at all
+without it, so nothing is reported rather than guessed. When
+supplied, an extra \code{message()} names a \code{n_workers} level that would
+give both lower estimated wall time and lower estimated
+core-seconds than your current \code{n_workers}, if the small grid
+checked (\code{n_workers} itself, \code{1}, half, and double) finds one.}
 }
 \value{
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}

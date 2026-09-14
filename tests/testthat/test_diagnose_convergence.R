@@ -264,6 +264,13 @@ test_that("print.bilatr_diagnostics() always prints flagged Tier 1 rows in full"
 
 # --- CSV-path chunking helpers (pure functions, no Stan needed) ---------
 
+test_that(".bilatr_estimate_chunk_baseline_mb() measures a real number, floored at .BILATR_CHUNK_BASELINE_MB", {
+  baseline <- .bilatr_estimate_chunk_baseline_mb()
+  expect_type(baseline, "double")
+  expect_length(baseline, 1)
+  expect_gte(baseline, .BILATR_CHUNK_BASELINE_MB)
+})
+
 test_that(".dot_name_to_bracket() converts CmdStan raw CSV names to posterior form", {
   expect_equal(.dot_name_to_bracket("lp__"), "lp__")
   expect_equal(.dot_name_to_bracket("sigma_theta0"), "sigma_theta0")
@@ -321,7 +328,7 @@ test_that(".compute_chunk_size() errors clearly when max_memory_mb can't even co
     .compute_chunk_size(
       n_draws = 1, n_chains = 1, file_mb = 0, max_memory_mb = 50, n_cores = 1
     ),
-    "fixed floor for R and its loaded packages"
+    "measured baseline \\(R and its loaded packages\\)"
   )
 })
 
@@ -336,6 +343,73 @@ test_that(".estimate_diagnostics_memory_mb() and .compute_chunk_size() invert ea
   # one variable larger should just barely exceed the budget (floor() was tight)
   est_next <- .estimate_diagnostics_memory_mb(n_draws, n_chains, chunk_size + 1L, n_cores = 1, file_mb = file_mb)
   expect_gt(est_next, budget)
+})
+
+test_that(".bilatr_worker_tradeoff() returns one row per worker_levels entry with the documented columns", {
+  out <- .bilatr_worker_tradeoff(
+    n_vars = 100000, n_draws = 1000, n_chains = 1, file_mb = 14000,
+    max_memory_mb = 24 * 8192, worker_levels = c(1, 2, 4, 8),
+    read_seconds = 300
+  )
+  expect_setequal(
+    names(out),
+    c("n_workers", "chunk_size", "n_chunks", "peak_mb", "wall_seconds", "core_seconds")
+  )
+  expect_equal(out$n_workers, c(1, 2, 4, 8))
+  expect_true(all(out$chunk_size > 0))
+  expect_true(all(out$n_chunks >= 1))
+  # core_seconds = n_workers * wall_seconds, exactly
+  expect_equal(out$core_seconds, out$n_workers * out$wall_seconds)
+})
+
+test_that(".bilatr_worker_tradeoff() reports NA (infeasible), not an error, when a n_workers level can't fit the budget", {
+  out <- .bilatr_worker_tradeoff(
+    n_vars = 100, n_draws = 1e6, n_chains = 4, file_mb = 14000,
+    max_memory_mb = 100, worker_levels = c(1, 24),
+    read_seconds = 10
+  )
+  expect_true(all(is.na(out$chunk_size)))
+  expect_true(all(is.na(out$wall_seconds)))
+  expect_true(all(is.na(out$core_seconds)))
+})
+
+test_that(".bilatr_worker_tradeoff()'s wall time falls with more chunks-per-second but core-seconds rises with n_workers, in the shape the review's own arithmetic predicted", {
+  # Same qualitative shape as the review's per-chain production case: at
+  # some point along worker_levels, wall time should be lower than at
+  # n_workers = 1 (more chunks, but summarising parallelised), while
+  # core-seconds should never be lower than at n_workers = 1 (each
+  # chunk's read cost is repeated per chunk regardless of n_workers, and
+  # summarising splits across cores without reducing total CPU-seconds
+  # for that part -- extra workers can only add chunk-count overhead).
+  out <- .bilatr_worker_tradeoff(
+    n_vars = 1900000, n_draws = 1000, n_chains = 1, file_mb = 14000,
+    max_memory_mb = 24 * 8192, worker_levels = c(1, 2, 4, 8, 16, 24),
+    read_seconds = 300
+  )
+  expect_false(any(is.na(out$wall_seconds)))
+  expect_true(any(out$wall_seconds[out$n_workers != 1] < out$wall_seconds[out$n_workers == 1]))
+  expect_true(all(out$core_seconds[out$n_workers != 1] >= out$core_seconds[out$n_workers == 1]))
+})
+
+test_that(".resolve_chunk_size_and_report() names a better n_workers level only when read_seconds is supplied", {
+  prepared <- list(num_post_warmup_draws = 1000, n_chains = 1, file_mb = 14000)
+
+  expect_no_message(
+    .resolve_chunk_size_and_report(
+      n_vars = 1900000, prepared = prepared, max_memory_mb = 24 * 8192,
+      chunk_size = NULL, n_cores = 24, max_memory_mb_missing = FALSE
+    ),
+    message = "estimated to give BOTH lower"
+  )
+
+  expect_message(
+    .resolve_chunk_size_and_report(
+      n_vars = 1900000, prepared = prepared, max_memory_mb = 24 * 8192,
+      chunk_size = NULL, n_cores = 24, max_memory_mb_missing = FALSE,
+      read_seconds = 300
+    ),
+    "estimated to give BOTH lower"
+  )
 })
 
 test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation", {

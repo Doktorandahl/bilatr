@@ -110,8 +110,12 @@ parse_weighted_arg <- function(weighted) {
 #' @param directed If `TRUE` (default), dyads are directed; if `FALSE`,
 #'   actor order is ignored.
 #' @param reference_category Value of `grouping_var` to anchor as the
-#'   model's scale/sign reference (`alpha[1] = 1`). Should typically be
-#'   a low-conflict/cooperative class. Every other action class's
+#'   model's scale/sign reference: `stable`/`ou` build `alpha[1]` to be
+#'   positive by construction (see each `.stan` file's header,
+#'   `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`), and RMS-normalize
+#'   the whole `alpha` vector to 1, so positive `alpha[1]` means better
+#'   relations at this reference/neutral class. Should typically be a
+#'   low-conflict/cooperative class. Every other action class's
 #'   discrimination (`alpha[2:A]`) is freely estimated.
 #' @param min_n_events Minimum total events for a dyad to be retained.
 #' @param weighted `FALSE` (default), or a single string naming which
@@ -151,19 +155,22 @@ parse_weighted_arg <- function(weighted) {
 #'   `log_lik` in `generated quantities`; left off by default since it is
 #'   `D x T x` draws and file size already scales with dyad count.
 #' @param anchor_scale Scale of the soft sign anchor
-#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`, consumed by
-#'   both registered Stan model variants (see `R/model_registry.R`).
-#'   `stable`/`ou` normalize `alpha` via a `sum_to_zero_vector` with no
-#'   fixed element, which leaves an exact reflection symmetry (`alpha`,
-#'   `theta` -> `-alpha`, `-theta` is likelihood-invariant); the anchor
-#'   breaks it by softly penalizing `alpha[1] < 0`, so higher `theta`
-#'   orients toward better relations. `alpha[1]` is already the
-#'   reference/neutral action class supplied via `reference_category` --
-#'   no separate index is needed. Since the anchor is only soft, a
-#'   chain's init can still land in the wrong-sign basin; see
-#'   `bilatr_orient()` for the deterministic post-hoc fix
-#'   `extract_theta()`/`extract_alpha()`/`extract_mu_intercept()` already
-#'   apply by default. Default `0.1`.
+#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`. Since 0.4.2
+#'   (see NEWS.md), this is consumed only by the LEGACY
+#'   `stable_soft_anchor`/`ou_soft_anchor` Stan programs (see
+#'   `R/model_registry.R`), which normalize `alpha` via a free
+#'   `sum_to_zero_vector` with no fixed element -- leaving an exact
+#'   reflection symmetry (`alpha`, `theta` -> `-alpha`, `-theta` is
+#'   likelihood-invariant) the anchor only softly penalizes (`alpha[1] <
+#'   0`), not reliably breaks across independently-initialized chains;
+#'   see `bilatr_orient()` for the post-hoc fix those two programs still
+#'   need. The current `stable`/`ou` programs identify `alpha[1]`'s sign
+#'   BY CONSTRUCTION instead (see each `.stan` file's header) and don't
+#'   declare `anchor_scale` at all; it is still supplied unconditionally
+#'   here (CmdStan ignores data a program doesn't declare), so this
+#'   function doesn't need to branch on `stan_model`. `alpha[1]` is
+#'   already the reference/neutral action class supplied via
+#'   `reference_category` -- no separate index is needed. Default `0.1`.
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `dyad_weight`, `period_weight`,
@@ -300,8 +307,11 @@ assemble_stan_data <- function(
     # `log_lik` in generated quantities (D x T x draws, so off by
     # default).
     compute_log_lik = compute_log_lik,
-    # Consumed by both registered variants: soft sign anchor on alpha[1],
-    # breaking their alpha/theta reflection symmetry.
+    # Only consumed by the legacy stable_soft_anchor/ou_soft_anchor
+    # programs (soft sign anchor on alpha[1]); stable/ou identify
+    # alpha[1]'s sign by construction and don't declare this field, but
+    # it's passed unconditionally regardless (CmdStan ignores data a
+    # program doesn't declare) -- see @param anchor_scale above.
     anchor_scale = anchor_scale
   )
 

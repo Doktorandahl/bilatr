@@ -45,17 +45,19 @@ A tibble with one row per action type: \code{action_index}
 \description{
 Pulls posterior summaries of the action-type discrimination parameters
 \code{alpha} out of a fitted model. \code{alpha} sums to exactly 0 and has RMS 1
-(a \code{sum_to_zero_vector}, not a single fixed-to-1 element) for
-\code{stable}/\code{ou}; \code{alpha[1]}, the reference/neutral action class supplied
-via \code{reference_category}, is only softly anchored positive (see
-\code{\link[=assemble_stan_data]{assemble_stan_data()}}'s \code{anchor_scale}). See the package's
-identification notes in \code{vignette("dyad_time_series")}.
+for \code{stable}/\code{ou}; \code{alpha[1]}, the reference/neutral action class
+supplied via \code{reference_category}, is positive BY CONSTRUCTION (see
+each \code{.stan} file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}). See the package's identification notes in
+\code{vignette("dyad_time_series")}.
 }
 \details{
-Draws are passed through \code{\link[=bilatr_orient]{bilatr_orient()}} before summarizing, so
-\code{alpha}'s sign always reflects the canonical orientation regardless of
-which reflection-symmetry basin the sampler actually landed in --
-\code{stable}/\code{ou}'s soft anchor above doesn't guarantee that on its own.
+Since 0.4.2, this skips \code{\link[=bilatr_orient]{bilatr_orient()}} entirely for \code{stable}/\code{ou}
+(\code{.bilatr_flip_variables(stan_model)} is \code{character(0)}): \code{alpha}'s
+sign is already canonical by construction, with no reflection
+symmetry to correct. Only the retired \code{stable_soft_anchor}/
+\code{ou_soft_anchor} \code{stan_model}s still get routed through
+\code{\link[=bilatr_orient]{bilatr_orient()}}, since their free \code{sum_to_zero_vector} alpha with a
+soft sign anchor doesn't guarantee canonical orientation on its own.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), for the case where there is no in-memory fit at all

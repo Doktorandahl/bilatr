@@ -39,8 +39,12 @@ assemble_stan_data(
 actor order is ignored.}
 
 \item{reference_category}{Value of \code{grouping_var} to anchor as the
-model's scale/sign reference (\code{alpha[1] = 1}). Should typically be
-a low-conflict/cooperative class. Every other action class's
+model's scale/sign reference: \code{stable}/\code{ou} build \code{alpha[1]} to be
+positive by construction (see each \code{.stan} file's header,
+\verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), and RMS-normalize
+the whole \code{alpha} vector to 1, so positive \code{alpha[1]} means better
+relations at this reference/neutral class. Should typically be a
+low-conflict/cooperative class. Every other action class's
 discrimination (\code{alpha[2:A]}) is freely estimated.}
 
 \item{min_n_events}{Minimum total events for a dyad to be retained.}
@@ -89,19 +93,21 @@ both registered Stan model variants, gating a per-dyad-period
 \verb{D x T x} draws and file size already scales with dyad count.}
 
 \item{anchor_scale}{Scale of the soft sign anchor
-\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}, consumed by
-both registered Stan model variants (see \code{R/model_registry.R}).
-\code{stable}/\code{ou} normalize \code{alpha} via a \code{sum_to_zero_vector} with no
-fixed element, which leaves an exact reflection symmetry (\code{alpha},
-\code{theta} -> \code{-alpha}, \code{-theta} is likelihood-invariant); the anchor
-breaks it by softly penalizing \code{alpha[1] < 0}, so higher \code{theta}
-orients toward better relations. \code{alpha[1]} is already the
-reference/neutral action class supplied via \code{reference_category} --
-no separate index is needed. Since the anchor is only soft, a
-chain's init can still land in the wrong-sign basin; see
-\code{bilatr_orient()} for the deterministic post-hoc fix
-\code{extract_theta()}/\code{extract_alpha()}/\code{extract_mu_intercept()} already
-apply by default. Default \code{0.1}.}
+\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}. Since 0.4.2
+(see NEWS.md), this is consumed only by the LEGACY
+\code{stable_soft_anchor}/\code{ou_soft_anchor} Stan programs (see
+\code{R/model_registry.R}), which normalize \code{alpha} via a free
+\code{sum_to_zero_vector} with no fixed element -- leaving an exact
+reflection symmetry (\code{alpha}, \code{theta} -> \code{-alpha}, \code{-theta} is
+likelihood-invariant) the anchor only softly penalizes (\code{alpha[1] < 0}), not reliably breaks across independently-initialized chains;
+see \code{bilatr_orient()} for the post-hoc fix those two programs still
+need. The current \code{stable}/\code{ou} programs identify \code{alpha[1]}'s sign
+BY CONSTRUCTION instead (see each \code{.stan} file's header) and don't
+declare \code{anchor_scale} at all; it is still supplied unconditionally
+here (CmdStan ignores data a program doesn't declare), so this
+function doesn't need to branch on \code{stan_model}. \code{alpha[1]} is
+already the reference/neutral action class supplied via
+\code{reference_category} -- no separate index is needed. Default \code{0.1}.}
 }
 \value{
 A named list suitable as the \code{data} argument to

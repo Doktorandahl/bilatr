@@ -12,15 +12,6 @@
 // below this point that isn't clearly about this file means that
 // retired model.
 //
-// 0.4.2: alpha_raw's sum_to_zero_vector[A] (with only a SOFT sign anchor
-// on alpha[1]) replaced with the hand-built, first-element-positive
-// construction described in bilatr_alphanorm.stan's header,
-// "IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION" -- identical change,
-// same rationale, applied here. The soft-anchor version of this file is
-// retired to inst/stan/legacy/bilatr_ou_soft_anchor.stan, registered as
-// `ou_soft_anchor` -- fits fully re-run under this file are not
-// parameter-comparable to fits made under that one (see NEWS.md).
-//
 // Combines `alphanorm`'s identification (bilatr_alphanorm.stan, now
 // registered as `stable`) with the retired `ou`'s OU/AR(1) dynamics --
 // see those two files for the full rationale behind each half; this
@@ -79,47 +70,69 @@
 //   - rho_prior_a/rho_prior_b (default Beta(8, 2)) and
 //     sigma_log_sd_stat ~ normal(0, 0.5): same as `ou`, same caveat.
 //
+// REFLECTION SYMMETRY -- inherited from `alphanorm` (see that file's
+// header for the full derivation and rationale; this section only
+// restates it in this model's own variable names, since mu_dyad/
+// mu_dyad_raw take the role theta0/z_theta0 play in `alphanorm`). A
+// SECOND, DISCRETE degeneracy, distinct from the radial one above and
+// exact regardless of alpha_raw's realized value: eta = alpha .* theta -
+// mu_intercept is invariant under the JOINT negation alpha -> -alpha,
+// theta -> -theta (i.e. mu_dyad -> -mu_dyad, mu_dyad_raw -> -mu_dyad_raw,
+// and theta_raw -> -theta_raw at every t; the OU recursion
+// theta[t] = mu_dyad + rho*(theta[t-1] - mu_dyad) + process_noise*
+// theta_raw[t] is self-consistent under this joint negation, since rho
+// and process_noise are untouched positive/unsigned quantities). Every
+// prior on the flipped quantities is symmetric about 0, so the two
+// mirror modes have exactly equal posterior mass, with the same
+// Rhat/pooling consequences described in `alphanorm`'s header.
+//
 // alpha[1] IS the reference/neutral action class here (same mechanism as
 // `alphanorm`: assemble_stan_data()'s `reference_category` argument
 // already reorders it to be first, so no new index needs to be passed
-// as data).
+// as data). Fixed the same way, with a SOFT sign anchor:
+//   target += log_inv_logit(alpha[1] * inv(anchor_scale))
+// (anchor_scale is a NEW data field, default 0.1). See `alphanorm`'s
+// header for why this is soft rather than a hard `alpha[1] <lower=0>`
+// constraint or an informative location prior, and why there is only
+// one anchor, not a second one on a hostile class.
 //
-// IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION -- inherited from
-// `alphanorm` (see bilatr_alphanorm.stan's header for the full
-// derivation and rationale; this section only restates it in this
-// model's own variable names, since mu_dyad/mu_dyad_raw take the role
-// theta0/z_theta0 play there). Under the previous free
-// sum_to_zero_vector[A] alpha_raw (retired to
-// inst/stan/legacy/bilatr_ou_soft_anchor.stan, registered as
-// `ou_soft_anchor`), eta = alpha .* theta - mu_intercept was invariant
-// under the JOINT negation alpha -> -alpha, theta -> -theta (i.e.
-// mu_dyad -> -mu_dyad, mu_dyad_raw -> -mu_dyad_raw, and theta_raw ->
-// -theta_raw at every t; the OU recursion theta[t] = mu_dyad +
-// rho*(theta[t-1] - mu_dyad) + process_noise*theta_raw[t] is
-// self-consistent under this joint negation, since rho and
-// process_noise are untouched positive/unsigned quantities), with the
-// same soft-anchor/likelihood-barrier consequences described in
-// `alphanorm`'s header. This version removes the symmetry itself, the
-// same way and for the same reasons: alpha_raw_1 is positive by
-// declaration, alpha_raw is built from it plus alpha_raw_mid via
-// append_row(), and alpha[1] > 0 always. Every chain now identifies the
-// same mode; no post-hoc relabeling (bilatr_orient(), R/orient.R --
-// legacy-only since 0.4.2) is needed for fits made under this file. See
-// `alphanorm`'s header for the full trade-off discussion (prior
-// exchangeability, conditioning, the documented sign-fold fallback if
-// alpha[1] is ever found pinned near the boundary) -- it applies here
-// unchanged, since this model shares alpha_raw's exact parameterization.
+// IMPORTANT CAVEAT (inherited from `alphanorm`, restated here because it
+// is easy to miss and consequential): the anchor's ~nats-scale penalty
+// controls RELATIVE MASS between the two modes, not whether a chain can
+// move between them. The modes are separated by a likelihood barrier of
+// THOUSANDS of nats (crossing requires alpha to rotate across the RMS-1
+// sphere to a direction that fits every dyad badly while theta passes
+// through 0), so they are effectively DISCONNECTED under NUTS -- a
+// single chain essentially never crosses during warmup, and the anchor
+// cannot rescue a chain that started on the wrong side. This project's
+// runs are single-chain, so an observed sign difference between two such
+// fits reflects two independent inits landing in different basins, not a
+// broken anchor. The anchor stays -- it makes the target correctly
+// specified -- but mode SELECTION comes from initialization
+// (bilatr_init_fn(), R/fit.R), a post-sampling check
+// (.warn_if_wrong_basin(), R/fit.R), and, as the deterministic fallback
+// that always works regardless of which basin was found, bilatr_orient()
+// (R/orient.R). See `alphanorm`'s header for the full version of this
+// argument and its documented (not implemented) hard-constraint fallback
+// -- both apply here unchanged, since this model shares alpha_raw's
+// exact parameterization.
 //
 // ORIENTATION: positive alpha[1] means higher theta corresponds to
 // better (less hostile) relations at the reference/neutral action class
-// -- matching stable/ou, and, since 0.4.2, holding for every fit made
-// under this file. `alpha`, `theta`, `mu_dyad`, `mu_intercept`, `phi`,
-// and every scale/dispersion/ratio quantity (`sigma_mu`, `sd_stat`,
-// `process_noise`, `rho`, `within_between_ratio`) are already in their
-// final orientation; bilatr_orient()/.bilatr_flip_variables() return
-// `character(0)` for `stable`/`ou` accordingly (R/orient.R). Only fits
-// made under the retired `stable_soft_anchor`/`ou_soft_anchor` programs
-// still need bilatr_orient()'s post-hoc relabeling.
+// -- matching stable/ou. Runs from before this anchor was added may be
+// sign-flipped relative to runs after it; so, separately, may any two
+// runs made after it (see "IMPORTANT CAVEAT" above). To compare or
+// combine any two fits, use bilatr_orient() rather than assuming they
+// already agree; its FLIP/UNCHANGED lists are:
+//   FLIP sign:  alpha, theta, mu_dyad, mu_dyad_raw, theta_raw
+//   UNCHANGED:  mu_intercept, phi, sigma_mu, sd_stat, process_noise,
+//               mu_log_sd_stat, sigma_log_sd_stat, rho,
+//               within_between_ratio
+// mu_intercept does not flip: alpha .* theta is invariant under the
+// joint negation, so only the theta-side and alpha-side terms change;
+// every scale/dispersion/ratio quantity above is unsigned, so none of
+// them flip either (within_between_ratio = exp(mu_log_sd_stat) in
+// particular is a ratio of two positive scales, not a location).
 //
 // GENERATED QUANTITIES: within_between_ratio = exp(mu_log_sd_stat)
 // directly (no mean() over dyads needed, unlike `ou`), computed
@@ -214,16 +227,14 @@ data {
   real<lower=0> rho_prior_a;                 // Beta(rho_prior_a, rho_prior_b) on
   real<lower=0> rho_prior_b;                 // rho; default 8, 2 (weighted toward
                                               // strong persistence)
+  real<lower=0> anchor_scale;                // soft sign-anchor scale on alpha[1];
+                                              // default 0.1 (see header,
+                                              // "REFLECTION SYMMETRY")
 }
 parameters {
   array[D, T] real theta_raw;
   sum_to_zero_vector[A] mu_intercept;   // softmax level-shift; sums to 0 exactly
-  // pre-normalization discrimination, hand-built sum-to-zero (see
-  // bilatr_alphanorm.stan's header, "IDENTIFICATION: alpha[1] > 0 BY
-  // CONSTRUCTION"): alpha_raw_1 is the reference/neutral class, positive
-  // by declaration
-  real<lower=0> alpha_raw_1;
-  vector[A - 2] alpha_raw_mid;
+  sum_to_zero_vector[A] alpha_raw;      // pre-normalization discrimination; sums to 0 exactly
 
   real<lower=0> sigma_mu;             // takes the role of stable's sigma_theta0;
                                        // no mu_theta_bar -- location pinned hard
@@ -239,14 +250,6 @@ parameters {
   real<lower=0> sigma_log_phi;
 }
 transformed parameters {
-  // Hand-built sum-to-zero vector, first element positive by construction
-  // (see bilatr_alphanorm.stan's header). append_row(), not slice
-  // assignment, so A == 2 (an empty alpha_raw_mid) doesn't hit an invalid
-  // range.
-  vector[A] alpha_raw = append_row(
-    alpha_raw_1,
-    append_row(alpha_raw_mid, -(alpha_raw_1 + sum(alpha_raw_mid)))
-  );
   vector[A] alpha = alpha_raw * sqrt((1.0 * A) / dot_self(alpha_raw));
 
   vector[D] mu_dyad = sigma_mu * mu_dyad_raw;
@@ -289,11 +292,15 @@ model {
 
   mu_intercept ~ std_normal();
 
-  // Put on the CONSTRUCTED alpha_raw, not on (alpha_raw_1, alpha_raw_mid)
-  // directly -- see bilatr_alphanorm.stan's header for why this is exact
-  // (constant-Jacobian linear map) and load-bearing for the radial
-  // direction of alpha_raw ("RADIAL DEGENERACY").
+  // load-bearing, not merely regularizing: identifies the radial
+  // direction of alpha_raw (see bilatr_alphanorm.stan header,
+  // "RADIAL DEGENERACY")
   alpha_raw ~ std_normal();
+
+  // soft sign anchor: breaks the alpha/theta reflection symmetry by
+  // penalizing alpha[1] < 0, not by constraining or centering it (see
+  // header, "REFLECTION SYMMETRY")
+  target += log_inv_logit(alpha[1] * inv(anchor_scale));
 
   // likelihood, chunked via reduce_sum
   array[D] int dyad_seq = linspaced_int_array(D, 1, D);

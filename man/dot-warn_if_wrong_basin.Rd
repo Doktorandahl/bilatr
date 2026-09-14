@@ -15,17 +15,19 @@
 \code{fit}, invisibly (called for the message/warning side effect).
 }
 \description{
-Only \code{stable}/\code{ou} have a reflection symmetry a chain's init can land
-on either side of (see \code{R/orient.R}); decided via
-\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} (not a literal \code{c("stable", "ou")} here) so
-this and \code{bilatr_orient()} never disagree about which models need it.
-Any other registered model that instead hard-fixes \code{alpha[1]} (as both
-did themselves before 0.4.0's promotion; see NEWS.md) is a no-op here.
-With single-chain runs (this project's SLURM submission convention --
-see \code{runscripts/submit_bilatr_runs.R}) there is no cross-chain Rhat or
-other diagnostic that would otherwise surface a wrong-basin fit, so
-this check is the only automatic signal; it reports regardless of sign
-so a caller always sees where \code{alpha[1]} landed, and warns specifically
-when it's negative.
+Since 0.4.2, only the retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
+have a reflection symmetry a chain's init can land on either side of
+(see \code{R/orient.R}); decided via \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} (not a
+literal name list here) so this and \code{bilatr_orient()} never disagree
+about which models need it. The current \code{stable}/\code{ou} build \code{alpha[1]}
+to be positive by construction (see each \code{.stan} file's header,
+\verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}) and are a no-op here,
+with no \code{fit$draws()} call at all. For models that still have the
+symmetry, with single-chain runs (this project's SLURM submission
+convention -- see \code{runscripts/submit_bilatr_runs.R}) there is no
+cross-chain Rhat or other diagnostic that would otherwise surface a
+wrong-basin fit, so this check was the only automatic signal; it
+reports regardless of sign so a caller always sees where \code{alpha[1]}
+landed, and warns specifically when it's negative.
 }
 \keyword{internal}

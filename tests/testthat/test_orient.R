@@ -8,7 +8,7 @@
   posterior::as_draws_df(df)
 }
 
-test_that("bilatr_orient() flips exactly the stable flip-list and leaves the rest unchanged", {
+test_that("bilatr_orient() flips exactly the legacy stable_soft_anchor flip-list and leaves the rest unchanged", {
   set.seed(1)
   n <- 20
   extra <- list(
@@ -28,7 +28,7 @@ test_that("bilatr_orient() flips exactly the stable flip-list and leaves the res
 
   flip_vars <- c("alpha", "alpha_raw", "theta", "theta0", "z_theta0", "theta_raw")
   unchanged_vars <- c("mu_intercept", "phi", "sigma_theta0")
-  oriented <- bilatr_orient(draws, stan_model = "stable", variables = c(flip_vars, unchanged_vars))
+  oriented <- bilatr_orient(draws, stan_model = "stable_soft_anchor", variables = c(flip_vars, unchanged_vars))
 
   for (v in c("alpha[1]", "alpha[2]", "alpha_raw[1]", "theta[1,1]", "theta[1,2]", "theta0[1]", "z_theta0[1]", "theta_raw[1,1]")) {
     expect_equal(
@@ -50,7 +50,7 @@ test_that("bilatr_orient() flips exactly the stable flip-list and leaves the res
   expect_equal(alpha1_theta11_after, alpha1_theta11_before)
 })
 
-test_that("bilatr_orient() flips exactly the ou flip-list and leaves the rest unchanged", {
+test_that("bilatr_orient() flips exactly the legacy ou_soft_anchor flip-list and leaves the rest unchanged", {
   set.seed(2)
   n <- 20
   extra <- list(
@@ -70,7 +70,7 @@ test_that("bilatr_orient() flips exactly the ou flip-list and leaves the rest un
 
   flip_vars <- c("alpha", "alpha_raw", "theta", "mu_dyad", "mu_dyad_raw", "theta_raw")
   unchanged_vars <- c("mu_intercept", "sigma_mu", "sd_stat", "rho", "within_between_ratio")
-  oriented <- bilatr_orient(draws, stan_model = "ou", variables = c(flip_vars, unchanged_vars))
+  oriented <- bilatr_orient(draws, stan_model = "ou_soft_anchor", variables = c(flip_vars, unchanged_vars))
 
   for (v in c("alpha[1]", "alpha_raw[1]", "theta[1,1]", "mu_dyad[1]", "mu_dyad_raw[1]", "theta_raw[1,1]")) {
     expect_equal(posterior::extract_variable(oriented, v), -extra[[v]], info = paste("expected", v, "to be negated"))
@@ -93,9 +93,40 @@ test_that("bilatr_orient() does not flip when alpha[1]'s median is already posit
     `theta[1,1]` = stats::rnorm(n, 0.5, 0.1)
   )
   draws <- .make_synthetic_draws(extra)
-  oriented <- bilatr_orient(draws, stan_model = "stable", variables = c("alpha", "theta"))
+  oriented <- bilatr_orient(draws, stan_model = "stable_soft_anchor", variables = c("alpha", "theta"))
   expect_equal(posterior::extract_variable(oriented, "alpha[1]"), extra[["alpha[1]"]])
   expect_equal(posterior::extract_variable(oriented, "theta[1,1]"), extra[["theta[1,1]"]])
+})
+
+test_that("stable/ou (0.4.2+) need no orientation: empty flip list, and extract_theta() is unchanged whether or not draws are routed through bilatr_orient()", {
+  for (name in c("stable", "ou")) {
+    expect_identical(.bilatr_flip_variables(name), character(0))
+  }
+
+  # Simulate what extract_theta()'s in-memory branch does: a "fit"-like
+  # object whose $draws() errors if bilatr_orient() ever asked it for
+  # alpha[1] alongside theta (which the modern branch must not do).
+  set.seed(5)
+  n <- 15
+  theta_vals <- stats::rnorm(n, 0.3, 0.1)
+  fake_fit <- list(
+    draws = function(variables) {
+      if (!identical(variables, "theta")) {
+        stop("extract_theta() requested more than 'theta' for a model with no reflection symmetry")
+      }
+      .make_synthetic_draws(list(`theta[1,1]` = theta_vals))
+    }
+  )
+  stan_data <- structure(list(), dyad_ids = data.frame(dyad_id = 1L, time_index = 1L, dyad = "A_B"))
+
+  theta <- extract_theta(fake_fit, stan_data, stan_model = "stable")
+  expect_equal(theta$mean, mean(theta_vals))
+
+  # bilatr_orient() itself, called directly on the same draws, must be a
+  # true no-op (not just unreached) for a model with an empty flip list
+  draws <- .make_synthetic_draws(list(`alpha[1]` = stats::rnorm(n, -5, 0.1), `theta[1,1]` = theta_vals))
+  oriented <- bilatr_orient(draws, stan_model = "stable", variables = "theta")
+  expect_equal(posterior::extract_variable(oriented, "theta[1,1]"), theta_vals)
 })
 
 test_that(".bilatr_flip_variables()/bilatr_orient() error on an unrecognized stan_model rather than silently no-op (B1)", {
@@ -116,35 +147,39 @@ test_that(".bilatr_flip_variables()/bilatr_orient() error on an unrecognized sta
   )
 })
 
-test_that(".bilatr_flip_variables() accepts the pre-0.4.0 alphanorm/alphanorm_ou aliases and matches stable/ou exactly", {
+test_that(".bilatr_flip_variables() accepts the pre-0.4.0 alphanorm/alphanorm_ou aliases and matches the legacy soft-anchor entries exactly", {
   .reset_bilatr_alias_messaged()
   expect_message(
     alphanorm_flip <- .bilatr_flip_variables("alphanorm"),
-    "pre-0.4.0 name of 'stable'"
+    "pre-0.4.0 name of 'stable_soft_anchor'"
   )
-  expect_identical(alphanorm_flip, .bilatr_flip_variables("stable"))
+  expect_identical(alphanorm_flip, .bilatr_flip_variables("stable_soft_anchor"))
 
   expect_message(
     alphanorm_ou_flip <- .bilatr_flip_variables("alphanorm_ou"),
-    "pre-0.4.0 name of 'ou'"
+    "pre-0.4.0 name of 'ou_soft_anchor'"
   )
-  expect_identical(alphanorm_ou_flip, .bilatr_flip_variables("ou"))
+  expect_identical(alphanorm_ou_flip, .bilatr_flip_variables("ou_soft_anchor"))
 })
 
 test_that("bilatr_orient() errors informatively if alpha[1] is not present in draws", {
   n <- 5
   draws <- .make_synthetic_draws(list(`theta[1,1]` = stats::rnorm(n)))
   expect_error(
-    bilatr_orient(draws, stan_model = "stable", variables = "theta"),
+    bilatr_orient(draws, stan_model = "stable_soft_anchor", variables = "theta"),
     "alpha\\[1\\]"
   )
 })
 
-test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_orient() recovers a positive orientation from that fit", {
+test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_orient() recovers a positive orientation from that fit (legacy stable_soft_anchor)", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
+  # Repointed to the legacy stable_soft_anchor program (0.4.2): that is
+  # where the reflection symmetry now lives -- the current `stable`
+  # identifies alpha[1]'s sign by construction and has no wrong basin to
+  # land in (see inst/stan/bilatr_alphanorm.stan's header).
   set.seed(1)
   D <- 3
   Tn <- 5
@@ -157,10 +192,10 @@ test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_or
     compute_log_lik = 0, anchor_scale = 0.1
   )
 
-  mod <- .compile_stan_model("stable", opt_level = 1)
+  mod <- .compile_stan_model("stable_soft_anchor", opt_level = 1)
 
   # deliberately seed into the WRONG basin (opposite sign convention from
-  # .alpha_raw_sum0_init()), and pin the sampler near its init
+  # .legacy_alpha_raw_sum0_init()), and pin the sampler near its init
   # (adapt_engaged = FALSE, tiny step_size, capped max_treedepth) so a
   # short run can't cross the (data-scale-dependent) likelihood barrier
   # between the two modes regardless of how large it happens to be for
@@ -188,34 +223,42 @@ test_that(".warn_if_wrong_basin() fires when alpha[1] is negative, and bilatr_or
   expect_lt(stats::median(posterior::extract_variable(fit_wrong$draws("alpha[1]"), "alpha[1]")), 0)
 
   expect_warning(
-    expect_message(.warn_if_wrong_basin(fit_wrong, "stable"), "Posterior median of alpha\\[1\\]"),
+    expect_message(.warn_if_wrong_basin(fit_wrong, "stable_soft_anchor"), "Posterior median of alpha\\[1\\]"),
     "wrong-sign basin"
   )
 
-  oriented <- bilatr_orient(fit_wrong$draws(variables = "alpha"), stan_model = "stable", variables = "alpha")
+  oriented <- bilatr_orient(fit_wrong$draws(variables = "alpha"), stan_model = "stable_soft_anchor", variables = "alpha")
   expect_gt(stats::median(posterior::extract_variable(oriented, "alpha[1]")), 0)
 
   # and the right-basin case (bilatr_init_fn()'s actual, anchored init)
   # should report but not warn
-  good_init <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = "stable")
+  good_init <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = "stable_soft_anchor")
   fit_right <- suppressWarnings(mod$sample(
     data = data_list, chains = 1, iter_warmup = 20, iter_sampling = 5,
     seed = 1, refresh = 0, threads_per_chain = 1,
     init = good_init, output_dir = tempdir(), show_messages = FALSE
   ))
-  expect_no_warning(expect_message(.warn_if_wrong_basin(fit_right, "stable"), "Posterior median of alpha\\[1\\]"))
+  expect_no_warning(expect_message(.warn_if_wrong_basin(fit_right, "stable_soft_anchor"), "Posterior median of alpha\\[1\\]"))
+})
+
+test_that(".warn_if_wrong_basin() is a true no-op for stable/ou (0.4.2+): no fit$draws() call at all", {
+  # Unlike the legacy stable_soft_anchor case above, stable/ou have no
+  # reflection symmetry left to check -- confirmed here by a fake fit
+  # whose $draws() errors if ever called.
+  fake_fit <- list(draws = function(...) stop("should not be called"))
+  for (name in c("stable", "ou")) {
+    expect_no_message(expect_no_warning(.warn_if_wrong_basin(fake_fit, name)))
+  }
 })
 
 test_that(".warn_if_wrong_basin() errors on an unrecognized stan_model rather than silently no-op (B1)", {
-  # both currently-registered models (stable, ou) DO have a reflection
-  # symmetry since 0.4.0's promotion (see NEWS.md); .warn_if_wrong_basin()
-  # now decides via .bilatr_flip_variables(), which itself validates
-  # stan_model through .canonical_stan_model() -- an unrecognized name
-  # errors rather than being silently treated as "no reflection
-  # symmetry, nothing to check" (B1). In practice this stan_model has
-  # already been validated by .compile_stan_model() earlier in
-  # fit_bilatr(), so this case shouldn't arise from a real call, but the
-  # guard must not paper over it if it somehow did.
+  # .warn_if_wrong_basin() decides via .bilatr_flip_variables(), which
+  # itself validates stan_model through .canonical_stan_model() -- an
+  # unrecognized name errors rather than being silently treated as "no
+  # reflection symmetry, nothing to check" (B1). In practice this
+  # stan_model has already been validated by .compile_stan_model()
+  # earlier in fit_bilatr(), so this case shouldn't arise from a real
+  # call, but the guard must not paper over it if it somehow did.
   fake_fit <- list(draws = function(...) stop("should not be called"))
   expect_error(.warn_if_wrong_basin(fake_fit, "some_unregistered_model"), "Unknown stan_model")
 })
@@ -225,10 +268,11 @@ test_that(".warn_if_wrong_basin() accepts the pre-0.4.0 alphanorm/alphanorm_ou a
   skip_on_cran()
   skip_on_ci()
 
-  # a fake fit whose $draws() would error if ever called -- confirms
-  # .warn_if_wrong_basin() treats the alias exactly like its canonical
-  # name (both are flip-variable models, so this does NOT return early;
-  # it must reach $draws())
+  # alphanorm/alphanorm_ou resolve to the legacy stable_soft_anchor/
+  # ou_soft_anchor entries (0.4.2+), which DO still have a reflection
+  # symmetry -- a fake fit whose $draws() would error if ever called
+  # confirms .warn_if_wrong_basin() treats the alias exactly like its
+  # canonical name (this does NOT return early; it must reach $draws())
   fake_fit <- list(draws = function(...) stop("should not be called"))
   expect_error(
     suppressMessages(.warn_if_wrong_basin(fake_fit, "alphanorm")),

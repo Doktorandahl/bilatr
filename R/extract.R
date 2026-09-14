@@ -7,18 +7,16 @@
 #' [assemble_stan_data()] attaches to its output. Works the same way for
 #' single-dyad ([fit_dyad_ts()]) and panel ([fit_panel()]) fits.
 #'
-#' Draws are passed through [bilatr_orient()] before summarizing, so
-#' `theta`'s sign always reflects the canonical orientation (higher theta
-#' = better relations) regardless of which reflection-symmetry basin the
-#' sampler actually landed in. This matters for the default `stan_model`
-#' (`"stable"`) itself, not just the experimental `"ou"`: both normalize
-#' `alpha` via a `sum_to_zero_vector` with only a *soft* sign anchor on
-#' `alpha[1]` (see [assemble_stan_data()]'s `anchor_scale`), so a chain's
-#' init can still land in the wrong-sign basin; this reorientation is
-#' what makes the result correct regardless. A no-op only for a
-#' hypothetical `stan_model` whose identification hard-fixes `alpha[1]`'s
-#' sign instead (as `stable`/`ou` themselves did before 0.4.0's
-#' promotion; see NEWS.md).
+#' Since 0.4.2, `stable`/`ou` build `alpha[1]` to be positive by
+#' construction (see each `.stan` file's header, `IDENTIFICATION:
+#' alpha[1] > 0 BY CONSTRUCTION`), so `theta` is already in its canonical
+#' orientation (higher theta = better relations) and this function skips
+#' [bilatr_orient()] entirely for them -- no draws-through-orientation
+#' round trip, since `.bilatr_flip_variables(stan_model)` is
+#' `character(0)`. Only the retired `stable_soft_anchor`/`ou_soft_anchor`
+#' `stan_model`s (their free `sum_to_zero_vector` alpha with a soft sign
+#' anchor leaves a real reflection symmetry a chain's init can land on
+#' either side of) still get routed through [bilatr_orient()] here.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
@@ -70,6 +68,8 @@
 #'   `theta` alone rather than all of Tier 3.
 #' @param scratch_dir Deprecated and ignored since 0.4.1; see
 #'   [diagnose_convergence()].
+#' @param read_seconds Only used when `fit` is CSV file paths; identical
+#'   in meaning to [diagnose_convergence()]'s argument of the same name.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, `dyad`, `dyad2`, `year` (and `month`, if applicable),
 #'   the posterior `mean` of theta, and one column per requested quantile.
@@ -85,7 +85,8 @@
 extract_theta <- function(
   fit, stan_data, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL,
   max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = parallelly::availableCores(), scratch_dir = NULL
+  n_workers = parallelly::availableCores(), scratch_dir = NULL,
+  read_seconds = NULL
 ) {
   stan_model <- .canonical_stan_model(stan_model)
   max_memory_mb_missing <- missing(max_memory_mb)
@@ -128,7 +129,7 @@ extract_theta <- function(
     n_cores <- if (parallel) n_workers else 1L
     chunk_size_used <- .resolve_chunk_size_and_report(
       length(theta_vars), prepared, max_memory_mb, chunk_size, n_cores,
-      max_memory_mb_missing
+      max_memory_mb_missing, read_seconds = read_seconds
     )
     # No standalone alpha[1] pass: orientation is decided from the first
     # Tier 3 chunk itself (alpha[1] prepended, read once, dropped before
@@ -138,6 +139,16 @@ extract_theta <- function(
       .bilatr_flip_variables(stan_model)
     )$summ %>%
       dplyr::select(variable, mean, `5%` = q5, `50%` = median, `95%` = q95)
+  } else if (length(.bilatr_flip_variables(stan_model)) == 0) {
+    # stable/ou (0.4.2+): alpha[1] > 0 by construction, so theta is
+    # already in its canonical orientation -- no alpha[1] read, no
+    # bilatr_orient() round trip.
+    draws <- fit$draws(variables = "theta")
+    theta_summ <- posterior::summarise_draws(
+      draws,
+      mean = mean,
+      ~ stats::quantile(.x, probs = probs)
+    )
   } else {
     draws <- fit$draws(variables = c("alpha[1]", "theta"))
     draws <- bilatr_orient(draws, stan_model = stan_model, variables = "theta")
@@ -186,16 +197,19 @@ extract_theta <- function(
 #'
 #' Pulls posterior summaries of the action-type discrimination parameters
 #' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has RMS 1
-#' (a `sum_to_zero_vector`, not a single fixed-to-1 element) for
-#' `stable`/`ou`; `alpha[1]`, the reference/neutral action class supplied
-#' via `reference_category`, is only softly anchored positive (see
-#' [assemble_stan_data()]'s `anchor_scale`). See the package's
-#' identification notes in `vignette("dyad_time_series")`.
+#' for `stable`/`ou`; `alpha[1]`, the reference/neutral action class
+#' supplied via `reference_category`, is positive BY CONSTRUCTION (see
+#' each `.stan` file's header, `IDENTIFICATION: alpha[1] > 0 BY
+#' CONSTRUCTION`). See the package's identification notes in
+#' `vignette("dyad_time_series")`.
 #'
-#' Draws are passed through [bilatr_orient()] before summarizing, so
-#' `alpha`'s sign always reflects the canonical orientation regardless of
-#' which reflection-symmetry basin the sampler actually landed in --
-#' `stable`/`ou`'s soft anchor above doesn't guarantee that on its own.
+#' Since 0.4.2, this skips [bilatr_orient()] entirely for `stable`/`ou`
+#' (`.bilatr_flip_variables(stan_model)` is `character(0)`): `alpha`'s
+#' sign is already canonical by construction, with no reflection
+#' symmetry to correct. Only the retired `stable_soft_anchor`/
+#' `ou_soft_anchor` `stan_model`s still get routed through
+#' [bilatr_orient()], since their free `sum_to_zero_vector` alpha with a
+#' soft sign anchor doesn't guarantee canonical orientation on its own.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), for the case where there is no in-memory fit at all
@@ -234,7 +248,10 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
       call. = FALSE
     )
   }
-  draws <- bilatr_orient(.get_draws(fit, "alpha"), stan_model = stan_model, variables = "alpha")
+  draws <- .get_draws(fit, "alpha")
+  if (length(.bilatr_flip_variables(stan_model)) > 0) {
+    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "alpha")
+  }
 
   out <- posterior::summarise_draws(
     draws,
@@ -260,11 +277,13 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' `stable`/`ou`, so no residual location degree of freedom hides in the
 #' softmax level-shift.
 #'
-#' `mu_intercept` is unaffected by stable/ou's reflection symmetry
-#' (`alpha .* theta` is invariant under the joint negation, so
-#' `mu_intercept` never needs to flip; see [bilatr_orient()]) -- `fit` is
-#' passed through it anyway, for a single consistent code path across the
-#' `extract_*()` functions, but it is always a no-op here.
+#' `mu_intercept` never flips under the alpha/theta reflection symmetry
+#' (`alpha .* theta` is invariant under the joint negation; see
+#' [bilatr_orient()]), so `"alpha[1]"` is only read alongside it when
+#' `stan_model` still has that symmetry to check (the retired
+#' `stable_soft_anchor`/`ou_soft_anchor`) -- for `stable`/`ou`, since
+#' 0.4.2, [bilatr_orient()] is skipped entirely and `mu_intercept` is
+#' read alone.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths,
 #' for the same post-hoc/no-in-memory-fit case described in
@@ -289,8 +308,11 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
       call. = FALSE
     )
   }
-  draws <- .get_draws(fit, c("alpha[1]", "mu_intercept"))
-  draws <- bilatr_orient(draws, stan_model = stan_model, variables = "mu_intercept")
+  needs_orientation <- length(.bilatr_flip_variables(stan_model)) > 0
+  draws <- .get_draws(fit, if (needs_orientation) c("alpha[1]", "mu_intercept") else "mu_intercept")
+  if (needs_orientation) {
+    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "mu_intercept")
+  }
 
   out <- posterior::summarise_draws(
     draws,

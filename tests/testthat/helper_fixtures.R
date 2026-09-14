@@ -127,18 +127,22 @@ make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
 # logic itself is exercised via a deliberately tiny chunk_size/
 # max_memory_mb, not by the fixture's own size.
 #
-# stan_model defaults to "stable", which (since 0.4.0's promotion of
-# alphanorm -- see NEWS.md) DOES have a reflection symmetry; the default
-# call exercises the ordinary (right-basin) path since bilatr_init_fn()'s
-# actual init biases toward it. Pass a deliberately wrong-basin init (see
-# test_orient.R's pattern) to exercise bilatr_orient()'s sign flip through
-# the CSV-chunked path instead -- also pass ... = adapt_engaged = FALSE,
-# step_size = <tiny>, max_treedepth = <small> (test_orient.R's pinning
-# trick) if the point is to keep the chain from adapting its way out of
-# that basin during ordinary warmup, since this fixture's default 30
-# warmup iterations are otherwise enough to escape a wrong-basin init on
-# a dataset this small. `compute_log_lik`/`anchor_scale` (needed by both
-# registered models) default to the same values
+# stan_model defaults to "stable", which since 0.4.2 identifies
+# alpha[1]'s sign by construction and has NO reflection symmetry (see
+# NEWS.md and inst/stan/bilatr_alphanorm.stan's header) -- the default
+# call has no basin to land in either way. To exercise bilatr_orient()'s
+# sign flip through the CSV-chunked path, pass
+# stan_model = "stable_soft_anchor" (the retired program that still has
+# the symmetry) along with a deliberately wrong-basin init built for
+# ITS parameters (a free sum_to_zero_vector `alpha_raw`, not
+# `alpha_raw_1`/`alpha_raw_mid`; see test_orient.R's pattern) -- also
+# pass ... = adapt_engaged = FALSE, step_size = <tiny>,
+# max_treedepth = <small> (test_orient.R's pinning trick) if the point
+# is to keep the chain from adapting its way out of that basin during
+# ordinary warmup, since this fixture's default 30 warmup iterations are
+# otherwise enough to escape a wrong-basin init on a dataset this small.
+# `compute_log_lik`/`anchor_scale`/`rho_prior_a`/`rho_prior_b` (needed by
+# one or more registered models) default to the same values
 # [assemble_stan_data()] does; pass `extra_data` to override them.
 make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, extra_data = list(), ...) {
   set.seed(1)

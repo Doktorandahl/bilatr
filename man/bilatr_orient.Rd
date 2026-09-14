@@ -13,8 +13,9 @@ includes \code{"alpha[1]"} -- required to determine orientation even if
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
 recognized pre-0.4.0 alias (see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}). Only
-\code{"stable"}/\code{"ou"} have a reflection symmetry to correct (see
-\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}); for any other registered name, \code{draws}
+\code{"stable_soft_anchor"}/\code{"ou_soft_anchor"} have a reflection symmetry
+to correct (see \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}); for any other
+registered name (including the current \code{"stable"}/\code{"ou"}), \code{draws}
 is returned unmodified (restricted to \code{variables}, if supplied),
 since there is nothing to fix. An unrecognized, non-alias name
 errors instead.}
@@ -30,6 +31,19 @@ negated if the posterior median of \code{alpha[1]} in \code{draws} was
 negative.
 }
 \description{
+\strong{Deprecated as of 0.4.2}, in favor of doing nothing: \code{stable}/\code{ou}
+build \code{alpha[1]} to be positive by construction (see each \code{.stan}
+file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}),
+leaving no reflection symmetry for this function to correct. It is
+retained only for reading/re-deriving CmdStan output produced by the
+pre-0.4.2 \code{stable_soft_anchor}/\code{ou_soft_anchor} programs, and is
+slated for removal once those runs are gone -- this is not enforced
+with \code{\link[base:Deprecated]{base::.Deprecated()}}, which would fire warnings on that
+legitimate legacy use; every current call site (\verb{extract_*()},
+\code{R/diagnose_and_extract.R}) already checks \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}
+first and skips calling this function entirely for \code{stable}/\code{ou}.
+}
+\details{
 \code{mu_intercept}, \code{phi}, and every scale/dispersion/ratio quantity
 (\code{sigma_theta0}/\code{sigma_mu}, \code{process_noise}, \code{sd_stat}, \code{rho},
 \verb{mu_log_*}, \verb{sigma_log_*}, \code{within_between_ratio}) are always left

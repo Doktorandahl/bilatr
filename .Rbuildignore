@@ -2,7 +2,13 @@
 ^original_code$
 ^data-raw$
 ^runscripts$
-^inst/stan/legacy$
+^inst/stan/legacy/bilatr_dirmult_irt_pre_0\.4\.0\.stan$
+^inst/stan/legacy/bilatr_dirmult_irt\.stan$
+^inst/stan/legacy/bilatr_ou_pre_0\.4\.0\.stan$
+^inst/stan/legacy/bilatr_phi_logn_pre_0\.3\.0\.stan$
+^inst/stan/legacy/bilatr_phi_logn\.stan$
+^inst/stan/legacy/bilatr_stable_soft_anchor$
+^inst/stan/legacy/bilatr_ou_soft_anchor$
 ^\.Rproj\.user$
 ^.*\.Rproj$
 ^dev$

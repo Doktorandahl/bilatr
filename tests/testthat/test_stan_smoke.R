@@ -12,13 +12,15 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # `stable` plus the experimental `ou` variant (phi_logn was retired to
-  # inst/stan/legacy/ in 0.3.2, and the pre-0.4.0 stable/ou were retired
-  # there in 0.4.0 when alphanorm/alphanorm_ou were promoted -- see
-  # NEWS.md; none of those three are registered).
+  # `stable`/`ou` (current, alpha[1] > 0 by construction) plus the
+  # retired `stable_soft_anchor`/`ou_soft_anchor` (pre-0.4.2, kept
+  # registered so their CmdStan output stays readable -- see NEWS.md).
+  # phi_logn was retired to inst/stan/legacy/ in 0.3.2, and the pre-0.4.0
+  # stable/ou were retired there in 0.4.0 when alphanorm/alphanorm_ou
+  # were promoted; neither of those two is registered.
   expect_setequal(
     names(.bilatr_stan_models),
-    c("stable", "ou")
+    c("stable", "ou", "stable_soft_anchor", "ou_soft_anchor")
   )
 
   for (name in names(.bilatr_stan_models)) {
@@ -43,10 +45,53 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
     min_n_events = 1
   )
 
-  experimental_models <- setdiff(names(.bilatr_stan_models), .BILATR_DEFAULT_MODEL)
+  experimental_models <- names(Filter(
+    function(m) identical(m$status, "experimental"), .bilatr_stan_models
+  ))
   expect_gt(length(experimental_models), 0)
 
   for (name in experimental_models) {
+    fit <- suppressWarnings(fit_panel_dev(
+      stan_data,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 25,
+      iter_sampling = 5,
+      seed = 1,
+      opt_level = 1,
+      output_dir = tempdir(),
+      stan_model = name,
+      refresh = 0,
+      show_messages = FALSE
+    ))
+    expect_s3_class(fit, "CmdStanMCMC")
+    expect_equal(posterior::ndraws(fit$draws()), 5)
+  }
+})
+
+test_that("every legacy model still runs a short fixed-seed sample (readable, not fit going forward)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  events <- make_fake_events()
+  events <- recode_cameo(events, code_col = "EventCode")
+  stan_data <- assemble_stan_data(
+    events,
+    years = 2015:2019,
+    resolution = "yearly",
+    grouping_var = "PentaClass",
+    reference_category = 0,
+    min_n_events = 1
+  )
+
+  legacy_models <- names(Filter(
+    function(m) identical(m$status, "legacy"), .bilatr_stan_models
+  ))
+  expect_setequal(legacy_models, c("stable_soft_anchor", "ou_soft_anchor"))
+
+  for (name in legacy_models) {
     fit <- suppressWarnings(fit_panel_dev(
       stan_data,
       chains = 1,
@@ -114,11 +159,48 @@ test_that("bilatr_init_fn()'s stable/ou inits pass cmdstanr's init validation", 
 
   # Specifically verifies what R/fit.R's bilatr_init_fn() assumes but
   # cannot check for itself at the R level: that cmdstanr's `init`
-  # argument accepts sum_to_zero_vector[A] parameters (alpha_raw,
-  # mu_intercept) as their length-A CONSTRAINED representation, not the
-  # length-(A - 1) unconstrained one, and that a plain rep(0, A) is
-  # accepted for mu_intercept. If cmdstanr instead required the
-  # unconstrained form, mod$sample(init = ...) below would error.
+  # argument accepts alpha_raw_1 (real<lower=0>)/alpha_raw_mid
+  # (vector[A - 2]) as ordinary unconstrained-space values (alpha_raw_1's
+  # positivity is enforced via a log transform, so an ordinary positive
+  # value is accepted directly), and that mu_intercept's
+  # sum_to_zero_vector[A] accepts its length-A CONSTRAINED representation
+  # (a plain rep(0, A)), not the length-(A - 1) unconstrained one. If
+  # cmdstanr instead required the unconstrained form for mu_intercept, or
+  # rejected alpha_raw_1/alpha_raw_mid's shapes, mod$sample(init = ...)
+  # below would error.
+  set.seed(1)
+  D <- 2
+  Tn <- 3
+  A <- 4
+  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, rho_prior_a = 8, rho_prior_b = 2
+  )
+
+  for (name in c("stable", "ou")) {
+    mod <- .compile_stan_model(name, opt_level = 1)
+    init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
+    fit <- suppressWarnings(suppressMessages(mod$sample(
+      data = data_list, chains = 1, iter_warmup = 20, iter_sampling = 5,
+      seed = 1, refresh = 0, threads_per_chain = 1,
+      init = init_fn, output_dir = tempdir(), show_messages = FALSE
+    )))
+    expect_s3_class(fit, "CmdStanMCMC")
+    expect_equal(posterior::ndraws(fit$draws()), 5)
+  }
+})
+
+test_that("bilatr_init_fn()'s legacy stable_soft_anchor/ou_soft_anchor inits still pass cmdstanr's init validation", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  # Same check as above, for the retired programs' free
+  # sum_to_zero_vector[A] alpha_raw (constrained, length-A
+  # representation).
   set.seed(1)
   D <- 2
   Tn <- 3
@@ -131,7 +213,7 @@ test_that("bilatr_init_fn()'s stable/ou inits pass cmdstanr's init validation", 
     compute_log_lik = 0, anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
   )
 
-  for (name in c("stable", "ou")) {
+  for (name in c("stable_soft_anchor", "ou_soft_anchor")) {
     mod <- .compile_stan_model(name, opt_level = 1)
     init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
     fit <- suppressWarnings(suppressMessages(mod$sample(
@@ -181,7 +263,8 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
     phi = c(1.2, 0.9),
     mu_log_phi = 0.05,
     sigma_log_phi = 0.4,
-    alpha_raw = sum0(c(2, stats::rnorm(A - 1, 0, 0.3)))
+    alpha_raw_1 = 1.5,
+    alpha_raw_mid = stats::rnorm(A - 2, 0, 0.3)
   )
 
   mod <- cmdstanr::cmdstan_model(
@@ -205,13 +288,13 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
   data_1s <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-    compute_log_lik = 0, anchor_scale = 0.1
+    compute_log_lik = 0
   )
   action_weight <- c(1.3, 0.7, 1.0, 1.5)
   data_action_weighted <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = action_weight,
-    compute_log_lik = 0, anchor_scale = 0.1
+    compute_log_lik = 0
   )
 
   lp_base <- logprob_at(data_1s, params)
@@ -223,11 +306,15 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
   expect_equal(lp_base, logprob_at(data_1s, params))
 })
 
-test_that("stable's (bilatr_alphanorm.stan) soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+test_that("legacy stable_soft_anchor's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
+  # Coverage for the retired program's still-relevant anchor math (this
+  # exact symmetry no longer exists in the current `stable`, which
+  # identifies alpha[1]'s sign by construction instead -- see
+  # inst/stan/bilatr_alphanorm.stan's header).
   set.seed(1)
   D <- 2
   Tn <- 3
@@ -264,7 +351,7 @@ test_that("stable's (bilatr_alphanorm.stan) soft sign anchor exactly accounts fo
   params_neg$theta_raw <- -params_pos$theta_raw
 
   mod <- cmdstanr::cmdstan_model(
-    system.file("stan", "bilatr_alphanorm.stan", package = "bilatr"),
+    system.file("stan", "legacy/bilatr_stable_soft_anchor.stan", package = "bilatr"),
     cpp_options = list(stan_threads = TRUE),
     compile_model_methods = TRUE,
     force_recompile = TRUE
@@ -303,7 +390,7 @@ test_that("stable's (bilatr_alphanorm.stan) soft sign anchor exactly accounts fo
   expect_gt(lp_pos, lp_neg)
 })
 
-test_that("ou's (bilatr_alphanorm_ou.stan) soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
+test_that("legacy ou_soft_anchor's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -346,7 +433,7 @@ test_that("ou's (bilatr_alphanorm_ou.stan) soft sign anchor exactly accounts for
   params_neg$theta_raw <- -params_pos$theta_raw
 
   mod <- cmdstanr::cmdstan_model(
-    system.file("stan", "bilatr_alphanorm_ou.stan", package = "bilatr"),
+    system.file("stan", "legacy/bilatr_ou_soft_anchor.stan", package = "bilatr"),
     cpp_options = list(stan_threads = TRUE),
     compile_model_methods = TRUE,
     force_recompile = TRUE
@@ -378,4 +465,39 @@ test_that("ou's (bilatr_alphanorm_ou.stan) soft sign anchor exactly accounts for
 
   expect_equal(lp_pos - lp_neg, expected_gap, tolerance = 1e-6)
   expect_gt(lp_pos, lp_neg)
+})
+
+test_that("stable/ou's alpha[1] is positive by construction regardless of alpha_raw_1's unconstrained value", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  # The point of the 0.4.2 reparameterization: unlike the legacy
+  # soft-anchor tests above, there is no mirror-image state to compare
+  # against here -- alpha_raw_1's <lower=0> constraint makes alpha[1] > 0
+  # a structural fact, not a fact about relative log-density between two
+  # otherwise-equal-mass states.
+  set.seed(3)
+  D <- 2
+  Tn <- 3
+  A <- 5
+  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+  data_list <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
+    compute_log_lik = 0, rho_prior_a = 8, rho_prior_b = 2
+  )
+
+  for (name in c("stable", "ou")) {
+    mod <- .compile_stan_model(name, opt_level = 1)
+    init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
+    fit <- suppressWarnings(suppressMessages(mod$sample(
+      data = data_list, chains = 2, iter_warmup = 50, iter_sampling = 25,
+      seed = 1, refresh = 0, threads_per_chain = 1,
+      init = init_fn, output_dir = tempdir(), show_messages = FALSE
+    )))
+    alpha1 <- posterior::extract_variable(fit$draws("alpha[1]"), "alpha[1]")
+    expect_true(all(alpha1 > 0))
+  }
 })

@@ -14,10 +14,12 @@ devtools::load_all(".", quiet = TRUE)
 fragment_path <- "inst/stan/include/partial_log_lik.stanfunctions"
 fragment_lines <- readLines(fragment_path)
 
+# Only the two currently-registered, actively-fit programs get the
+# splice -- inst/stan/legacy/ files (including the retired
+# stable_soft_anchor/ou_soft_anchor from 0.4.2) are frozen snapshots and
+# must not be rewritten by this script.
 target_files <- c(
-  "inst/stan/bilatr_dirmult_irt.stan",
   "inst/stan/bilatr_alphanorm.stan",
-  "inst/stan/bilatr_ou.stan",
   "inst/stan/bilatr_alphanorm_ou.stan"
 )
 
