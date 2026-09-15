@@ -23,21 +23,15 @@ real partial_log_lik(array[] int slice_d,
                       array[,] real theta,
                       vector mu_intercept,
                       vector phi,
-                      vector alpha,
-                      vector dyad_weight,
-                      vector period_weight,
-                      vector action_weight) {
+                      vector alpha) {
   real lp = 0;
   for (d in start:end) {
     for (t in 1:T) {
       if (is_obs[d, t] == 1) {
         vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept;
         vector[A] p = softmax(eta);
-        // action_weight rescales concentration per action type
-        vector[A] conc = phi[d] * (action_weight .* p);
-        // dyad_weight/period_weight scale each dyad-period's contribution
-        lp += dyad_weight[d] * period_weight[t] *
-          dirichlet_multinomial_lpmf(Y[d, t] | conc);
+        vector[A] conc = phi[d] * p;
+        lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
       }
     }
   }

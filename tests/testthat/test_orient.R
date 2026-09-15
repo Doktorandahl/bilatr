@@ -272,7 +272,6 @@ test_that("the orientation fold reports alpha[1] > 0 and agreeing alpha/theta fr
   is_obs <- matrix(1L, D, Tn)
   data_list <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
     compute_log_lik = 0
   )
 

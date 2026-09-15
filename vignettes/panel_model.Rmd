@@ -76,34 +76,6 @@ stan_data <- assemble_stan_data(
 stan_data$D # multiple dyads
 ```
 
-Setting `weighted = "all"` instead would additionally downweight
-high-volume dyads/periods and upweight rare action classes, useful when
-a handful of very active dyads would otherwise dominate the likelihood.
-`weighted` also accepts single components or `"-"`-separated
-combinations (e.g. `"dyad"`, `"dyad-period"`) if you only want some of
-the three reweighting schemes computed, leaving the others at 1s:
-
-```{r, eval = FALSE}
-stan_data_weighted <- assemble_stan_data(
-  events,
-  years = 2015:2019,
-  resolution = "yearly",
-  grouping_var = "PentaClass",
-  reference_category = 0,
-  weighted = "all"
-)
-
-# only downweight high-volume dyads, leave period/action weights at 1s
-stan_data_dyad_weighted <- assemble_stan_data(
-  events,
-  years = 2015:2019,
-  resolution = "yearly",
-  grouping_var = "PentaClass",
-  reference_category = 0,
-  weighted = "dyad"
-)
-```
-
 ## 3. Fit
 
 [fit_panel()] checks that `stan_data$D >= 2` and defaults

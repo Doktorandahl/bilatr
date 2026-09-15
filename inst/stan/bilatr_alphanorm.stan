@@ -11,6 +11,18 @@
 // retired to inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan and
 // bilatr_ou_pre_0.4.0.stan respectively -- not this file.
 //
+// 0.4.6: the dyad_weight/period_weight/action_weight likelihood-weighting
+// data fields are retired from this file (and from partial_log_lik() /
+// dyad_period_log_lik() / assemble_stan_data()) -- never used in
+// production, and action_weight in particular made the Dirichlet-
+// multinomial concentration depend on theta, complicating the
+// hand-differentiated forward filter built on top of this likelihood.
+// At unit weights (the only weights ever used) this is an exact,
+// bit-identical no-op; see NEWS.md. The legacy stable_soft_anchor
+// program (inst/stan/legacy/bilatr_stable_soft_anchor.stan) still
+// declares and applies all three, unchanged, since it must keep
+// matching the fits that produced its output.
+//
 // 0.4.2: alpha_raw's sum_to_zero_vector[A] (with only a SOFT sign anchor
 // on alpha[1]) was briefly replaced with a hand-built construction whose
 // first element was positive BY DECLARATION (real<lower=0> alpha_raw_1).
@@ -259,21 +271,15 @@ functions {
                         array[,] real theta,
                         vector mu_intercept,
                         vector phi,
-                        vector alpha,
-                        vector dyad_weight,
-                        vector period_weight,
-                        vector action_weight) {
+                        vector alpha) {
     real lp = 0;
     for (d in start:end) {
       for (t in 1:T) {
         if (is_obs[d, t] == 1) {
           vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept;
           vector[A] p = softmax(eta);
-          // action_weight rescales concentration per action type
-          vector[A] conc = phi[d] * (action_weight .* p);
-          // dyad_weight/period_weight scale each dyad-period's contribution
-          lp += dyad_weight[d] * period_weight[t] *
-            dirichlet_multinomial_lpmf(Y[d, t] | conc);
+          vector[A] conc = phi[d] * p;
+          lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
         }
       }
     }
@@ -291,15 +297,14 @@ functions {
   // three files is lower-risk than extending the sync tooling for it.
   real dyad_period_log_lik(int obs_dt, array[] int y_dt, real theta_dt,
                             int A, vector mu_intercept, real phi_d,
-                            vector alpha, real dyad_weight_d,
-                            real period_weight_t, vector action_weight) {
+                            vector alpha) {
     if (obs_dt == 0) {
       return 0;
     }
     vector[A] eta = alpha .* rep_vector(theta_dt, A) - mu_intercept;
     vector[A] p = softmax(eta);
-    vector[A] conc = phi_d * (action_weight .* p);
-    return dyad_weight_d * period_weight_t * dirichlet_multinomial_lpmf(y_dt | conc);
+    vector[A] conc = phi_d * p;
+    return dirichlet_multinomial_lpmf(y_dt | conc);
   }
 
   // +1/-1 orientation of a draw, from the reference class's sign. Applied
@@ -319,9 +324,6 @@ data {
   int<lower=1> C;                            // reduce_sum grainsize
   array[D, T] int<lower=0, upper=1> is_obs;  // observed indicator
   array[D, T, A] int<lower=0> Y;             // event counts
-  vector<lower=0>[D] dyad_weight;            // per-dyad reweighting, default 1s
-  vector<lower=0>[T] period_weight;          // per-period reweighting, default 1s
-  vector<lower=0>[A] action_weight;          // per-action-type reweighting, default 1s
   int<lower=0, upper=1> compute_log_lik;     // 1 = also compute per-dyad-period
                                               // log_lik in generated quantities
                                               // (D x T x draws; default 0/off)
@@ -404,8 +406,7 @@ model {
   // likelihood, chunked via reduce_sum
   array[D] int dyad_seq = linspaced_int_array(D, 1, D);
   target += reduce_sum(partial_log_lik, dyad_seq, C,
-                        T, A, is_obs, Y, theta, mu_intercept, phi, alpha,
-                        dyad_weight, period_weight, action_weight);
+                        T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
 }
 generated quantities {
   array[compute_log_lik ? D : 0, compute_log_lik ? T : 0] real log_lik;
@@ -414,8 +415,7 @@ generated quantities {
     for (d in 1:D) {
       for (t in 1:T) {
         log_lik[d, t] = dyad_period_log_lik(
-          is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha,
-          dyad_weight[d], period_weight[t], action_weight
+          is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha
         );
       }
     }

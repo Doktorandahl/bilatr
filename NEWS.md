@@ -1,4 +1,41 @@
 
+# bilatr 0.4.6
+
+## Breaking changes
+
+* **Retires the likelihood-weighting scheme** (`dyad_weight`,
+  `period_weight`, `action_weight`) from the `stable`/`ou` Stan programs
+  and from `assemble_stan_data()`. These were never used in production
+  (`weighted = FALSE` throughout every runscript), and two of the three
+  were pure likelihood tempering with no generative interpretation;
+  `action_weight` was different in kind -- it multiplied inside the
+  Dirichlet-multinomial concentration, making the total concentration
+  depend on `theta` and complicating a forward-filter feature planned on
+  top of this likelihood, which hand-differentiates the likelihood in
+  `generated quantities` (no autodiff there).
+* `partial_log_lik()`/`dyad_period_log_lik()` no longer take
+  `dyad_weight`/`period_weight`/`action_weight`; the concentration is now
+  simply `phi[d] * p`. `compute_default_weights()` and
+  `parse_weighted_arg()` are removed. `assemble_stan_data()` no longer
+  returns `dyad_weight`/`period_weight`/`action_weight`, and its
+  `weighted` argument is now defunct: it must be `FALSE` or `"none"`
+  (both accepted as no-ops, matching this project's own SLURM runscripts,
+  which already map their `weighted = "none"` CLI argument to `FALSE`),
+  and errors with a message pointing here for any other value.
+* Verified this is a pure deletion, not a behavior change: at unit
+  weights (the only weights ever used), fitting the pre-0.4.6 `stable`
+  program and the new one on identical data/inits/seed produces
+  **bit-identical** `lp__`, draws, and sampler diagnostics
+  (`identical()`, not merely equal to tolerance).
+* Older `stan_data.rds` files (still carrying the three weight fields)
+  remain usable with the new programs -- CmdStan ignores data fields a
+  program doesn't declare. The legacy `stable_soft_anchor`/
+  `ou_soft_anchor` programs (and the two pre-0.4.0 retirees) are
+  unchanged and still declare/apply all three, so pre-0.4.6 output made
+  under them stays readable; they are reachable only via the dev-only
+  `fit_dyad_ts_dev()`/`fit_panel_dev()`, never via `fit_dyad_ts()`/
+  `fit_panel()`.
+
 # bilatr 0.4.5
 
 ## Changes

@@ -87,9 +87,6 @@ stan_data$T # number of years
 stan_data$A # number of action classes
 ```
 
-Leaving `dyad_weight`/`period_weight`/`action_weight` unset (as above)
-defaults them to vectors of 1s, i.e. the model's base, unweighted form.
-
 ## 3. Fit
 
 [fit_dyad_ts()] checks that `stan_data$D == 1` and fits the model with

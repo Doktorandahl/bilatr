@@ -91,6 +91,18 @@ test_that("every legacy model still runs a short fixed-seed sample (readable, no
   ))
   expect_setequal(legacy_models, c("stable_soft_anchor", "ou_soft_anchor"))
 
+  # assemble_stan_data() no longer supplies dyad_weight/period_weight/
+  # action_weight (retired in 0.4.6, see NEWS.md), but the legacy programs
+  # still declare them -- add unit weights by hand here, since this test's
+  # only job is confirming the retired .stan files still compile/run, not
+  # exercising a real production data-assembly path (none of the current
+  # runscripts fit these models).
+  stan_data <- utils::modifyList(stan_data, list(
+    dyad_weight = rep(1, stan_data$D),
+    period_weight = rep(1, stan_data$T),
+    action_weight = rep(1, stan_data$A)
+  ))
+
   for (name in legacy_models) {
     fit <- suppressWarnings(fit_panel_dev(
       stan_data,
@@ -132,6 +144,15 @@ test_that("fit_panel_dev() reaches sampling with the pre-0.4.0 'alphanorm' alias
     reference_category = 0,
     min_n_events = 1
   )
+  # "alphanorm" resolves to the legacy stable_soft_anchor program, which
+  # still declares dyad_weight/period_weight/action_weight (retired from
+  # assemble_stan_data() in 0.4.6, see NEWS.md) -- add unit weights by
+  # hand, same reasoning as the legacy-model test above.
+  stan_data <- utils::modifyList(stan_data, list(
+    dyad_weight = rep(1, stan_data$D),
+    period_weight = rep(1, stan_data$T),
+    action_weight = rep(1, stan_data$A)
+  ))
 
   .reset_bilatr_alias_messaged()
   fit <- suppressWarnings(suppressMessages(fit_panel_dev(
@@ -203,72 +224,6 @@ test_that(".compile_stan_model() caches compiled models by file + opt_level", {
 
   mod3 <- .compile_stan_model("stable", opt_level = 1, force_recompile = TRUE)
   expect_s3_class(mod3, "CmdStanModel")
-})
-
-test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
-  skip_if_no_cmdstan()
-  skip_on_cran()
-  skip_on_ci()
-
-  set.seed(1)
-  D <- 2
-  Tn <- 3
-  A <- 4
-  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
-  is_obs <- matrix(1L, D, Tn)
-
-  sum0 <- function(x) x - mean(x)
-  params <- list(
-    theta_raw = matrix(stats::rnorm(D * Tn, 0, 0.3), D, Tn),
-    mu_intercept = sum0(stats::rnorm(A, 0, 0.3)),
-    sigma_theta0 = 0.4,
-    z_theta0 = stats::rnorm(D, 0, 0.3),
-    log_process_noise_raw = stats::rnorm(D, 0, 0.3),
-    mu_log_noise = log(0.2),
-    sigma_log_noise = 0.3,
-    phi = c(1.2, 0.9),
-    mu_log_phi = 0.05,
-    sigma_log_phi = 0.4,
-    alpha_raw = sum0(c(2, stats::rnorm(A - 1, 0, 0.3)))
-  )
-
-  mod <- cmdstanr::cmdstan_model(
-    system.file("stan", "bilatr_alphanorm.stan", package = "bilatr"),
-    cpp_options = list(stan_threads = TRUE),
-    compile_model_methods = TRUE,
-    force_recompile = TRUE
-  )
-
-  logprob_at <- function(data, params) {
-    fit <- suppressWarnings(mod$sample(
-      data = data, chains = 1, iter_warmup = 50, iter_sampling = 5,
-      seed = 1, refresh = 0, threads_per_chain = 1,
-      output_dir = tempdir(), show_messages = FALSE
-    ))
-    fit$init_model_methods(verbose = FALSE)
-    up <- fit$unconstrain_variables(variables = params)
-    fit$log_prob(up, jacobian = TRUE)
-  }
-
-  data_1s <- list(
-    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-    compute_log_lik = 0
-  )
-  action_weight <- c(1.3, 0.7, 1.0, 1.5)
-  data_action_weighted <- list(
-    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = action_weight,
-    compute_log_lik = 0
-  )
-
-  lp_base <- logprob_at(data_1s, params)
-  lp_weighted <- logprob_at(data_action_weighted, params)
-
-  # weighting away from 1s must change the density...
-  expect_false(isTRUE(all.equal(lp_base, lp_weighted)))
-  # ...but re-running the same (1s) data must be exactly reproducible
-  expect_equal(lp_base, logprob_at(data_1s, params))
 })
 
 test_that("legacy stable_soft_anchor's soft sign anchor exactly accounts for the log-prob gap between mirror-image parameter states", {

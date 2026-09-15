@@ -13,9 +13,6 @@ assemble_stan_data(
   reference_category = NULL,
   min_n_events = 1,
   weighted = FALSE,
-  dyad_weight = NULL,
-  period_weight = NULL,
-  action_weight = NULL,
   chunk_size = 100,
   rho_prior_a = 8,
   rho_prior_b = 2,
@@ -49,28 +46,17 @@ discrimination (\code{alpha[2:A]}) is freely estimated.}
 
 \item{min_n_events}{Minimum total events for a dyad to be retained.}
 
-\item{weighted}{\code{FALSE} (default), or a single string naming which
-default reweighting scheme(s) to compute via
-\code{\link[=compute_default_weights]{compute_default_weights()}} for any of \code{dyad_weight}/\code{period_weight}/
-\code{action_weight} left as \code{NULL}: \code{"all"} for all three, or a
-\code{"-"}-separated combination of \code{"dyad"}, \code{"period"}, \code{"action"} for
-just those (e.g. \code{"dyad"}, \code{"dyad-period"}, \code{"period-action"}).
-Components not named here, and not requested, still default to 1s.
-\code{weighted = TRUE} is no longer accepted; use \code{weighted = "all"}.}
-
-\item{dyad_weight}{Optional numeric vector of length D (number of
-retained dyads) rescaling each dyad's contribution to the
-likelihood. Defaults to 1s (or computed, if \code{"dyad"} is requested via
-\code{weighted}).}
-
-\item{period_weight}{Optional numeric vector of length T (number of
-time periods) rescaling each period's contribution. Defaults to 1s
-(or computed, if \code{"period"} is requested via \code{weighted}).}
-
-\item{action_weight}{Optional numeric vector of length A (number of
-action classes) rescaling the concentration per action type.
-Defaults to 1s (or computed, if \code{"action"} is requested via
-\code{weighted}).}
+\item{weighted}{Defunct. The \code{dyad_weight}/\code{period_weight}/
+\code{action_weight} likelihood-weighting scheme was removed in 0.4.6 (see
+NEWS.md) -- never used in production, and \code{action_weight} in
+particular made the Dirichlet-multinomial concentration depend on
+\code{theta}, complicating the hand-differentiated forward filter built on
+top of this likelihood. Kept only as a formal so old call sites that
+actually requested weighting fail loudly instead of silently fitting
+an unweighted model: must be \code{FALSE} or \code{"none"} (both accepted as
+the only meaningful values now, matching this project's own SLURM
+runscripts, which map their own \code{weighted = "none"} CLI argument to
+\code{FALSE} before calling this function); any other value errors.}
 
 \item{chunk_size}{\code{reduce_sum} grainsize used to chunk the likelihood
 across dyads. 16 cores with \code{chunk_size = 600} was the
@@ -113,21 +99,15 @@ already the reference/neutral action class supplied via
 \value{
 A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
-\code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{dyad_weight}, \code{period_weight},
-\code{action_weight}, \code{rho_prior_a}, \code{rho_prior_b}, \code{compute_log_lik},
-\code{anchor_scale}. Also carries a \code{dyad_ids} attribute (the output of
-\code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to posterior draws;
-see \code{\link[=extract_theta]{extract_theta()}}.
+\code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{rho_prior_a}, \code{rho_prior_b},
+\code{compute_log_lik}, \code{anchor_scale}. Also carries a \code{dyad_ids} attribute
+(the output of \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to
+posterior draws; see \code{\link[=extract_theta]{extract_theta()}}.
 }
 \description{
 Aggregates CAMEO-coded event data to dyad-period action-class counts
 and packages it as the data list expected by the package's Stan model
-(\code{inst/stan/bilatr_dirmult_irt.stan}). This single function covers all
-three previously-separate model variants (base, event-weighted,
-dyad+period+event-weighted): \code{dyad_weight}, \code{period_weight}, and
-\code{action_weight} default to vectors of 1s (recovering the base,
-unweighted model), can be supplied explicitly, or computed
-automatically per-component via \code{weighted}.
+(\code{inst/stan/bilatr_dirmult_irt.stan}).
 }
 \examples{
 \dontrun{
@@ -145,27 +125,6 @@ stan_data <- assemble_stan_data(
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0
-)
-
-# compute default dyad- and period-level reweighting, but leave
-# action_weight at 1s:
-stan_data_dp <- assemble_stan_data(
-  events,
-  years = 2015:2020,
-  resolution = "yearly",
-  grouping_var = "PentaClass",
-  reference_category = 0,
-  weighted = "dyad-period"
-)
-
-# compute all three default reweighting schemes:
-stan_data_all <- assemble_stan_data(
-  events,
-  years = 2015:2020,
-  resolution = "yearly",
-  grouping_var = "PentaClass",
-  reference_category = 0,
-  weighted = "all"
 )
 }
 }
