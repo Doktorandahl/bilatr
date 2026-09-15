@@ -1,4 +1,18 @@
 
+# bilatr 0.4.5
+
+## Changes
+
+* `EventRootCode3`'s class 7 ("Engage in diplomatic cooperation") now
+  also picks up `019` ("Express accord"), alongside `018`. Previously
+  `019` stayed grouped under root 01 (class 1, "Make a public
+  statement") along with the rest of root 01's codes; it now joins `018`
+  in relocating out of that root, since both behave more like
+  diplomatic cooperation than a neutral statement. `assign_eventrootcode3()`
+  and `eventrootcode3_rootcodes()` (class 7's root-codes string is now
+  `"05, 018, 019"`) are updated accordingly; `EventRootCode2`/
+  `BilatrClass` are unaffected.
+
 # bilatr 0.4.4
 
 ## New features

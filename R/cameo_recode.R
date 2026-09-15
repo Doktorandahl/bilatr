@@ -128,14 +128,15 @@ eventrootcode2_name <- function(class) {
 #'
 #' `EventRootCode3` is a further refinement of [assign_eventrootcode2()],
 #' motivated by wanting a few of its coarser groupings split back out
-#' while relocating two individual codes that behave more like a
-#' different category than their root suggests:
+#' while relocating individual codes that behave more like a different
+#' category than their root suggests:
 #'
 #' \itemize{
 #'   \item `016` ("Deny responsibility") moves out of root 01 into the
 #'     Reject class (with root 12).
-#'   \item `018` ("Make empathetic comment") moves out of root 01 into
-#'     the diplomatic-cooperation class (with root 05).
+#'   \item `018` ("Make empathetic comment") and `019` ("Express accord")
+#'     move out of root 01 into the diplomatic-cooperation class (with
+#'     root 05).
 #'   \item `EventRootCode2`'s `"10"` (roots 09 + 10, "Investigate or
 #'     demand") is split back into Investigate (root 09) and Demand
 #'     (root 10).
@@ -162,6 +163,7 @@ assign_eventrootcode3 <- function(code) {
   dplyr::case_when(
     code == "016" ~ 14L,
     code == "018" ~ 7L,
+    code == "019" ~ 7L,
     root == "01" ~ 1L,
     root == "02" ~ 2L,
     root == "03" ~ 3L,
@@ -243,7 +245,7 @@ eventrootcode3_rootcodes <- function(class) {
     "4"  = "04, 040",
     "5"  = "041, 042, 043, 044",
     "6"  = "045, 046",
-    "7"  = "05, 018",
+    "7"  = "05, 018, 019",
     "8"  = "06",
     "9"  = "07",
     "10" = "08",
@@ -410,8 +412,8 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' codes; `EventRootCode3` / `EventRootCode3Name` /
 #' `EventRootCode3RootCodes` (see [assign_eventrootcode3()],
 #' [eventrootcode3_name()], and [eventrootcode3_rootcodes()]) further
-#' refines `EventRootCode2` by relocating `016`/`018` and splitting its
-#' `"10"` and `"13"` groupings back out; `BilatrClass` / `BilatrClassName`
+#' refines `EventRootCode2` by relocating `016`/`018`/`019` and splitting
+#' its `"10"` and `"13"` groupings back out; `BilatrClass` / `BilatrClassName`
 #' (see [assign_bilatr_class()]) is the 11-level action scheme used as
 #' the model's default; `BilatrClass2` / `BilatrClass2Name` (see
 #' [assign_bilatr_class2()]) is a 9-level coarsening that merges the two

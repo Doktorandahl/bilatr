@@ -26,8 +26,9 @@ into related roots); see \code{\link[=assign_eventrootcode2]{assign_eventrootcod
 \item{EventRootCode2Name}{Character. Human-readable label for
 \code{EventRootCode2}; see \code{\link[=eventrootcode2_name]{eventrootcode2_name()}}.}
 \item{EventRootCode3}{Integer, 1-19. A further refinement of
-\code{EventRootCode2} that relocates \code{016}/\code{018} into the Reject /
-diplomatic-cooperation classes and splits its \code{"10"}
+\code{EventRootCode2} that relocates \code{016} into the Reject class and
+\code{018}/\code{019} into the diplomatic-cooperation class, and splits its
+\code{"10"}
 (investigate/demand) and \code{"13"} (threaten/protest/force-posture)
 groupings back into Investigate + Demand and
 Threaten-or-force-posture + Protest; see

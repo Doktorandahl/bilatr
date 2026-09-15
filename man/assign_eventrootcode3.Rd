@@ -16,15 +16,16 @@ Integer vector of \code{EventRootCode3} values (1-19).
 \description{
 \code{EventRootCode3} is a further refinement of \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}},
 motivated by wanting a few of its coarser groupings split back out
-while relocating two individual codes that behave more like a
-different category than their root suggests:
+while relocating individual codes that behave more like a different
+category than their root suggests:
 }
 \details{
 \itemize{
 \item \code{016} ("Deny responsibility") moves out of root 01 into the
 Reject class (with root 12).
-\item \code{018} ("Make empathetic comment") moves out of root 01 into
-the diplomatic-cooperation class (with root 05).
+\item \code{018} ("Make empathetic comment") and \code{019} ("Express accord")
+move out of root 01 into the diplomatic-cooperation class (with
+root 05).
 \item \code{EventRootCode2}'s \code{"10"} (roots 09 + 10, "Investigate or
 demand") is split back into Investigate (root 09) and Demand
 (root 10).

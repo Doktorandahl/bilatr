@@ -31,8 +31,8 @@ can be useful as a near-neutral reference category. \code{EventRootCode2} /
 codes; \code{EventRootCode3} / \code{EventRootCode3Name} /
 \code{EventRootCode3RootCodes} (see \code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}},
 \code{\link[=eventrootcode3_name]{eventrootcode3_name()}}, and \code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}) further
-refines \code{EventRootCode2} by relocating \code{016}/\code{018} and splitting its
-\code{"10"} and \code{"13"} groupings back out; \code{BilatrClass} / \code{BilatrClassName}
+refines \code{EventRootCode2} by relocating \code{016}/\code{018}/\code{019} and splitting
+its \code{"10"} and \code{"13"} groupings back out; \code{BilatrClass} / \code{BilatrClassName}
 (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action scheme used as
 the model's default; \code{BilatrClass2} / \code{BilatrClass2Name} (see
 \code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}) is a 9-level coarsening that merges the two

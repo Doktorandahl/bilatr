@@ -27,8 +27,9 @@
 #'   \item{EventRootCode2Name}{Character. Human-readable label for
 #'     `EventRootCode2`; see [eventrootcode2_name()].}
 #'   \item{EventRootCode3}{Integer, 1-19. A further refinement of
-#'     `EventRootCode2` that relocates `016`/`018` into the Reject /
-#'     diplomatic-cooperation classes and splits its `"10"`
+#'     `EventRootCode2` that relocates `016` into the Reject class and
+#'     `018`/`019` into the diplomatic-cooperation class, and splits its
+#'     `"10"`
 #'     (investigate/demand) and `"13"` (threaten/protest/force-posture)
 #'     groupings back into Investigate + Demand and
 #'     Threaten-or-force-posture + Protest; see

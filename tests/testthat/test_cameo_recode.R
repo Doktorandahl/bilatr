@@ -54,14 +54,15 @@ test_that("eventrootcode2_name labels every assign_eventrootcode2() output value
   expect_equal(eventrootcode2_name("046"), bilatr_class_name(3L))
 })
 
-test_that("assign_eventrootcode3 relocates 016/018 and splits the 10/13 groupings", {
+test_that("assign_eventrootcode3 relocates 016/018/019 and splits the 10/13 groupings", {
   # most roots still map to the same single class as EventRootCode2
   expect_equal(assign_eventrootcode3(c("01", "0211", "17")), c(1L, 2L, 18L))
   # 016 moves to Reject (with root 12), not root 01
   expect_equal(assign_eventrootcode3("016"), 14L)
   expect_equal(assign_eventrootcode3("12"), 14L)
-  # 018 moves to diplomatic cooperation (with root 05), not root 01
+  # 018/019 move to diplomatic cooperation (with root 05), not root 01
   expect_equal(assign_eventrootcode3("018"), 7L)
+  expect_equal(assign_eventrootcode3("019"), 7L)
   expect_equal(assign_eventrootcode3("05"), 7L)
   # investigate (09) and demand (10) are split apart again
   expect_equal(assign_eventrootcode3(c("09", "093", "10", "100")), c(11L, 11L, 12L, 12L))
@@ -84,6 +85,7 @@ test_that("eventrootcode3_name labels every assign_eventrootcode3() output value
 })
 
 test_that("eventrootcode3_rootcodes lists the codes feeding each class and NAs anything else", {
+  expect_equal(eventrootcode3_rootcodes(7L), "05, 018, 019")
   expect_equal(eventrootcode3_rootcodes(14L), "12, 016")
   expect_equal(eventrootcode3_rootcodes(15L), "13, 15")
   expect_equal(eventrootcode3_rootcodes(5L), "041, 042, 043, 044")
@@ -174,18 +176,19 @@ test_that("recode_cameo also attaches EventRootCode2, BilatrClass, and BilatrCla
 })
 
 test_that("recode_cameo also attaches EventRootCode3 and its name/root-codes columns", {
-  events <- tibble::tibble(EventCode = c("016", "018", "09", "10", "13", "14"))
+  events <- tibble::tibble(EventCode = c("016", "018", "019", "09", "10", "13", "14"))
   out <- recode_cameo(events, code_col = "EventCode")
   expect_true(all(c(
     "EventRootCode3", "EventRootCode3Name", "EventRootCode3RootCodes"
   ) %in% names(out)))
-  expect_equal(out$EventRootCode3, c(14L, 7L, 11L, 12L, 15L, 16L))
+  expect_equal(out$EventRootCode3, c(14L, 7L, 7L, 11L, 12L, 15L, 16L))
   expect_equal(out$EventRootCode3Name, c(
-    "Reject", "Engage in diplomatic cooperation", "Investigate", "Demand",
-    "Threaten or exhibit force posture", "Protest"
+    "Reject", "Engage in diplomatic cooperation", "Engage in diplomatic cooperation",
+    "Investigate", "Demand", "Threaten or exhibit force posture", "Protest"
   ))
   expect_equal(out$EventRootCode3RootCodes[1], "12, 016")
-  expect_equal(out$EventRootCode3RootCodes[5], "13, 15")
+  expect_equal(out$EventRootCode3RootCodes[2], "05, 018, 019")
+  expect_equal(out$EventRootCode3RootCodes[6], "13, 15")
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {
