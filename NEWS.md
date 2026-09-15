@@ -1,4 +1,19 @@
 
+# bilatr 0.4.4
+
+## New features
+
+* Added `EventRootCode3`, a finer alternative to `EventRootCode2`:
+  `016`/`018` are relocated into the Reject/diplomatic-cooperation
+  classes (rather than staying grouped under root 01), and the
+  `"10"`/`"13"` groupings are split back into Investigate + Demand and
+  Threaten-or-exhibit-force-posture + Protest. Classes are numbered
+  1-19. `cameo_lookup`/`recode_cameo()` gain `EventRootCode3`,
+  `EventRootCode3Name`, and `EventRootCode3RootCodes` (the underlying
+  CAMEO root/event codes each class draws from) alongside the new
+  `assign_eventrootcode3()`, `eventrootcode3_name()`, and
+  `eventrootcode3_rootcodes()` helpers.
+
 # bilatr 0.4.3
 
 ## Breaking changes

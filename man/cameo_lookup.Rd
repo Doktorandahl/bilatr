@@ -25,6 +25,18 @@ root codes (root 04 split three ways; roots 09/14/15/18/20 folded
 into related roots); see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}.}
 \item{EventRootCode2Name}{Character. Human-readable label for
 \code{EventRootCode2}; see \code{\link[=eventrootcode2_name]{eventrootcode2_name()}}.}
+\item{EventRootCode3}{Integer, 1-19. A further refinement of
+\code{EventRootCode2} that relocates \code{016}/\code{018} into the Reject /
+diplomatic-cooperation classes and splits its \code{"10"}
+(investigate/demand) and \code{"13"} (threaten/protest/force-posture)
+groupings back into Investigate + Demand and
+Threaten-or-force-posture + Protest; see
+\code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}}.}
+\item{EventRootCode3Name}{Character. Human-readable label for
+\code{EventRootCode3}; see \code{\link[=eventrootcode3_name]{eventrootcode3_name()}}.}
+\item{EventRootCode3RootCodes}{Character. Comma-separated CAMEO
+root/event codes underlying each \code{EventRootCode3} class; see
+\code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}.}
 \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}

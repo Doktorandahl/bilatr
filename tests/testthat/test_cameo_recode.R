@@ -54,6 +54,42 @@ test_that("eventrootcode2_name labels every assign_eventrootcode2() output value
   expect_equal(eventrootcode2_name("046"), bilatr_class_name(3L))
 })
 
+test_that("assign_eventrootcode3 relocates 016/018 and splits the 10/13 groupings", {
+  # most roots still map to the same single class as EventRootCode2
+  expect_equal(assign_eventrootcode3(c("01", "0211", "17")), c(1L, 2L, 18L))
+  # 016 moves to Reject (with root 12), not root 01
+  expect_equal(assign_eventrootcode3("016"), 14L)
+  expect_equal(assign_eventrootcode3("12"), 14L)
+  # 018 moves to diplomatic cooperation (with root 05), not root 01
+  expect_equal(assign_eventrootcode3("018"), 7L)
+  expect_equal(assign_eventrootcode3("05"), 7L)
+  # investigate (09) and demand (10) are split apart again
+  expect_equal(assign_eventrootcode3(c("09", "093", "10", "100")), c(11L, 11L, 12L, 12L))
+  # threaten (13) and exhibit force posture (15) stay merged...
+  expect_equal(assign_eventrootcode3(c("13", "150")), c(15L, 15L))
+  # ...but protest (14) becomes its own class
+  expect_equal(assign_eventrootcode3("141"), 16L)
+  expect_true(is.na(assign_eventrootcode3("99")))
+})
+
+test_that("eventrootcode3_name labels every assign_eventrootcode3() output value and NAs anything else", {
+  expect_equal(eventrootcode3_name(14L), "Reject")
+  expect_equal(eventrootcode3_name(15L), "Threaten or exhibit force posture")
+  expect_equal(eventrootcode3_name(16L), "Protest")
+  expect_true(is.na(eventrootcode3_name(20L)))
+
+  produced <- unique(assign_eventrootcode3(cameo_lookup$CAMEOEVENTCODE))
+  expect_false(any(is.na(eventrootcode3_name(produced))))
+  expect_equal(sort(unique(produced)), 1:19)
+})
+
+test_that("eventrootcode3_rootcodes lists the codes feeding each class and NAs anything else", {
+  expect_equal(eventrootcode3_rootcodes(14L), "12, 016")
+  expect_equal(eventrootcode3_rootcodes(15L), "13, 15")
+  expect_equal(eventrootcode3_rootcodes(5L), "041, 042, 043, 044")
+  expect_true(is.na(eventrootcode3_rootcodes(20L)))
+})
+
 test_that("assign_bilatr_class follows EventRootCode2 with per-code refinements", {
   # regrouped-root defaults
   expect_equal(assign_bilatr_class(c("010", "190", "071", "0862")), c(0L, 10L, 5L, 6L))
@@ -91,6 +127,10 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$PentaClass)))
   expect_false(any(is.na(cameo_lookup$EventRootCode2)))
   expect_false(any(is.na(cameo_lookup$EventRootCode2Name)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode3)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode3Name)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode3RootCodes)))
+  expect_true(all(cameo_lookup$EventRootCode3 %in% 1:19))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
   expect_false(any(is.na(cameo_lookup$BilatrClass2)))
@@ -131,6 +171,21 @@ test_that("recode_cameo also attaches EventRootCode2, BilatrClass, and BilatrCla
   expect_equal(out$BilatrClassName[2], "Assault, fight, or mass violence")
   expect_equal(out$BilatrClass2, c(2L, 8L, 8L, 7L))
   expect_equal(out$BilatrClass2Name[2], "Threaten, coerce, or use force")
+})
+
+test_that("recode_cameo also attaches EventRootCode3 and its name/root-codes columns", {
+  events <- tibble::tibble(EventCode = c("016", "018", "09", "10", "13", "14"))
+  out <- recode_cameo(events, code_col = "EventCode")
+  expect_true(all(c(
+    "EventRootCode3", "EventRootCode3Name", "EventRootCode3RootCodes"
+  ) %in% names(out)))
+  expect_equal(out$EventRootCode3, c(14L, 7L, 11L, 12L, 15L, 16L))
+  expect_equal(out$EventRootCode3Name, c(
+    "Reject", "Engage in diplomatic cooperation", "Investigate", "Demand",
+    "Threaten or exhibit force posture", "Protest"
+  ))
+  expect_equal(out$EventRootCode3RootCodes[1], "12, 016")
+  expect_equal(out$EventRootCode3RootCodes[5], "13, 15")
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {

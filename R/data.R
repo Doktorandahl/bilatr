@@ -26,6 +26,18 @@
 #'     into related roots); see [assign_eventrootcode2()].}
 #'   \item{EventRootCode2Name}{Character. Human-readable label for
 #'     `EventRootCode2`; see [eventrootcode2_name()].}
+#'   \item{EventRootCode3}{Integer, 1-19. A further refinement of
+#'     `EventRootCode2` that relocates `016`/`018` into the Reject /
+#'     diplomatic-cooperation classes and splits its `"10"`
+#'     (investigate/demand) and `"13"` (threaten/protest/force-posture)
+#'     groupings back into Investigate + Demand and
+#'     Threaten-or-force-posture + Protest; see
+#'     [assign_eventrootcode3()].}
+#'   \item{EventRootCode3Name}{Character. Human-readable label for
+#'     `EventRootCode3`; see [eventrootcode3_name()].}
+#'   \item{EventRootCode3RootCodes}{Character. Comma-separated CAMEO
+#'     root/event codes underlying each `EventRootCode3` class; see
+#'     [eventrootcode3_rootcodes()].}
 #'   \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 #'     used as the bilatr model's default grouping; see
 #'     [assign_bilatr_class()].}
