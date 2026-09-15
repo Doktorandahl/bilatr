@@ -152,55 +152,21 @@ test_that("fit_panel_dev() reaches sampling with the pre-0.4.0 'alphanorm' alias
   expect_equal(posterior::ndraws(fit$draws()), 5)
 })
 
-test_that("bilatr_init_fn()'s stable/ou inits pass cmdstanr's init validation", {
+test_that("bilatr_init_fn()'s inits pass cmdstanr's init validation for every registered model", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
   # Specifically verifies what R/fit.R's bilatr_init_fn() assumes but
   # cannot check for itself at the R level: that cmdstanr's `init`
-  # argument accepts alpha_raw_1 (real<lower=0>)/alpha_raw_mid
-  # (vector[A - 2]) as ordinary unconstrained-space values (alpha_raw_1's
-  # positivity is enforced via a log transform, so an ordinary positive
-  # value is accepted directly), and that mu_intercept's
-  # sum_to_zero_vector[A] accepts its length-A CONSTRAINED representation
-  # (a plain rep(0, A)), not the length-(A - 1) unconstrained one. If
-  # cmdstanr instead required the unconstrained form for mu_intercept, or
-  # rejected alpha_raw_1/alpha_raw_mid's shapes, mod$sample(init = ...)
-  # below would error.
-  set.seed(1)
-  D <- 2
-  Tn <- 3
-  A <- 4
-  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
-  is_obs <- matrix(1L, D, Tn)
-  data_list <- list(
-    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-    compute_log_lik = 0, rho_prior_a = 8, rho_prior_b = 2
-  )
-
-  for (name in c("stable", "ou")) {
-    mod <- .compile_stan_model(name, opt_level = 1)
-    init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
-    fit <- suppressWarnings(suppressMessages(mod$sample(
-      data = data_list, chains = 1, iter_warmup = 20, iter_sampling = 5,
-      seed = 1, refresh = 0, threads_per_chain = 1,
-      init = init_fn, output_dir = tempdir(), show_messages = FALSE
-    )))
-    expect_s3_class(fit, "CmdStanMCMC")
-    expect_equal(posterior::ndraws(fit$draws()), 5)
-  }
-})
-
-test_that("bilatr_init_fn()'s legacy stable_soft_anchor/ou_soft_anchor inits still pass cmdstanr's init validation", {
-  skip_if_no_cmdstan()
-  skip_on_cran()
-  skip_on_ci()
-
-  # Same check as above, for the retired programs' free
-  # sum_to_zero_vector[A] alpha_raw (constrained, length-A
-  # representation).
+  # argument accepts alpha_raw's/mu_intercept's sum_to_zero_vector[A] as
+  # their length-A CONSTRAINED representation, not the length-(A - 1)
+  # unconstrained one. If cmdstanr instead required the unconstrained
+  # form, mod$sample(init = ...) below would error. `stable`/`ou` and
+  # their retired `_soft_anchor` counterparts share this exact parameter
+  # shape (they differ only in what the .stan program does with
+  # alpha_raw's sign, not in shape -- see bilatr_init_fn()'s docs), so one
+  # loop covers all four.
   set.seed(1)
   D <- 2
   Tn <- 3
@@ -213,7 +179,7 @@ test_that("bilatr_init_fn()'s legacy stable_soft_anchor/ou_soft_anchor inits sti
     compute_log_lik = 0, anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
   )
 
-  for (name in c("stable_soft_anchor", "ou_soft_anchor")) {
+  for (name in c("stable", "ou", "stable_soft_anchor", "ou_soft_anchor")) {
     mod <- .compile_stan_model(name, opt_level = 1)
     init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
     fit <- suppressWarnings(suppressMessages(mod$sample(
@@ -263,8 +229,7 @@ test_that("weight vectors of 1s recover the unweighted (base) model exactly", {
     phi = c(1.2, 0.9),
     mu_log_phi = 0.05,
     sigma_log_phi = 0.4,
-    alpha_raw_1 = 1.5,
-    alpha_raw_mid = stats::rnorm(A - 2, 0, 0.3)
+    alpha_raw = sum0(c(2, stats::rnorm(A - 1, 0, 0.3)))
   )
 
   mod <- cmdstanr::cmdstan_model(
@@ -311,10 +276,13 @@ test_that("legacy stable_soft_anchor's soft sign anchor exactly accounts for the
   skip_on_cran()
   skip_on_ci()
 
-  # Coverage for the retired program's still-relevant anchor math (this
-  # exact symmetry no longer exists in the current `stable`, which
-  # identifies alpha[1]'s sign by construction instead -- see
-  # inst/stan/bilatr_alphanorm.stan's header).
+  # Coverage for the retired program's still-relevant anchor math: the
+  # current `stable` shares this exact reflection symmetry in its raw
+  # parameters (same free sum_to_zero_vector alpha_raw), but folds the
+  # sign into the REPORTED alpha/theta instead of anchoring it, so this
+  # log-prob-gap mechanism is specific to the legacy soft-anchor program
+  # -- see inst/stan/bilatr_alphanorm.stan's header, "IDENTIFICATION:
+  # ORIENTATION FOLD".
   set.seed(1)
   D <- 2
   Tn <- 3
@@ -467,37 +435,11 @@ test_that("legacy ou_soft_anchor's soft sign anchor exactly accounts for the log
   expect_gt(lp_pos, lp_neg)
 })
 
-test_that("stable/ou's alpha[1] is positive by construction regardless of alpha_raw_1's unconstrained value", {
-  skip_if_no_cmdstan()
-  skip_on_cran()
-  skip_on_ci()
-
-  # The point of the 0.4.2 reparameterization: unlike the legacy
-  # soft-anchor tests above, there is no mirror-image state to compare
-  # against here -- alpha_raw_1's <lower=0> constraint makes alpha[1] > 0
-  # a structural fact, not a fact about relative log-density between two
-  # otherwise-equal-mass states.
-  set.seed(3)
-  D <- 2
-  Tn <- 3
-  A <- 5
-  Y <- array(sample(0:5, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
-  is_obs <- matrix(1L, D, Tn)
-  data_list <- list(
-    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-    compute_log_lik = 0, rho_prior_a = 8, rho_prior_b = 2
-  )
-
-  for (name in c("stable", "ou")) {
-    mod <- .compile_stan_model(name, opt_level = 1)
-    init_fn <- bilatr_init_fn(list(D = D, T = Tn, A = A), stan_model = name)
-    fit <- suppressWarnings(suppressMessages(mod$sample(
-      data = data_list, chains = 2, iter_warmup = 50, iter_sampling = 25,
-      seed = 1, refresh = 0, threads_per_chain = 1,
-      init = init_fn, output_dir = tempdir(), show_messages = FALSE
-    )))
-    alpha1 <- posterior::extract_variable(fit$draws("alpha[1]"), "alpha[1]")
-    expect_true(all(alpha1 > 0))
-  }
-})
+# A rigorous, mechanism-level test of the orientation fold (deliberately
+# opposite alpha_raw inits, pinned so neither chain can adapt out of its
+# basin, asserting large Rhat on the raw parameters as proof the fold --
+# not coincidence -- is doing the work) lives in test_orient.R alongside
+# the analogous legacy wrong-basin test, since both rely on the same
+# pinning trick. See "the orientation fold reports alpha[1] > 0 and
+# agreeing alpha/theta from two chains pinned in opposite alpha_raw
+# basins" there.

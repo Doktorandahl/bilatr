@@ -1,4 +1,55 @@
 
+# bilatr 0.4.3
+
+## Breaking changes
+
+* **Reverts 0.4.2's `alpha[1] > 0` hard constraint** and replaces it with
+  an orientation fold. A production cluster run showed the 0.4.2
+  constraint doesn't work: a hard constraint on `alpha_raw_1` removes one
+  of the two reflection-symmetric modes from the parameter space, but not
+  the likelihood barrier between them, so a chain that would have started
+  (or drifted, during warmup) into the excluded orientation cannot cross
+  to the feasible one -- it slides to the constraint boundary and parks
+  there instead (observed: `alpha[1] = 0.00046`, 5-95% interval
+  `[0.000025, 0.00127]`, wandering on the log scale, `lp__` materially
+  worse than a healthy chain; confirmed to be the mirrored solution
+  projected onto `alpha[1] = 0` and re-fitted around that boundary, not a
+  repairable mirror image). No hard constraint, on any element, can fix
+  this -- a constraint identifies by removing ambiguity, it cannot move a
+  chain across a barrier.
+* The fix changes what is *reported*, not what is *reachable*: `alpha_raw`
+  is a free `sum_to_zero_vector[A]` again (as before 0.4.2), and both
+  `alpha` and `theta` are multiplied by `sign(alpha_raw[1])` in
+  `transformed parameters`. Since the likelihood depends on `alpha`/`theta`
+  only through their elementwise product, this leaves the target
+  completely unchanged (no Jacobian adjustment -- it is not a change of
+  variables, just a canonical relabelling of the output) while making
+  `alpha[1] >= 0` always hold in every REPORTED fit, regardless of which
+  raw-space basin a chain occupies. `anchor_scale`/the soft anchor stay
+  removed, as in 0.4.2.
+* The RAW parameters the fold consumes (`alpha_raw`, `z_theta0`/
+  `mu_dyad_raw`, `theta_raw`) remain genuinely sign-ambiguous themselves
+  -- if two chains land in opposite raw-space basins, those variables'
+  own cross-chain Rhat is meaningless even though everything reported is
+  fine. `diagnose_convergence()`/`diagnose_and_extract_bilatr()` now
+  exclude them from the tiered diagnostics tables entirely (new
+  `.bilatr_sign_ambiguous_raw_names()`, derived from the same source of
+  truth as `.bilatr_flip_variables()` so the two lists cannot drift
+  apart) rather than let a meaningless Rhat surface as a false Tier 1
+  alarm.
+* Verified with a two-chain test giving deliberately opposite `alpha_raw`
+  inits: both chains report `alpha[1] > 0` and agree on `alpha`/`theta`
+  within MCMC error (small Rhat), while `alpha_raw`/`theta_raw` show large
+  Rhat -- confirming the fold, not coincidence, is doing the work. Also
+  re-confirmed (same-data comparison, `stable_soft_anchor` vs. `stable`)
+  that this is a re-parameterization, not a model change: `alpha`/`theta`
+  agree after orienting the legacy fit, `mu_intercept`/`phi`/`sigma_*`
+  agree directly.
+* 0.4.2's own "Breaking changes"/"Changes" entries below otherwise stand:
+  the orientation-retirement (`bilatr_orient()` deprecation), benchmark
+  Pss correction, and worker/chunk trade-off reporting are unaffected by
+  this reversion.
+
 # bilatr 0.4.2
 
 ## Breaking changes

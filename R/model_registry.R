@@ -16,25 +16,30 @@
   stable = list(
     file = "bilatr_alphanorm.stan",
     description = paste(
-      "Since 0.4.2 (see NEWS.md): identifies alpha[1]'s sign BY",
-      "CONSTRUCTION (alpha_raw built from a real<lower=0> alpha_raw_1 plus",
-      "free middle elements, not a free sum_to_zero_vector), removing the",
-      "alpha/theta reflection symmetry entirely rather than reweighting",
-      "its two halves with a soft anchor. Also hard-pins location (no",
-      "mu_theta0) and normalizes alpha's RMS to 1. positive alpha[1]",
-      "means better relations, for every fit made under this program (no",
-      "post-hoc orientation needed). process_noise's prior is a ratio to",
-      "sigma_theta0, not an absolute theta-unit quantity -- see the .stan",
-      "file's header comment."
+      "Since 0.4.2b (see NEWS.md): identifies alpha[1]'s sign via an",
+      "ORIENTATION FOLD -- alpha_raw is a free sum_to_zero_vector (as",
+      "before 0.4.2), but alpha and theta are both multiplied by",
+      "sign(alpha_raw[1]) in transformed parameters, so alpha[1] >= 0",
+      "always in the REPORTED draws regardless of which raw-space basin a",
+      "chain occupies (a 0.4.2 hard-positivity constraint on alpha_raw",
+      "tried this first and failed on the cluster -- see NEWS.md and the",
+      ".stan file's header). Also hard-pins location (no mu_theta0) and",
+      "normalizes alpha's RMS to 1. positive alpha[1] means better",
+      "relations, for every fit made under this program (no post-hoc",
+      "orientation needed for alpha/theta; the raw alpha_raw/z_theta0/",
+      "theta_raw remain sign-ambiguous and are excluded from tiered",
+      "diagnostics -- see R/diagnose_convergence.R). process_noise's",
+      "prior is a ratio to sigma_theta0, not an absolute theta-unit",
+      "quantity -- see the .stan file's header comment."
     ),
     status = "stable"
   ),
   ou = list(
     file = "bilatr_alphanorm_ou.stan",
     description = paste(
-      "Since 0.4.2 (see NEWS.md): combines stable's identification (hard",
-      "location pin, RMS-1 alpha normalization, alpha[1] > 0 by",
-      "construction) with an OU/AR(1) theta process (dyad-specific",
+      "Since 0.4.2b (see NEWS.md): combines stable's identification (hard",
+      "location pin, RMS-1 alpha normalization, alpha[1] >= 0 via the",
+      "orientation fold) with an OU/AR(1) theta process (dyad-specific",
       "equilibria `mu_dyad` and a global persistence `rho`), giving",
       "cross-dyad ordering a restoring force in place of stable's",
       "random-walk theta. sd_stat is relative to sigma_mu, so",
@@ -71,10 +76,10 @@
       "through 0.4.1, promoted from the experimental `alphanorm_ou`",
       "variant. Same OU/AR(1) dynamics as the current `ou`, but shares",
       "stable_soft_anchor's free sum_to_zero_vector alpha_raw and soft",
-      "alpha[1] sign anchor rather than the current program's",
-      "hard-positivity construction -- see `stable_soft_anchor`'s",
-      "description for the consequence. Retained only to read/re-derive",
-      "fits made before 0.4.2."
+      "alpha[1] sign anchor rather than the current program's orientation",
+      "fold -- see `stable_soft_anchor`'s description for the",
+      "consequence. Retained only to read/re-derive fits made before",
+      "0.4.2."
     ),
     status = "legacy"
   )
@@ -99,12 +104,23 @@
 #     bilatr_ou_pre_0.4.0.stan.
 #   - 0.4.2: `stable`/`ou`'s free sum_to_zero_vector alpha_raw (with a
 #     soft sign anchor on alpha[1]) replaced with a hard-positivity
-#     construction that removes the alpha/theta reflection symmetry
-#     entirely (see NEWS.md and each current .stan file's header,
-#     "IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION"). The retired
+#     constraint (real<lower=0> alpha_raw_1) intended to remove the
+#     alpha/theta reflection symmetry entirely. A production cluster run
+#     falsified this: the constraint removes one mode from the parameter
+#     space but not the likelihood barrier between the two, so a chain
+#     that would have landed in the excluded mode instead slides to the
+#     constraint boundary and parks there (see NEWS.md and each .stan
+#     file's header for the numbers). Reverted in 0.4.2b.
+#   - 0.4.2b: `stable`/`ou`'s alpha_raw is back to a free
+#     sum_to_zero_vector (as it was pre-0.4.2), and alpha[1]'s sign is
+#     instead identified via an ORIENTATION FOLD: alpha and theta are
+#     both multiplied by sign(alpha_raw[1]) in transformed parameters, so
+#     alpha[1] >= 0 always in the REPORTED draws without excluding any
+#     region of the parameter space (see NEWS.md and each current .stan
+#     file's header, "IDENTIFICATION: ORIENTATION FOLD"). The retired
 #     soft-anchor programs are registered above as `stable_soft_anchor`/
 #     `ou_soft_anchor` (status = "legacy") so runs made under them stay
-#     readable; fits made under the new `stable`/`ou` are NOT
+#     readable; fits made under the current `stable`/`ou` are NOT
 #     parameter-comparable to fits made under the retired ones.
 
 .BILATR_DEFAULT_MODEL <- "stable"

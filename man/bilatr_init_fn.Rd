@@ -18,10 +18,12 @@ argument.
 \description{
 Initial values are model-specific: \code{stan_model} selects among the
 registered models' distinct parameter sets (a non-centered
-\code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy,
-\verb{alpha_raw_1 <lower=0>} vs. legacy \code{sum_to_zero_vector} alpha
-normalization, etc.). Unrecognised names are rejected upstream by
-\code{\link[=.resolve_stan_model]{.resolve_stan_model()}}, so the \code{stop()} below should be unreachable in
-practice.
+\code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy, etc.);
+\code{stable}/\code{stable_soft_anchor} (and \code{ou}/\code{ou_soft_anchor}) share an
+identical parameter set and so share one \code{switch()} branch each --
+they differ only in what the \code{.stan} program does with \code{alpha_raw}'s
+sign once sampled (see \code{\link[=.alpha_raw_sum0_init]{.alpha_raw_sum0_init()}}), not in shape.
+Unrecognised names are rejected upstream by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}},
+so the \code{stop()} below should be unreachable in practice.
 }
 \keyword{internal}

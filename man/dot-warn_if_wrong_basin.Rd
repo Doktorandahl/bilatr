@@ -19,10 +19,11 @@ Since 0.4.2, only the retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
 have a reflection symmetry a chain's init can land on either side of
 (see \code{R/orient.R}); decided via \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} (not a
 literal name list here) so this and \code{bilatr_orient()} never disagree
-about which models need it. The current \code{stable}/\code{ou} build \code{alpha[1]}
-to be positive by construction (see each \code{.stan} file's header,
-\verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}) and are a no-op here,
-with no \code{fit$draws()} call at all. For models that still have the
+about which models need it. The current \code{stable}/\code{ou} fold \code{alpha[1]}'s
+sign into the REPORTED \code{alpha}/\code{theta} instead (see each \code{.stan}
+file's header, "IDENTIFICATION: ORIENTATION FOLD"), so there is no
+wrong basin left for a caller to land in -- this function is a no-op
+for them, with no \code{fit$draws()} call at all. For models that still have the
 symmetry, with single-chain runs (this project's SLURM submission
 convention -- see \code{runscripts/submit_bilatr_runs.R}) there is no
 cross-chain Rhat or other diagnostic that would otherwise surface a

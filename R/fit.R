@@ -71,41 +71,37 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
   .compile_stan_model(.BILATR_DEFAULT_MODEL, opt_level, force_recompile)
 }
 
-#' A sign-biased sum-to-zero init draw for the legacy `stable_soft_anchor`/
-#' `ou_soft_anchor` programs' `alpha_raw`
+#' A sign-biased sum-to-zero init draw for `sum_to_zero_vector[A]` alpha
+#' parameters
 #'
-#' Legacy-only since 0.4.2: `stable`/`ou` build `alpha_raw` from a
-#' `real<lower=0> alpha_raw_1` and no longer need this (see each
-#' `.stan` file's header, `IDENTIFICATION: alpha[1] > 0 BY
-#' CONSTRUCTION`). `stable_soft_anchor`/`ou_soft_anchor` still declare
-#' `alpha_raw` as a free `sum_to_zero_vector[A]`, normalized by
-#' `sqrt(A / dot_self(alpha_raw))`, so an all-zero init (otherwise the
-#' natural default) would divide by zero; this draws a random vector
-#' instead, centered to sum to exactly 0 (required by
+#' Every registered model's `alpha_raw` is a free `sum_to_zero_vector[A]`,
+#' normalized by `sqrt(A / dot_self(alpha_raw))`, so an all-zero init
+#' (otherwise the natural default) would divide by zero; this draws a
+#' random vector instead, centered to sum to exactly 0 (required by
 #' `sum_to_zero_vector`'s constrained representation) and away from the
 #' `dot_self(alpha_raw) == 0` degeneracy.
 #'
-#' Those two programs also anchor `alpha[1]`'s sign with a soft penalty
-#' in the model block (breaking an exact reflection symmetry: alpha,
-#' theta -> -alpha, -theta leaves the likelihood, every prior, and the
-#' `sum_to_zero_vector` Jacobian unchanged), but that penalty only makes
-#' the TARGET correctly specified -- it does not, by itself, make a
-#' chain visit the `alpha[1] > 0` basin, since the two basins are
-#' separated by a likelihood barrier of thousands of nats that a chain
-#' essentially never crosses during warmup. This negates the whole draw
-#' whenever its first element came out negative, so chains START already
-#' in the anchored basin instead of relying on warmup to find it. This is
-#' a bias, not a guarantee for every init/data/seed combination -- see
-#' `bilatr_orient()` (`R/orient.R`) for the deterministic, always-correct
-#' fallback that relabels draws after the fact regardless of which basin
-#' a chain actually landed in, and `.warn_if_wrong_basin()` below for the
-#' automatic post-sampling check that flags it when this bias didn't work.
+#' `stable`/`ou` also fold `alpha_raw[1]`'s sign into the REPORTED
+#' `alpha`/`theta` (`orientation_sign()`, each `.stan` file's header,
+#' "IDENTIFICATION: ORIENTATION FOLD"), which makes the reported
+#' quantities correct regardless of which raw-space basin a chain
+#' occupies -- so, for those two models, this function's sign bias below
+#' is a nicety, not a correctness requirement: it just means a chain's
+#' RAW parameters (`alpha_raw` itself, and the theta-side raws that share
+#' its sign) usually won't label-switch either, keeping their own
+#' diagnostics interpretable more often (though never guaranteed; see
+#' `R/diagnose_convergence.R`'s exclusion of those raw names from the
+#' tiered diagnostics, which is what actually protects a caller when this
+#' bias doesn't hold). The retired `stable_soft_anchor`/`ou_soft_anchor`
+#' programs have no fold, so for THEM this bias is what
+#' `.warn_if_wrong_basin()` below and `bilatr_orient()` (`R/orient.R`)
+#' exist to catch/repair when it fails.
 #'
 #' @param A Number of action types.
 #' @return A length-`A` numeric vector summing to exactly 0, with its
 #'   first element positive.
 #' @keywords internal
-.legacy_alpha_raw_sum0_init <- function(A) {
+.alpha_raw_sum0_init <- function(A) {
   v <- stats::rnorm(A, 0, 0.5)
   v <- v - mean(v)
   if (v[1] < 0) {
@@ -118,11 +114,13 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #'
 #' Initial values are model-specific: `stan_model` selects among the
 #' registered models' distinct parameter sets (a non-centered
-#' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy,
-#' `alpha_raw_1 <lower=0>` vs. legacy `sum_to_zero_vector` alpha
-#' normalization, etc.). Unrecognised names are rejected upstream by
-#' [.resolve_stan_model()], so the `stop()` below should be unreachable in
-#' practice.
+#' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy, etc.);
+#' `stable`/`stable_soft_anchor` (and `ou`/`ou_soft_anchor`) share an
+#' identical parameter set and so share one `switch()` branch each --
+#' they differ only in what the `.stan` program does with `alpha_raw`'s
+#' sign once sampled (see [.alpha_raw_sum0_init()]), not in shape.
+#' Unrecognised names are rejected upstream by [.resolve_stan_model()],
+#' so the `stop()` below should be unreachable in practice.
 #'
 #' @param stan_data A Stan data list as returned by [assemble_stan_data()].
 #' @param stan_model Name registered in `.bilatr_stan_models`.
@@ -134,51 +132,18 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   Tn <- stan_data$T
   A <- stan_data$A
 
-  # alpha_raw_1 > 0 by construction (no sign to bias); alpha_raw_mid is
-  # unconstrained. abs(rnorm()) + 0.1 keeps alpha_raw_1 comfortably away
-  # from its lower bound rather than initializing near it.
-  alpha_raw_1_init <- abs(stats::rnorm(1, 0, 0.5)) + 0.1
-  alpha_raw_mid_init <- stats::rnorm(A - 2, 0, 0.5)
-
   init_list <- switch(
     stan_model,
-    stable = list(
-      theta_raw = matrix(0, D, Tn),
-      mu_intercept = rep(0, A),
-      alpha_raw_1 = alpha_raw_1_init,
-      alpha_raw_mid = alpha_raw_mid_init,
-      sigma_theta0 = 0.5,
-      # real initial spread, not near 0: keeps theta away from the region
-      # where the likelihood is nearly flat in alpha's direction
-      z_theta0 = stats::rnorm(D, 0, 0.5),
-      log_process_noise_raw = rep(0, D),
-      mu_log_noise = log(0.2),
-      sigma_log_noise = 0.3,
-      phi = rep(1, D),
-      mu_log_phi = 0,
-      sigma_log_phi = 0.5
-    ),
-    ou = list(
-      theta_raw = matrix(0, D, Tn),
-      mu_intercept = rep(0, A),
-      alpha_raw_1 = alpha_raw_1_init,
-      alpha_raw_mid = alpha_raw_mid_init,
-      sigma_mu = 0.5,
-      # real initial spread, not near 0 -- see the stable branch above
-      mu_dyad_raw = stats::rnorm(D, 0, 0.5),
-      rho = 0.8,
-      mu_log_sd_stat = log(1),
-      sigma_log_sd_stat = 0.3,
-      log_sd_stat_raw = rep(0, D),
-      phi = rep(1, D),
-      mu_log_phi = 0,
-      sigma_log_phi = 0.5
-    ),
+    stable = ,
     stable_soft_anchor = list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
-      alpha_raw = .legacy_alpha_raw_sum0_init(A),
+      alpha_raw = .alpha_raw_sum0_init(A),
       sigma_theta0 = 0.5,
+      # real initial spread, not near 0: with theta near 0 the likelihood
+      # is nearly flat in alpha's direction, leaving an early-warmup
+      # window in which alpha could still rotate before the data locks
+      # the orientation in
       z_theta0 = stats::rnorm(D, 0, 0.5),
       log_process_noise_raw = rep(0, D),
       mu_log_noise = log(0.2),
@@ -187,11 +152,13 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       mu_log_phi = 0,
       sigma_log_phi = 0.5
     ),
+    ou = ,
     ou_soft_anchor = list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
-      alpha_raw = .legacy_alpha_raw_sum0_init(A),
+      alpha_raw = .alpha_raw_sum0_init(A),
       sigma_mu = 0.5,
+      # real initial spread, not near 0 -- see the stable branch above
       mu_dyad_raw = stats::rnorm(D, 0, 0.5),
       rho = 0.8,
       mu_log_sd_stat = log(1),
@@ -219,10 +186,11 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 #' have a reflection symmetry a chain's init can land on either side of
 #' (see `R/orient.R`); decided via [.bilatr_flip_variables()] (not a
 #' literal name list here) so this and `bilatr_orient()` never disagree
-#' about which models need it. The current `stable`/`ou` build `alpha[1]`
-#' to be positive by construction (see each `.stan` file's header,
-#' `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`) and are a no-op here,
-#' with no `fit$draws()` call at all. For models that still have the
+#' about which models need it. The current `stable`/`ou` fold `alpha[1]`'s
+#' sign into the REPORTED `alpha`/`theta` instead (see each `.stan`
+#' file's header, "IDENTIFICATION: ORIENTATION FOLD"), so there is no
+#' wrong basin left for a caller to land in -- this function is a no-op
+#' for them, with no `fit$draws()` call at all. For models that still have the
 #' symmetry, with single-chain runs (this project's SLURM submission
 #' convention -- see `runscripts/submit_bilatr_runs.R`) there is no
 #' cross-chain Rhat or other diagnostic that would otherwise surface a

@@ -18,14 +18,17 @@ Character vector of variable base names (matched against
 \code{posterior} draws column names via \code{.bilatr_match_draws_columns()}).
 }
 \description{
-\code{character(0)} for \code{stable}/\code{ou} (0.4.2+): those programs build
-\code{alpha[1]} to be positive by construction (see each \code{.stan} file's
-header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), which removes
-the reflection symmetry entirely rather than leaving something to
-correct after the fact. Only the retired \code{stable_soft_anchor}/
-\code{ou_soft_anchor} programs (registered \code{status = "legacy"}; what
-\code{stable}/\code{ou} were named 0.4.0-0.4.1) still have one, since their free
-\code{sum_to_zero_vector} alpha with only a soft sign anchor cannot
-guarantee a chain lands in the \code{alpha[1] > 0} basin.
+\code{character(0)} for \code{stable}/\code{ou} (0.4.2b+): those programs fold
+\code{alpha[1]}'s sign into the REPORTED \code{alpha}/\code{theta} (each \code{.stan}
+file's header, "IDENTIFICATION: ORIENTATION FOLD"), so nothing is left
+for post-hoc relabelling to do to the reported quantities -- see
+\code{\link[=.bilatr_sign_tied_names]{.bilatr_sign_tied_names()}} for why their RAW parameters are still
+sign-ambiguous regardless (handled separately, in
+\code{R/diagnose_convergence.R}, not here). Only the retired
+\code{stable_soft_anchor}/\code{ou_soft_anchor} programs (registered
+\code{status = "legacy"}; what \code{stable}/\code{ou} were named 0.4.0-0.4.1) still
+need \code{bilatr_orient()}, since their free \code{sum_to_zero_vector} alpha
+with only a soft sign anchor cannot guarantee a chain lands in the
+\code{alpha[1] > 0} basin, and nothing folds the sign for them.
 }
 \keyword{internal}

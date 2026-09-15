@@ -48,15 +48,20 @@ test_that(".classify_bilatr_tier assigns Tier 1 by fixed name, regardless of ind
   expect_true(all(is.na(out$dyad_id)))
 })
 
-test_that(".classify_bilatr_tier assigns Tier 2 to single-index, non-Tier-1 parameters", {
-  out <- .classify_bilatr_tier(c("phi[3]", "process_noise[1]", "theta0[2]", "z_theta0[5]"))
-  expect_equal(out$tier, rep(2L, 4))
-  expect_equal(out$dyad_id, c(3L, 1L, 2L, 5L))
+test_that(".classify_bilatr_tier assigns Tier 2 to single-index, non-Tier-1, non-sign-ambiguous parameters", {
+  # z_theta0 is excluded from this set on purpose (see the dedicated
+  # sign-ambiguous-exclusion test below) -- it's sign-ambiguous under the
+  # alpha/theta reflection symmetry, not an ordinary Tier 2 parameter.
+  out <- .classify_bilatr_tier(c("phi[3]", "process_noise[1]", "theta0[2]"))
+  expect_equal(out$tier, rep(2L, 3))
+  expect_equal(out$dyad_id, c(3L, 1L, 2L))
   expect_true(all(is.na(out$time_index)))
 })
 
-test_that(".classify_bilatr_tier assigns Tier 3 to double-index parameters", {
-  out <- .classify_bilatr_tier(c("theta[3,12]", "theta_raw[2,1]"))
+test_that(".classify_bilatr_tier assigns Tier 3 to double-index, non-sign-ambiguous parameters", {
+  # theta_raw is excluded from this set on purpose -- see the dedicated
+  # sign-ambiguous-exclusion test below.
+  out <- .classify_bilatr_tier(c("theta[3,12]", "log_lik[2,1]"))
   expect_equal(out$tier, c(3L, 3L))
   expect_equal(out$dyad_id, c(3L, 2L))
   expect_equal(out$time_index, c(12L, 1L))
@@ -77,12 +82,30 @@ test_that(".classify_bilatr_tier classifies phi structurally by index shape", {
 })
 
 test_that(".classify_bilatr_tier keeps bracketed non-centered globals in Tier 1, not Tier 2", {
-  # alpha_raw[i] / mu_intercept_raw[i] are single-indexed by *action type*,
-  # not dyad -- the structural single-index rule alone would wrongly route
-  # them into Tier 2's dyad join, so they must be caught by name first.
-  out <- .classify_bilatr_tier(c("alpha_raw[1]", "mu_intercept_raw[2]"))
+  # mu_intercept_raw[i] is single-indexed by *action type*, not dyad --
+  # the structural single-index rule alone would wrongly route it into
+  # Tier 2's dyad join, so it must be caught by name first. alpha_raw[i]
+  # is ALSO single-indexed by action type, but is excluded entirely
+  # rather than kept in Tier 1 -- see the dedicated sign-ambiguous test
+  # below, and .bilatr_tier1_names's docs for why it isn't in this list.
+  out <- .classify_bilatr_tier(c("mu_intercept_raw[2]", "mu_theta0"))
   expect_equal(out$tier, c(1L, 1L))
   expect_true(all(is.na(out$dyad_id)))
+})
+
+test_that(".classify_bilatr_tier excludes sign-ambiguous raw parameters entirely (tier = NA), not just from Tier 1/2", {
+  # alpha_raw/theta_raw/z_theta0/mu_dyad_raw are sign-ambiguous under the
+  # alpha/theta reflection symmetry regardless of whether something
+  # downstream (the orientation fold, for stable/ou) corrects the
+  # REPORTED quantities built from them -- see
+  # .bilatr_sign_ambiguous_raw_names()'s docs. tier = NA excludes them
+  # from every downstream tier table via the tier %in% c(1,2,3) filters
+  # used throughout this file, rather than surfacing their meaningless
+  # cross-chain Rhat as a false convergence alarm.
+  out <- .classify_bilatr_tier(c(
+    "alpha_raw[1]", "z_theta0[3]", "mu_dyad_raw[3]", "theta_raw[1,1]"
+  ))
+  expect_true(all(is.na(out$tier)))
 })
 
 test_that(".classify_bilatr_tier folds unclassified scalars into Tier 1 rather than dropping them", {
@@ -489,8 +512,11 @@ test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requeste
   # the read really was narrowed to Tier 1's own variable set (derived
   # from $metadata()$variables, never touching a draw) rather than
   # reading everything and subsetting after
-  tier1_vars <- .classify_bilatr_tier(fx$fit$metadata()$variables)$variable
-  tier1_vars <- tier1_vars[.classify_bilatr_tier(fx$fit$metadata()$variables)$tier == 1L]
+  # `%in%` (not `==`), since `tier` can be `NA` for sign-ambiguous raw
+  # parameters (excluded from every tier) -- `==` against `NA` yields
+  # `NA`, not `FALSE`, and would inject `NA` into the variable-name subset
+  var_tiers_meta <- .classify_bilatr_tier(fx$fit$metadata()$variables)
+  tier1_vars <- var_tiers_meta$variable[var_tiers_meta$tier %in% 1L]
   expect_setequal(diag_tier1_only$tier1$variable, tier1_vars)
 })
 

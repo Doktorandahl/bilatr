@@ -12,13 +12,24 @@
 // bilatr_ou_pre_0.4.0.stan respectively -- not this file.
 //
 // 0.4.2: alpha_raw's sum_to_zero_vector[A] (with only a SOFT sign anchor
-// on alpha[1], described in this file's history below and now removed)
-// replaced with a hand-built sum-to-zero construction whose first
-// element is positive BY DECLARATION -- see "IDENTIFICATION: alpha[1] > 0
-// BY CONSTRUCTION" below. The soft-anchor version of this file (with its
-// `anchor_scale` data field) is retired to
+// on alpha[1]) was briefly replaced with a hand-built construction whose
+// first element was positive BY DECLARATION (real<lower=0> alpha_raw_1).
+// A production cluster run falsified that approach: a hard constraint
+// removes one of the two reflection-symmetric modes from the parameter
+// space, but not the likelihood barrier between them, so a chain that
+// starts in the excluded orientation cannot cross to the feasible one --
+// it slides to the constraint boundary and parks there instead (observed:
+// alpha_raw_1 = 0.00046, 5-95% interval [0.000025, 0.00127], wandering on
+// the log scale, lp__ materially worse than a healthy chain; confirmed to
+// be the mirrored solution projected onto alpha[1] = 0 and re-fitted
+// around that boundary, not a repairable mirror image -- correlation
+// 0.994 with the healthy chain's negation, but NOT identical to it). See
+// "IDENTIFICATION: ORIENTATION FOLD" below for what replaced it (0.4.2b)
+// and why no hard constraint of any kind can work here. The soft-anchor
+// version of this file (with its `anchor_scale` data field, the version
+// before EITHER of these) is retired to
 // inst/stan/legacy/bilatr_stable_soft_anchor.stan, registered as
-// `stable_soft_anchor` -- fits fully re-run under this file are not
+// `stable_soft_anchor` -- fits made under this file are not
 // parameter-comparable to fits made under that one (see NEWS.md).
 //
 // Motivation: the model this replaced (retired to
@@ -133,87 +144,91 @@
 // `"2"`), so no separate index needs to be threaded through as new
 // data -- `alpha[1]` already IS the anchor position.
 //
-// IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION (0.4.2). eta = alpha .*
-// theta - mu_intercept is invariant under the JOINT negation
-// alpha -> -alpha, theta -> -theta (i.e. theta0 -> -theta0, z_theta0 ->
-// -z_theta0, and theta_raw -> -theta_raw at every t), because alpha .*
-// theta is a product of two negations while mu_intercept is untouched.
-// Under a free sum_to_zero_vector[A] alpha_raw (this file's previous
-// parameterization -- see inst/stan/legacy/bilatr_stable_soft_anchor.stan,
-// registered as `stable_soft_anchor`), every prior on the flipped
-// quantities is symmetric about 0, so the two mirror modes carry exactly
-// equal posterior mass; that soft-anchor version's `target +=
-// log_inv_logit(alpha[1] * inv(anchor_scale))` only reweighted that mass,
-// and could not move a chain across the likelihood barrier (thousands of
-// nats) separating the two modes once warmup had landed it in one --
-// whichever basin a chain's init happened to land in is the one it
-// reported, making cross-chain Rhat on alpha/theta uninterpretable for
-// independently-initialized chains. See that file's header for the full
-// history of this problem and the soft-anchor mechanism it used.
+// IDENTIFICATION: ORIENTATION FOLD (0.4.2b). eta = alpha .* theta -
+// mu_intercept is invariant under the JOINT negation alpha -> -alpha,
+// theta -> -theta (i.e. theta0 -> -theta0, z_theta0 -> -z_theta0, and
+// theta_raw -> -theta_raw at every t), because alpha .* theta is a
+// product of two negations while mu_intercept is untouched. With a free
+// sum_to_zero_vector[A] alpha_raw, every prior on the flipped quantities
+// is symmetric about 0, so the two mirror modes carry exactly equal
+// posterior mass, and whichever one a chain's init happens to land in is
+// the one it reports -- making cross-chain Rhat on alpha/theta
+// uninterpretable for independently-initialized chains. That is the
+// actual problem; two different fixes for it have been tried and
+// rejected before this one (both recorded here so neither is tried
+// again):
+//   - a SOFT sign anchor (target += log_inv_logit(alpha[1] *
+//     inv(anchor_scale)), the pre-0.4.2 approach, retired to
+//     inst/stan/legacy/bilatr_stable_soft_anchor.stan / registered as
+//     `stable_soft_anchor`): makes the target correctly specified but
+//     cannot move a chain across the likelihood barrier (thousands of
+//     nats) separating the two modes once warmup has landed it in one.
+//   - a HARD constraint (real<lower=0> alpha_raw_1, the 0.4.2 approach,
+//     briefly shipped and reverted): removes one mode from the parameter
+//     space entirely, but not the barrier -- a chain that would have
+//     landed in the excluded mode instead slides to the constraint
+//     boundary and parks there (see the top-of-file note above for the
+//     cluster numbers). A constraint identifies by removing ambiguity;
+//     it cannot move a chain across a barrier. Constraining a different
+//     element, the largest-magnitude element, or strengthening the soft
+//     anchor all have the identical failure mode -- they only relocate
+//     where a trapped chain parks, they do not free it. Do not try any
+//     of them.
 //
-// This version removes the symmetry itself rather than reweighting its
-// two halves: alpha_raw is built by hand from a positive first element
-// plus free middle elements, with the last element absorbing whatever
-// balances the sum to exactly 0 --
-//   real<lower=0> alpha_raw_1;
-//   vector[A - 2] alpha_raw_mid;
-//   vector[A] alpha_raw = append_row(
-//     alpha_raw_1,
-//     append_row(alpha_raw_mid, -(alpha_raw_1 + sum(alpha_raw_mid)))
-//   );
-// (append_row(), not slice assignment into alpha_raw[2:(A-1)], so A == 2
-// -- an empty alpha_raw_mid -- doesn't hit an invalid range). alpha[1] > 0
-// always, inherited directly from alpha_raw_1 > 0 (the RMS normalization
-// below only rescales by a positive factor), so there is no longer a
-// reflection to break: every chain identifies the same mode, cross-chain
-// Rhat on alpha/theta is meaningful again, and no post-hoc relabeling
-// (bilatr_orient(), R/orient.R -- legacy-only since 0.4.2) is needed for
-// fits made under this file. The prior, `alpha_raw ~ std_normal()`, is
-// put on this CONSTRUCTED alpha_raw, not on (alpha_raw_1, alpha_raw_mid)
-// directly: the map from the free parameters to alpha_raw is linear with
-// a constant Jacobian, so this reproduces exactly the density
-// sum_to_zero_vector + std_normal() gave on the sum-to-zero hyperplane --
-// putting std_normal() on the free parameters instead would give the
-// last class (which absorbs their sum) a prior scale of sqrt(A - 1),
-// breaking exchangeability across action classes. The
-// dot_self(alpha_raw) == 0 degeneracy that .alpha_raw_sum0_init() existed
-// to avoid (R/fit.R) is now structurally impossible, since alpha_raw_1 is
-// strictly positive.
+// The fix that actually works changes what is REPORTED, not what is
+// REACHABLE. Let s = sign(alpha_raw[1]) (see orientation_sign(), in the
+// functions block above) and multiply BOTH alpha and theta by it.
+// Because the likelihood depends on those two only through the
+// elementwise product alpha .* theta, and both flip together, the
+// likelihood is completely unchanged -- so a chain in EITHER raw-space
+// basin reports identical alpha and theta, with alpha[1] >= 0 always. No
+// barrier needs crossing, no region is excluded, nothing is truncated.
+// Two properties matter, and must survive any future edit to this file:
+//   - The target stays smooth. The discontinuity is in the reported
+//     transformed parameters, not in the density HMC differentiates.
+//     Crossing alpha_raw[1] = 0 flips s, alpha and theta simultaneously,
+//     leaving alpha .* theta -- and hence every term of the likelihood --
+//     continuous and differentiable; the priors are on the raw
+//     parameters (alpha_raw, z_theta0, theta_raw) and are untouched by
+//     s. There is no Jacobian adjustment to make, because this is not a
+//     change of variables: it is the same model, reported under a
+//     canonical labelling.
+//   - It is exact, not approximate. Both raw-space modes map to the same
+//     reported values, so the pushforward posterior on (alpha, theta) is
+//     correct whichever basin a chain occupies.
+// orientation_sign() is a functions-block helper, deliberately NOT cached
+// into a local `real s` here: any bare top-level declaration in
+// transformed parameters is written to the output CSV, and a raw sign
+// scalar would show the same meaningless cross-chain Rhat this fold
+// exists to remove (see R/diagnose_convergence.R's
+// .bilatr_sign_ambiguous_raw_names() / .classify_bilatr_tier() for where
+// that exclusion is actually enforced, for alpha_raw/z_theta0/theta_raw
+// themselves).
 //
-// Trade-off, stated honestly: this hand-rolled construction is NOT
-// isotropic under alpha_raw ~ std_normal() the way sum_to_zero_vector's
-// is. alpha_raw[A], built as -(alpha_raw_1 + sum(alpha_raw_mid)), absorbs
-// the accumulated variance of every other element, so the implied prior
-// on alpha's DIRECTION is no longer exactly exchangeable across action
-// classes (class A is a priori different from classes 2..A-1), and the
-// sampler's coordinates are mildly correlated -- conditioning is slightly
-// worse than under the isometric sum_to_zero_vector. At A between 4 and 9
-// (this project's action-class counts) this is expected to be immaterial
-// given ~thousands of dyads' worth of likelihood dominating the prior,
-// but it is a real change and was checked at CHECKPOINT 1 (0.4.2) via a
-// same-data comparison against `stable_soft_anchor` (post-orientation)
-// and a direct read of alpha[1]'s posterior distance from 0 in
-// posterior-SD units. If the data ever genuinely want alpha[1] ~ 0 (the
-// reference category is a low-conflict/neutral class, so this is not
-// absurd a priori), this hard positivity constraint would truncate a
-// posterior that wants to straddle the boundary; the documented fallback
-// in that case is the sign-fold construction (multiply the whole
-// constructed alpha and theta path by sign(alpha_raw[1]) in transformed
-// parameters, exact and Jacobian-free, at the cost of alpha_raw/theta_raw
-// themselves label-switching and needing exclusion from Tier 1/3 Rhat
-// reporting) -- not implemented here because CHECKPOINT 1 did not find
-// alpha[1] pinned near the boundary.
+// alpha_raw ~ std_normal() is on the free parameter directly (no
+// constructed-variable Jacobian to reason about, unlike the reverted
+// 0.4.2 approach) -- see "RADIAL DEGENERACY" above for why it is
+// load-bearing, not merely regularizing.
 //
 // ORIENTATION: positive alpha[1] means higher theta corresponds to
 // better (less hostile) relations at the reference/neutral action class,
 // matching stable/ou and the package's stated quantity (bilateral
-// relationship quality) -- and, since 0.4.2, this holds for every fit
-// made under this file, not just on average across many. `alpha`, `theta`,
-// `mu_intercept`, `phi`, and every scale/dispersion parameter are already
-// in their final orientation; bilatr_orient()/.bilatr_flip_variables()
-// return `character(0)` for `stable`/`ou` accordingly (R/orient.R). Only
-// fits made under the retired `stable_soft_anchor`/`ou_soft_anchor`
-// programs still need bilatr_orient()'s post-hoc relabeling.
+// relationship quality) -- and this holds for every fit made under this
+// file via the fold above, not just on average across many. `alpha`,
+// `theta`, `mu_intercept`, `phi`, and every scale/dispersion parameter
+// are always in their final orientation as REPORTED;
+// bilatr_orient()/.bilatr_flip_variables() return `character(0)` for
+// `stable`/`ou` accordingly (R/orient.R) -- there is nothing left for
+// post-hoc relabeling to do to the reported quantities. The RAW
+// parameters the fold consumes (alpha_raw, z_theta0, theta_raw) remain
+// genuinely sign-ambiguous themselves: if two chains land in opposite
+// raw-space basins, those three variables' own cross-chain Rhat is
+// meaningless even though everything reported is fine -- this is why
+// they are excluded from the tiered diagnostics tables rather than left
+// to be (mis)read as a convergence failure (R/diagnose_convergence.R).
+// Only fits made under the retired `stable_soft_anchor`/`ou_soft_anchor`
+// programs still need bilatr_orient()'s post-hoc relabeling of the
+// reported quantities themselves.
 functions {
   // <<< BEGIN GENERATED partial_log_lik (source: inst/stan/include/partial_log_lik.stanfunctions) >>>
   // Do not hand-edit between these markers -- edit the source file
@@ -286,6 +301,16 @@ functions {
     vector[A] conc = phi_d * (action_weight .* p);
     return dyad_weight_d * period_weight_t * dirichlet_multinomial_lpmf(y_dt | conc);
   }
+
+  // +1/-1 orientation of a draw, from the reference class's sign. Applied
+  // to BOTH alpha and theta below; see header, "IDENTIFICATION:
+  // ORIENTATION FOLD". Hand-duplicated (not spliced via the GENERATED
+  // mechanism) in bilatr_alphanorm_ou.stan -- identical there, same
+  // reasoning as dyad_period_log_lik() above (tiny, not worth extending
+  // the sync tooling for).
+  real orientation_sign(vector alpha_raw) {
+    return alpha_raw[1] >= 0 ? 1.0 : -1.0;
+  }
 }
 data {
   int<lower=1> T;                            // number of time points
@@ -305,11 +330,7 @@ parameters {
   // Latent states per dyad
   array[D, T] real theta_raw;
   sum_to_zero_vector[A] mu_intercept;   // softmax level-shift; sums to 0 exactly
-  // pre-normalization discrimination, hand-built sum-to-zero (see header,
-  // "IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION"): alpha_raw_1 is the
-  // reference/neutral class, positive by declaration
-  real<lower=0> alpha_raw_1;
-  vector[A - 2] alpha_raw_mid;
+  sum_to_zero_vector[A] alpha_raw;      // pre-normalization discrimination; sums to 0 exactly
   real<lower=0> sigma_theta0;
   vector[D] z_theta0;                   // no mu_theta0: theta0 has mean exactly 0
 
@@ -322,23 +343,18 @@ parameters {
   real<lower=0> sigma_log_phi;
 }
 transformed parameters {
-  // Hand-built sum-to-zero vector, first element positive by construction
-  // (see header): alpha_raw_1, then the free middle elements, then
-  // whatever balances the sum to exactly 0. append_row() (not slice
-  // assignment) so A == 2 (an empty alpha_raw_mid) doesn't hit an invalid
-  // range.
-  vector[A] alpha_raw = append_row(
-    alpha_raw_1,
-    append_row(alpha_raw_mid, -(alpha_raw_1 + sum(alpha_raw_mid)))
-  );
-
   // Normalize alpha to RMS (== population SD, sum-to-zero) 1. This is the
   // scale anchor for the whole model; see header for the radial
-  // degeneracy this creates. alpha[1] > 0 always, inherited directly from
-  // alpha_raw_1 > 0 (normalization only rescales by a positive factor).
-  vector[A] alpha = alpha_raw * sqrt((1.0 * A) / dot_self(alpha_raw));
+  // degeneracy this creates. Sign is NOT fixed here -- see
+  // orientation_sign() below and header, "IDENTIFICATION: ORIENTATION
+  // FOLD".
+  vector[A] alpha = orientation_sign(alpha_raw)
+                    * alpha_raw * sqrt((1.0 * A) / dot_self(alpha_raw));
 
-  vector[D] theta0 = sigma_theta0 * z_theta0;
+  // theta0 folds the same sign as alpha, so alpha .* theta (all the
+  // likelihood ever sees) is invariant to which raw-space basin the
+  // sampler is in -- see header.
+  vector[D] theta0 = orientation_sign(alpha_raw) * sigma_theta0 * z_theta0;
 
   // Per-dyad process noise, now a RATIO to sigma_theta0 (non-centered
   // lognormal hierarchy on the ratio, not on an absolute theta-unit
@@ -348,9 +364,9 @@ transformed parameters {
 
   array[D, T] real theta;
   for (d in 1:D) {
-    theta[d, 1] = theta0[d] + process_noise[d] * theta_raw[d, 1];
+    theta[d, 1] = theta0[d] + orientation_sign(alpha_raw) * process_noise[d] * theta_raw[d, 1];
     for (t in 2:T) {
-      theta[d, t] = theta[d, t - 1] + process_noise[d] * theta_raw[d, t];
+      theta[d, t] = theta[d, t - 1] + orientation_sign(alpha_raw) * process_noise[d] * theta_raw[d, t];
     }
   }
 }
@@ -377,16 +393,12 @@ model {
 
   mu_intercept ~ std_normal();
 
-  // Put on the CONSTRUCTED alpha_raw, not on (alpha_raw_1, alpha_raw_mid)
-  // directly: the map from the free parameters to alpha_raw is linear
-  // with a constant Jacobian, so this reproduces exactly the density
-  // sum_to_zero_vector + std_normal() gave on the sum-to-zero hyperplane
-  // -- no Jacobian adjustment needed, and every action class stays
-  // exchangeable a priori. Putting std_normal() on the free parameters
-  // instead would give the last class (which absorbs their sum) a prior
-  // scale of sqrt(A - 1), breaking that exchangeability. Also
-  // load-bearing, not merely regularizing, for the radial direction of
-  // alpha_raw (see header, "RADIAL DEGENERACY").
+  // load-bearing, not merely regularizing: identifies the radial
+  // direction of alpha_raw (see header, "RADIAL DEGENERACY"). The
+  // orientation fold (transformed parameters, above) leaves this prior
+  // untouched -- it is symmetric about 0 and orientation_sign() is
+  // applied only to the REPORTED alpha/theta0/theta, not to alpha_raw
+  // itself.
   alpha_raw ~ std_normal();
 
   // likelihood, chunked via reduce_sum

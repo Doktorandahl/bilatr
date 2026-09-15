@@ -5,7 +5,7 @@
 \alias{.bilatr_tier1_names}
 \title{Names of Stan parameters treated as global/shared (Tier 1)}
 \format{
-An object of class \code{character} of length 11.
+An object of class \code{character} of length 10.
 }
 \usage{
 .bilatr_tier1_names
@@ -14,6 +14,10 @@ An object of class \code{character} of length 11.
 Matched against a monitored quantity's \emph{base name} (its variable name
 with any \verb{[...]} index stripped), so this correctly matches vector
 parameters like \code{alpha[1]}, \code{alpha[2]}, ... via their shared base name
-\code{alpha}.
+\code{alpha}. \code{alpha_raw} is NOT listed here (despite also being indexed by
+action type, not dyad): it is sign-ambiguous under the alpha/theta
+reflection symmetry (see \code{\link[=.bilatr_sign_ambiguous_raw_names]{.bilatr_sign_ambiguous_raw_names()}}) and
+caught by that check, earlier in \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}}'s
+\code{case_when()}, before this list is ever consulted.
 }
 \keyword{internal}

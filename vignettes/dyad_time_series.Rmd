@@ -66,12 +66,12 @@ events <- recode_cameo(events, code_col = "EventCode")
 counts and packages them for the model. `reference_category` should be a
 low-conflict/neutral action class; here we use PentaClass 0 (verbal
 cooperation). It becomes `alpha[1]`, the discrimination parameter the
-model builds to be positive BY CONSTRUCTION (see `inst/stan/
-bilatr_alphanorm.stan`'s header, "IDENTIFICATION: alpha[1] > 0 BY
-CONSTRUCTION"), so that higher `theta` always means better relations.
-Every other action class's discrimination is freely estimated subject to
-`alpha` summing to exactly 0 across all classes (RMS normalized to 1) --
-there is no single fixed-at-1 element.
+model always reports as positive via an orientation fold (see `inst/stan/
+bilatr_alphanorm.stan`'s header, "IDENTIFICATION: ORIENTATION FOLD"), so
+that higher `theta` always means better relations. Every other action
+class's discrimination is freely estimated subject to `alpha` summing to
+exactly 0 across all classes (RMS normalized to 1) -- there is no single
+fixed-at-1 element.
 
 ```{r}
 stan_data <- assemble_stan_data(
@@ -133,12 +133,16 @@ extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
 Note `sum(alpha)` and `sum(mu_intercept)` are exactly 0: both are
 sum-to-zero by construction (the model's identification anchors), rather
 than a single element fixed to a constant. `alpha[1]`'s *sign* is
-likewise positive by construction (not merely favored by a prior), so
-every fit already reports `theta` in its canonical orientation (higher
-`theta` = better relations) with no post-hoc relabeling needed --
-[bilatr_orient()] is retained only to read fits made under the retired
-`stable_soft_anchor`/`ou_soft_anchor` programs (see `NEWS.md`), and
-[extract_alpha()]/[extract_theta()] skip it entirely for `stable`/`ou`.
+always reported positive too, via an orientation fold (`alpha` and
+`theta` are both multiplied by `sign(alpha_raw[1])` in `transformed
+parameters` -- exact and Jacobian-free, since the likelihood only ever
+sees their product) rather than a hard constraint on the sampled
+parameter, so every fit already reports `theta` in its canonical
+orientation (higher `theta` = better relations) with no post-hoc
+relabeling needed -- [bilatr_orient()] is retained only to read fits
+made under the retired `stable_soft_anchor`/`ou_soft_anchor` programs
+(see `NEWS.md`), and [extract_alpha()]/[extract_theta()] skip it
+entirely for `stable`/`ou`.
 
 ## 5. Diagnose
 

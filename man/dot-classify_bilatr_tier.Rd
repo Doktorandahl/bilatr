@@ -10,21 +10,28 @@
 \item{variable}{Character vector of \code{summarise_draws()} variable names.}
 }
 \value{
-A tibble with columns \code{variable}, \code{tier} (\code{1L}, \code{2L}, or \code{3L}),
-\code{dyad_id} (the first index, \code{NA} for Tier 1), and \code{time_index} (the
-second index, \code{NA} outside Tier 3).
+A tibble with columns \code{variable}, \code{tier} (\code{1L}, \code{2L}, \code{3L}, or
+\code{NA} for excluded sign-ambiguous raw parameters), \code{dyad_id} (the
+first index, \code{NA} outside Tier 2/3), and \code{time_index} (the second
+index, \code{NA} outside Tier 3).
 }
 \description{
-Tier 1 (global/shared) is matched first, by base name, against
-\link{.bilatr_tier1_names}. Everything else is classified structurally by
-how many \verb{[...]} indices it carries: a single index (\code{name[d]}) is
-assumed to be a per-dyad hierarchical parameter (Tier 2, joined on
-\code{d}); two indices (\code{name[d, t]}) is assumed to be a per-dyad-period
-latent state (Tier 3, joined on \code{d}). This is deliberately structural
-rather than a fixed per-parameter name list, so a future model variant
-that changes a parameter's shape (e.g. makes \code{phi} per-dyad-period,
-\code{phi[d, t]}, instead of the per-dyad \code{phi[d]} of the \code{stable} model) is
-still classified consistently without special-casing.
+Sign-ambiguous raw parameters (see \code{\link[=.bilatr_sign_ambiguous_raw_names]{.bilatr_sign_ambiguous_raw_names()}}:
+\code{alpha_raw}, \code{z_theta0}/\code{mu_dyad_raw}, \code{theta_raw}) are excluded first,
+by base name -- \code{tier = NA}, dropped from every downstream tier table
+by the \code{tier \%in\% c(1L, 2L, 3L)} filters already used throughout this
+file, rather than surfacing their meaningless cross-chain Rhat as a
+false convergence alarm (see the alpha/theta reflection symmetry
+discussion in each \code{.stan} file's header). Tier 1 (global/shared) is
+matched next, by base name, against \link{.bilatr_tier1_names}. Everything
+else is classified structurally by how many \verb{[...]} indices it
+carries: a single index (\code{name[d]}) is assumed to be a per-dyad
+hierarchical parameter (Tier 2, joined on \code{d}); two indices (\code{name[d, t]}) is assumed to be a per-dyad-period latent state (Tier 3, joined
+on \code{d}). This is deliberately structural rather than a fixed
+per-parameter name list, so a future model variant that changes a
+parameter's shape (e.g. makes \code{phi} per-dyad-period, \code{phi[d, t]},
+instead of the per-dyad \code{phi[d]} of the \code{stable} model) is still
+classified consistently without special-casing.
 Anything with no brackets that isn't in the Tier 1 name list (should
 not occur for the package's own models, but could for a hand-edited
 Stan file) is folded into Tier 1 rather than dropped, since its

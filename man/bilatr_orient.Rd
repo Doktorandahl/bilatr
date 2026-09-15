@@ -32,14 +32,14 @@ negative.
 }
 \description{
 \strong{Deprecated as of 0.4.2}, in favor of doing nothing: \code{stable}/\code{ou}
-build \code{alpha[1]} to be positive by construction (see each \code{.stan}
-file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}),
-leaving no reflection symmetry for this function to correct. It is
-retained only for reading/re-deriving CmdStan output produced by the
-pre-0.4.2 \code{stable_soft_anchor}/\code{ou_soft_anchor} programs, and is
-slated for removal once those runs are gone -- this is not enforced
-with \code{\link[base:Deprecated]{base::.Deprecated()}}, which would fire warnings on that
-legitimate legacy use; every current call site (\verb{extract_*()},
+fold \code{alpha[1]}'s sign into the REPORTED \code{alpha}/\code{theta} (see each
+\code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"), leaving no
+reflection symmetry in those reported quantities for this function to
+correct. It is retained only for reading/re-deriving CmdStan output
+produced by the pre-0.4.2 \code{stable_soft_anchor}/\code{ou_soft_anchor}
+programs, and is slated for removal once those runs are gone -- this
+is not enforced with \code{\link[base:Deprecated]{base::.Deprecated()}}, which would fire warnings
+on that legitimate legacy use; every current call site (\verb{extract_*()},
 \code{R/diagnose_and_extract.R}) already checks \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}
 first and skips calling this function entirely for \code{stable}/\code{ou}.
 }

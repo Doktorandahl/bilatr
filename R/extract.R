@@ -7,10 +7,10 @@
 #' [assemble_stan_data()] attaches to its output. Works the same way for
 #' single-dyad ([fit_dyad_ts()]) and panel ([fit_panel()]) fits.
 #'
-#' Since 0.4.2, `stable`/`ou` build `alpha[1]` to be positive by
-#' construction (see each `.stan` file's header, `IDENTIFICATION:
-#' alpha[1] > 0 BY CONSTRUCTION`), so `theta` is already in its canonical
-#' orientation (higher theta = better relations) and this function skips
+#' `stable`/`ou` fold `alpha[1]`'s sign into the reported `alpha`/`theta`
+#' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
+#' so `theta` is already in its canonical orientation (higher theta =
+#' better relations) and this function skips
 #' [bilatr_orient()] entirely for them -- no draws-through-orientation
 #' round trip, since `.bilatr_flip_variables(stan_model)` is
 #' `character(0)`. Only the retired `stable_soft_anchor`/`ou_soft_anchor`
@@ -198,9 +198,9 @@ extract_theta <- function(
 #' Pulls posterior summaries of the action-type discrimination parameters
 #' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has RMS 1
 #' for `stable`/`ou`; `alpha[1]`, the reference/neutral action class
-#' supplied via `reference_category`, is positive BY CONSTRUCTION (see
-#' each `.stan` file's header, `IDENTIFICATION: alpha[1] > 0 BY
-#' CONSTRUCTION`). See the package's identification notes in
+#' supplied via `reference_category`, is always reported positive via the
+#' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
+#' ORIENTATION FOLD"). See the package's identification notes in
 #' `vignette("dyad_time_series")`.
 #'
 #' Since 0.4.2, this skips [bilatr_orient()] entirely for `stable`/`ou`

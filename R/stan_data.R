@@ -110,11 +110,11 @@ parse_weighted_arg <- function(weighted) {
 #' @param directed If `TRUE` (default), dyads are directed; if `FALSE`,
 #'   actor order is ignored.
 #' @param reference_category Value of `grouping_var` to anchor as the
-#'   model's scale/sign reference: `stable`/`ou` build `alpha[1]` to be
-#'   positive by construction (see each `.stan` file's header,
-#'   `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`), and RMS-normalize
-#'   the whole `alpha` vector to 1, so positive `alpha[1]` means better
-#'   relations at this reference/neutral class. Should typically be a
+#'   model's scale/sign reference: `stable`/`ou` fold `alpha[1]`'s sign
+#'   into the reported `alpha`/`theta` (see each `.stan` file's header,
+#'   "IDENTIFICATION: ORIENTATION FOLD"), and RMS-normalize the whole
+#'   `alpha` vector to 1, so positive `alpha[1]` means better relations at
+#'   this reference/neutral class. Should typically be a
 #'   low-conflict/cooperative class. Every other action class's
 #'   discrimination (`alpha[2:A]`) is freely estimated.
 #' @param min_n_events Minimum total events for a dyad to be retained.
@@ -164,9 +164,10 @@ parse_weighted_arg <- function(weighted) {
 #'   likelihood-invariant) the anchor only softly penalizes (`alpha[1] <
 #'   0`), not reliably breaks across independently-initialized chains;
 #'   see `bilatr_orient()` for the post-hoc fix those two programs still
-#'   need. The current `stable`/`ou` programs identify `alpha[1]`'s sign
-#'   BY CONSTRUCTION instead (see each `.stan` file's header) and don't
-#'   declare `anchor_scale` at all; it is still supplied unconditionally
+#'   need. The current `stable`/`ou` programs fold `alpha[1]`'s sign into
+#'   the reported `alpha`/`theta` instead (see each `.stan` file's
+#'   header, "IDENTIFICATION: ORIENTATION FOLD") and don't declare
+#'   `anchor_scale` at all; it is still supplied unconditionally
 #'   here (CmdStan ignores data a program doesn't declare), so this
 #'   function doesn't need to branch on `stan_model`. `alpha[1]` is
 #'   already the reference/neutral action class supplied via

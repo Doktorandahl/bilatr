@@ -46,8 +46,9 @@ A tibble with one row per action type: \code{action_index}
 Pulls posterior summaries of the action-type discrimination parameters
 \code{alpha} out of a fitted model. \code{alpha} sums to exactly 0 and has RMS 1
 for \code{stable}/\code{ou}; \code{alpha[1]}, the reference/neutral action class
-supplied via \code{reference_category}, is positive BY CONSTRUCTION (see
-each \code{.stan} file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}). See the package's identification notes in
+supplied via \code{reference_category}, is always reported positive via the
+orientation fold (see each \code{.stan} file's header, "IDENTIFICATION:
+ORIENTATION FOLD"). See the package's identification notes in
 \code{vignette("dyad_time_series")}.
 }
 \details{

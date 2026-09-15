@@ -313,7 +313,10 @@ test_that(".chunked_summarise_csv() flips only theta/theta_raw within a chunk th
 
   prepared <- .prepare_fast_csv_read(fx$csv_files)
   var_tiers <- .classify_bilatr_tier(prepared$variables)
-  tier3_vars <- var_tiers$variable[var_tiers$tier == 3L]
+  # `%in%` (not `==`): `tier` can be `NA` for sign-ambiguous raw
+  # parameters (excluded from every tier) -- `==` against `NA` yields
+  # `NA`, not `FALSE`, and would inject `NA` into the variable-name subset
+  tier3_vars <- var_tiers$variable[var_tiers$tier %in% 3L]
   theta_vars <- grep("^theta\\[", tier3_vars, value = TRUE)
   log_lik_vars <- grep("^log_lik\\[", tier3_vars, value = TRUE)
   # confirm the fixture actually exercises the mixed case B5 fixed

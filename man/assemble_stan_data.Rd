@@ -39,11 +39,11 @@ assemble_stan_data(
 actor order is ignored.}
 
 \item{reference_category}{Value of \code{grouping_var} to anchor as the
-model's scale/sign reference: \code{stable}/\code{ou} build \code{alpha[1]} to be
-positive by construction (see each \code{.stan} file's header,
-\verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), and RMS-normalize
-the whole \code{alpha} vector to 1, so positive \code{alpha[1]} means better
-relations at this reference/neutral class. Should typically be a
+model's scale/sign reference: \code{stable}/\code{ou} fold \code{alpha[1]}'s sign
+into the reported \code{alpha}/\code{theta} (see each \code{.stan} file's header,
+"IDENTIFICATION: ORIENTATION FOLD"), and RMS-normalize the whole
+\code{alpha} vector to 1, so positive \code{alpha[1]} means better relations at
+this reference/neutral class. Should typically be a
 low-conflict/cooperative class. Every other action class's
 discrimination (\code{alpha[2:A]}) is freely estimated.}
 
@@ -101,9 +101,10 @@ both registered Stan model variants, gating a per-dyad-period
 reflection symmetry (\code{alpha}, \code{theta} -> \code{-alpha}, \code{-theta} is
 likelihood-invariant) the anchor only softly penalizes (\code{alpha[1] < 0}), not reliably breaks across independently-initialized chains;
 see \code{bilatr_orient()} for the post-hoc fix those two programs still
-need. The current \code{stable}/\code{ou} programs identify \code{alpha[1]}'s sign
-BY CONSTRUCTION instead (see each \code{.stan} file's header) and don't
-declare \code{anchor_scale} at all; it is still supplied unconditionally
+need. The current \code{stable}/\code{ou} programs fold \code{alpha[1]}'s sign into
+the reported \code{alpha}/\code{theta} instead (see each \code{.stan} file's
+header, "IDENTIFICATION: ORIENTATION FOLD") and don't declare
+\code{anchor_scale} at all; it is still supplied unconditionally
 here (CmdStan ignores data a program doesn't declare), so this
 function doesn't need to branch on \code{stan_model}. \code{alpha[1]} is
 already the reference/neutral action class supplied via

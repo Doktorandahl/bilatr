@@ -3,14 +3,51 @@
 #' Matched against a monitored quantity's *base name* (its variable name
 #' with any `[...]` index stripped), so this correctly matches vector
 #' parameters like `alpha[1]`, `alpha[2]`, ... via their shared base name
-#' `alpha`.
+#' `alpha`. `alpha_raw` is NOT listed here (despite also being indexed by
+#' action type, not dyad): it is sign-ambiguous under the alpha/theta
+#' reflection symmetry (see [.bilatr_sign_ambiguous_raw_names()]) and
+#' caught by that check, earlier in [.classify_bilatr_tier()]'s
+#' `case_when()`, before this list is ever consulted.
 #' @keywords internal
 .bilatr_tier1_names <- c(
-  "alpha", "alpha_raw", "mu_intercept", "mu_intercept_raw",
+  "alpha", "mu_intercept", "mu_intercept_raw",
   "mu_theta0", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
   "lp__"
 )
+
+#' Names of raw, sampled parameters that are sign-ambiguous under the
+#' alpha/theta reflection symmetry, across every registered model
+#'
+#' Unlike [.bilatr_flip_variables()] (legacy models only, and including
+#' the REPORTED quantities those models still need `bilatr_orient()`
+#' for), this is unconditional across every model: `stable`/`ou`'s
+#' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
+#' ORIENTATION FOLD") corrects the reported `alpha`/`theta`/etc., but the
+#' RAW parameters it's built from (`alpha_raw` itself, plus whichever of
+#' `z_theta0`/`mu_dyad_raw` and `theta_raw` a given model has) remain
+#' genuinely sign-ambiguous: if two chains land in opposite raw-space
+#' basins, those variables' own cross-chain Rhat is meaningless even
+#' though everything reported is fine. [.classify_bilatr_tier()] uses
+#' this to keep them out of the tiered diagnostics tables entirely
+#' (`tier = NA`), rather than let a meaningless Rhat surface as a false
+#' Tier 1 alarm.
+#'
+#' Derived from [.bilatr_sign_tied_names()] (`R/orient.R`) -- the single
+#' source of truth this and [.bilatr_flip_variables()] both draw from, so
+#' the two cannot drift apart -- unioning the `raw` component across
+#' every currently-registered model. Computed inside the function body,
+#' not as a top-level constant, so it doesn't depend on `R/model_registry.R`
+#' having been sourced first.
+#'
+#' @return Character vector of variable base names.
+#' @keywords internal
+.bilatr_sign_ambiguous_raw_names <- function() {
+  unique(unlist(lapply(
+    names(.bilatr_stan_models),
+    function(m) .bilatr_sign_tied_names(m)$raw
+  )))
+}
 
 #' Split a `posterior::summarise_draws()` variable name into base name and
 #' index components
@@ -39,32 +76,42 @@
 
 #' Classify monitored quantities into diagnostic tiers by name/index shape
 #'
-#' Tier 1 (global/shared) is matched first, by base name, against
-#' [.bilatr_tier1_names]. Everything else is classified structurally by
-#' how many `[...]` indices it carries: a single index (`name[d]`) is
-#' assumed to be a per-dyad hierarchical parameter (Tier 2, joined on
-#' `d`); two indices (`name[d, t]`) is assumed to be a per-dyad-period
-#' latent state (Tier 3, joined on `d`). This is deliberately structural
-#' rather than a fixed per-parameter name list, so a future model variant
-#' that changes a parameter's shape (e.g. makes `phi` per-dyad-period,
-#' `phi[d, t]`, instead of the per-dyad `phi[d]` of the `stable` model) is
-#' still classified consistently without special-casing.
+#' Sign-ambiguous raw parameters (see [.bilatr_sign_ambiguous_raw_names()]:
+#' `alpha_raw`, `z_theta0`/`mu_dyad_raw`, `theta_raw`) are excluded first,
+#' by base name -- `tier = NA`, dropped from every downstream tier table
+#' by the `tier %in% c(1L, 2L, 3L)` filters already used throughout this
+#' file, rather than surfacing their meaningless cross-chain Rhat as a
+#' false convergence alarm (see the alpha/theta reflection symmetry
+#' discussion in each `.stan` file's header). Tier 1 (global/shared) is
+#' matched next, by base name, against [.bilatr_tier1_names]. Everything
+#' else is classified structurally by how many `[...]` indices it
+#' carries: a single index (`name[d]`) is assumed to be a per-dyad
+#' hierarchical parameter (Tier 2, joined on `d`); two indices (`name[d,
+#' t]`) is assumed to be a per-dyad-period latent state (Tier 3, joined
+#' on `d`). This is deliberately structural rather than a fixed
+#' per-parameter name list, so a future model variant that changes a
+#' parameter's shape (e.g. makes `phi` per-dyad-period, `phi[d, t]`,
+#' instead of the per-dyad `phi[d]` of the `stable` model) is still
+#' classified consistently without special-casing.
 #' Anything with no brackets that isn't in the Tier 1 name list (should
 #' not occur for the package's own models, but could for a hand-edited
 #' Stan file) is folded into Tier 1 rather than dropped, since its
 #' sparsity profile is unknown and it should never be silently hidden.
 #'
 #' @param variable Character vector of `summarise_draws()` variable names.
-#' @return A tibble with columns `variable`, `tier` (`1L`, `2L`, or `3L`),
-#'   `dyad_id` (the first index, `NA` for Tier 1), and `time_index` (the
-#'   second index, `NA` outside Tier 3).
+#' @return A tibble with columns `variable`, `tier` (`1L`, `2L`, `3L`, or
+#'   `NA` for excluded sign-ambiguous raw parameters), `dyad_id` (the
+#'   first index, `NA` outside Tier 2/3), and `time_index` (the second
+#'   index, `NA` outside Tier 3).
 #' @keywords internal
 .classify_bilatr_tier <- function(variable) {
   parsed <- .parse_variable_indices(variable)
+  sign_ambiguous <- .bilatr_sign_ambiguous_raw_names()
 
   dplyr::mutate(
     parsed,
     tier = dplyr::case_when(
+      base_name %in% sign_ambiguous ~ NA_integer_,
       base_name %in% .bilatr_tier1_names ~ 1L,
       n_index == 0 ~ 1L,
       n_index == 1 ~ 2L,

@@ -17,9 +17,9 @@ Character vector of unique classes in anchor order.
 \description{
 Puts \code{reference_category} first (if supplied and present), with all other
 classes sorted alphabetically after it. This ordering is what implements
-the model's identification constraint on the R side: \code{stable}/\code{ou} build
-\code{alpha[1]} (the first column) to be positive by construction (see each
-\code{.stan} file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}),
+the model's identification constraint on the R side: \code{stable}/\code{ou} fold
+\code{alpha[1]}'s (the first column's) sign into the reported \code{alpha}/\code{theta}
+(see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
 so the reference/neutral class anchors alpha's sign and scale. All
 remaining \code{alpha[2:A]} are freely estimated.
 }

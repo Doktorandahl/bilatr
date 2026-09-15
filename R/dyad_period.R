@@ -26,9 +26,9 @@ validate_reference_class <- function(value, classes, arg_name) {
 #'
 #' Puts `reference_category` first (if supplied and present), with all other
 #' classes sorted alphabetically after it. This ordering is what implements
-#' the model's identification constraint on the R side: `stable`/`ou` build
-#' `alpha[1]` (the first column) to be positive by construction (see each
-#' `.stan` file's header, `IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION`),
+#' the model's identification constraint on the R side: `stable`/`ou` fold
+#' `alpha[1]`'s (the first column's) sign into the reported `alpha`/`theta`
+#' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
 #' so the reference/neutral class anchors alpha's sign and scale. All
 #' remaining `alpha[2:A]` are freely estimated.
 #'

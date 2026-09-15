@@ -63,9 +63,10 @@ the human-readable dyad identifiers (\code{dyad}, the undirected \code{dyad2},
 single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=fit_panel]{fit_panel()}}) fits.
 }
 \details{
-Since 0.4.2, \code{stable}/\code{ou} build \code{alpha[1]} to be positive by
-construction (see each \code{.stan} file's header, \verb{IDENTIFICATION: alpha[1] > 0 BY CONSTRUCTION}), so \code{theta} is already in its canonical
-orientation (higher theta = better relations) and this function skips
+\code{stable}/\code{ou} fold \code{alpha[1]}'s sign into the reported \code{alpha}/\code{theta}
+(see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
+so \code{theta} is already in its canonical orientation (higher theta =
+better relations) and this function skips
 \code{\link[=bilatr_orient]{bilatr_orient()}} entirely for them -- no draws-through-orientation
 round trip, since \code{.bilatr_flip_variables(stan_model)} is
 \code{character(0)}. Only the retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
