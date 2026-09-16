@@ -15,7 +15,11 @@ test_that("assemble_stan_data()'s output at weighted = FALSE differs from before
   expect_false(any(c("dyad_weight", "period_weight", "action_weight") %in% names(sd)))
   expect_setequal(
     names(sd),
-    c("D", "T", "A", "C", "is_obs", "Y", "rho_prior_a", "rho_prior_b", "compute_log_lik", "anchor_scale")
+    c(
+      "D", "T", "A", "C", "is_obs", "Y", "rho_prior_a", "rho_prior_b",
+      "compute_log_lik", "prior_only", "compute_theta_filtered",
+      "n_filter_dyads", "filter_dyads", "anchor_scale"
+    )
   )
 })
 
@@ -51,7 +55,7 @@ test_that("the 0.4.6 stable program is bit-identical to the pre-0.4.6 one at uni
   Y <- array(sample(0:6, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
   is_obs <- matrix(1L, D, Tn)
 
-  data_new <- list(T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y, compute_log_lik = 0)
+  data_new <- list(T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y, compute_log_lik = 0, prior_only = 0, compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0))
   data_old <- utils::modifyList(
     data_new,
     list(dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A))

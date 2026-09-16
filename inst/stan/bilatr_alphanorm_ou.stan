@@ -230,6 +230,16 @@ data {
   int<lower=0, upper=1> compute_log_lik;     // 1 = also compute per-dyad-period
                                               // log_lik in generated quantities
                                               // (D x T x draws; default 0/off)
+  int<lower=0, upper=1> prior_only;          // 1 = skip the likelihood entirely
+                                              // (fit the prior only; see
+                                              // alpha_prior_moments())
+  int<lower=0, upper=1> compute_theta_filtered; // 1 = also compute
+                                              // theta_filtered/theta_filtered_sd
+                                              // in generated quantities, for the
+                                              // dyads in filter_dyads
+  int<lower=0> n_filter_dyads;               // length of filter_dyads; 0 if
+                                              // compute_theta_filtered is 0
+  array[n_filter_dyads] int<lower=1, upper=D> filter_dyads; // which dyads to filter
   real<lower=0> rho_prior_a;                 // Beta(rho_prior_a, rho_prior_b) on
   real<lower=0> rho_prior_b;                 // rho; default 8, 2 (weighted toward
                                               // strong persistence)
@@ -316,10 +326,14 @@ model {
   // theta, not to alpha_raw itself.
   alpha_raw ~ std_normal();
 
-  // likelihood, chunked via reduce_sum
-  array[D] int dyad_seq = linspaced_int_array(D, 1, D);
-  target += reduce_sum(partial_log_lik, dyad_seq, C,
-                        T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
+  // likelihood, chunked via reduce_sum -- skipped entirely if prior_only,
+  // gating this exactly the way compute_log_lik gates its own generated
+  // quantity below
+  if (!prior_only) {
+    array[D] int dyad_seq = linspaced_int_array(D, 1, D);
+    target += reduce_sum(partial_log_lik, dyad_seq, C,
+                          T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
+  }
 }
 generated quantities {
   // the single number the cross-dyad-comparability problem reduces to
@@ -333,6 +347,57 @@ generated quantities {
         log_lik[d, t] = dyad_period_log_lik(
           is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha
         );
+      }
+    }
+  }
+
+  // Forward-filtered theta -- see bilatr_alphanorm.stan's generated
+  // quantities block for the full derivation (identical score/Fisher-
+  // information math; only the state-transition step differs here).
+  // The prediction step for a mean-reverting OU/AR(1) transition is
+  // m_pred = mu_dyad + rho*(m - mu_dyad), p_pred = rho^2*p_var +
+  // process_noise^2 -- NOT p_var + process_noise^2 (that unscaled form is
+  // only correct for stable, where rho is implicitly 1). Sanity check:
+  // at the stationary variance p_var = sd_stat[d]^2 (this filter's own
+  // initial value, and process_noise[d]^2 = sd_stat[d]^2*(1-rho^2) from
+  // transformed parameters), rho^2*p_var + process_noise[d]^2 =
+  // sd_stat[d]^2 exactly -- so an unobserved dyad's filtered variance
+  // stays at the stationary level forever, as it should, rather than
+  // growing without bound. No orientation_sign() call here either: mu_dyad,
+  // sd_stat, process_noise, and rho are already-oriented/unsigned
+  // quantities.
+  array[compute_theta_filtered ? n_filter_dyads : 0,
+        compute_theta_filtered ? T : 0] real theta_filtered;
+  array[compute_theta_filtered ? n_filter_dyads : 0,
+        compute_theta_filtered ? T : 0] real theta_filtered_sd;
+
+  if (compute_theta_filtered) {
+    for (i in 1:n_filter_dyads) {
+      int d = filter_dyads[i];
+      real m = mu_dyad[d];
+      real p_var = square(sd_stat[d]);
+      for (t in 1:T) {
+        real m_pred = mu_dyad[d] + rho * (m - mu_dyad[d]);
+        real p_pred = square(rho) * p_var + square(process_noise[d]);
+        if (is_obs[d, t] == 1) {
+          vector[A] eta = alpha .* rep_vector(m_pred, A) - mu_intercept;
+          vector[A] p = softmax(eta);
+          real a_bar = dot_product(p, alpha);
+          int n = sum(Y[d, t]);
+          real info = n * (1 + phi[d]) / (n + phi[d]) * dot_product(p, square(alpha - a_bar));
+          real g = 0;
+          for (k in 1:A) {
+            real conc_k = phi[d] * p[k];
+            g += conc_k * (alpha[k] - a_bar) * (digamma(Y[d, t, k] + conc_k) - digamma(conc_k));
+          }
+          p_var = 1 / (1 / p_pred + info);
+          m = m_pred + p_var * g;
+        } else {
+          m = m_pred;
+          p_var = p_pred;
+        }
+        theta_filtered[i, t] = m;
+        theta_filtered_sd[i, t] = sqrt(p_var);
       }
     }
   }

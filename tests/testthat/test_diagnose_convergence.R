@@ -60,11 +60,14 @@ test_that(".classify_bilatr_tier assigns Tier 2 to single-index, non-Tier-1, non
 
 test_that(".classify_bilatr_tier assigns Tier 3 to double-index, non-sign-ambiguous parameters", {
   # theta_raw is excluded from this set on purpose -- see the dedicated
-  # sign-ambiguous-exclusion test below.
-  out <- .classify_bilatr_tier(c("theta[3,12]", "log_lik[2,1]"))
-  expect_equal(out$tier, c(3L, 3L))
-  expect_equal(out$dyad_id, c(3L, 2L))
-  expect_equal(out$time_index, c(12L, 1L))
+  # sign-ambiguous-exclusion test below. theta_filtered/theta_filtered_sd
+  # (0.5.0) need no special-casing either -- structural, same as theta/
+  # log_lik (see .bilatr_tier1_names's docs for the filter_dyads caveat
+  # on dyad_id when a dyad subset was used).
+  out <- .classify_bilatr_tier(c("theta[3,12]", "log_lik[2,1]", "theta_filtered[1,1]", "theta_filtered_sd[1,1]"))
+  expect_equal(out$tier, c(3L, 3L, 3L, 3L))
+  expect_equal(out$dyad_id, c(3L, 2L, 1L, 1L))
+  expect_equal(out$time_index, c(12L, 1L, 1L, 1L))
 })
 
 test_that(".classify_bilatr_tier classifies phi structurally by index shape", {
@@ -81,15 +84,16 @@ test_that(".classify_bilatr_tier classifies phi structurally by index shape", {
   expect_equal(per_dyad_period$time_index, 7L)
 })
 
-test_that(".classify_bilatr_tier keeps bracketed non-centered globals in Tier 1, not Tier 2", {
-  # mu_intercept_raw[i] is single-indexed by *action type*, not dyad --
-  # the structural single-index rule alone would wrongly route it into
-  # Tier 2's dyad join, so it must be caught by name first. alpha_raw[i]
-  # is ALSO single-indexed by action type, but is excluded entirely
-  # rather than kept in Tier 1 -- see the dedicated sign-ambiguous test
-  # below, and .bilatr_tier1_names's docs for why it isn't in this list.
-  out <- .classify_bilatr_tier(c("mu_intercept_raw[2]", "mu_theta0"))
-  expect_equal(out$tier, c(1L, 1L))
+test_that(".classify_bilatr_tier keeps bracketed globals in Tier 1, not Tier 2", {
+  # mu_intercept[i]/alpha[i] are single-indexed by *action type*, not
+  # dyad -- the structural single-index rule alone would wrongly route
+  # them into Tier 2's dyad join, so they must be caught by name first
+  # (both are in .bilatr_tier1_names). alpha_raw[i] is ALSO
+  # single-indexed by action type, but is excluded entirely rather than
+  # kept in Tier 1 -- see the dedicated sign-ambiguous test below, and
+  # .bilatr_tier1_names's docs for why it isn't in that list.
+  out <- .classify_bilatr_tier(c("mu_intercept[2]", "alpha[3]", "mu_theta0"))
+  expect_equal(out$tier, c(1L, 1L, 1L))
   expect_true(all(is.na(out$dyad_id)))
 })
 

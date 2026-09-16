@@ -197,7 +197,7 @@ test_that("bilatr_init_fn()'s inits pass cmdstanr's init validation for every re
   data_list <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-    compute_log_lik = 0, anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
+    compute_log_lik = 0, prior_only = 0, compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0), anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
   )
 
   for (name in c("stable", "ou", "stable_soft_anchor", "ou_soft_anchor")) {

@@ -327,6 +327,16 @@ data {
   int<lower=0, upper=1> compute_log_lik;     // 1 = also compute per-dyad-period
                                               // log_lik in generated quantities
                                               // (D x T x draws; default 0/off)
+  int<lower=0, upper=1> prior_only;          // 1 = skip the likelihood entirely
+                                              // (fit the prior only; see
+                                              // alpha_prior_moments())
+  int<lower=0, upper=1> compute_theta_filtered; // 1 = also compute
+                                              // theta_filtered/theta_filtered_sd
+                                              // in generated quantities, for the
+                                              // dyads in filter_dyads
+  int<lower=0> n_filter_dyads;               // length of filter_dyads; 0 if
+                                              // compute_theta_filtered is 0
+  array[n_filter_dyads] int<lower=1, upper=D> filter_dyads; // which dyads to filter
 }
 parameters {
   // Latent states per dyad
@@ -403,10 +413,14 @@ model {
   // itself.
   alpha_raw ~ std_normal();
 
-  // likelihood, chunked via reduce_sum
-  array[D] int dyad_seq = linspaced_int_array(D, 1, D);
-  target += reduce_sum(partial_log_lik, dyad_seq, C,
-                        T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
+  // likelihood, chunked via reduce_sum -- skipped entirely if prior_only,
+  // gating this exactly the way compute_log_lik gates its own generated
+  // quantity below
+  if (!prior_only) {
+    array[D] int dyad_seq = linspaced_int_array(D, 1, D);
+    target += reduce_sum(partial_log_lik, dyad_seq, C,
+                          T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
+  }
 }
 generated quantities {
   array[compute_log_lik ? D : 0, compute_log_lik ? T : 0] real log_lik;
@@ -417,6 +431,59 @@ generated quantities {
         log_lik[d, t] = dyad_period_log_lik(
           is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha
         );
+      }
+    }
+  }
+
+  // Forward-filtered theta: conditional on THIS draw's hyperparameters,
+  // a Fisher-scoring (West-Harrison linear-Bayes) filter over the
+  // observations -- an approximation to p(theta_t | y_1:t), not the exact
+  // marginal (the hyperparameters here were themselves fit on all T
+  // periods). No autodiff in generated quantities, so the score is
+  // hand-derived (see data-raw or dev notes for the derivation): with
+  // conc_0 = phi[d] constant in theta (true unconditionally since the
+  // weights were retired in 0.4.6), d/dtheta log P(y|conc) reduces to
+  // sum_k phi[d]*p_k*(alpha_k - a_bar) * (digamma(y_k + phi[d]*p_k) -
+  // digamma(phi[d]*p_k)); the Fisher information uses the standard DM
+  // overdispersion correction n*(1+phi)/(n+phi) applied to
+  // Var_pi(alpha) = dot_product(p, square(alpha - a_bar)) (see
+  // diagnose_category_merges()'s use of the same quantity). No
+  // orientation_sign() call anywhere here: alpha, mu_intercept,
+  // sigma_theta0, and process_noise are already-oriented quantities, and
+  // the initial state (0) is orientation-free, so the recursion's output
+  // is automatically on the same oriented scale as theta.
+  array[compute_theta_filtered ? n_filter_dyads : 0,
+        compute_theta_filtered ? T : 0] real theta_filtered;
+  array[compute_theta_filtered ? n_filter_dyads : 0,
+        compute_theta_filtered ? T : 0] real theta_filtered_sd;
+
+  if (compute_theta_filtered) {
+    for (i in 1:n_filter_dyads) {
+      int d = filter_dyads[i];
+      real m = 0;
+      real p_var = square(sigma_theta0);
+      for (t in 1:T) {
+        real m_pred = m;
+        real p_pred = p_var + square(process_noise[d]);
+        if (is_obs[d, t] == 1) {
+          vector[A] eta = alpha .* rep_vector(m_pred, A) - mu_intercept;
+          vector[A] p = softmax(eta);
+          real a_bar = dot_product(p, alpha);
+          int n = sum(Y[d, t]);
+          real info = n * (1 + phi[d]) / (n + phi[d]) * dot_product(p, square(alpha - a_bar));
+          real g = 0;
+          for (k in 1:A) {
+            real conc_k = phi[d] * p[k];
+            g += conc_k * (alpha[k] - a_bar) * (digamma(Y[d, t, k] + conc_k) - digamma(conc_k));
+          }
+          p_var = 1 / (1 / p_pred + info);
+          m = m_pred + p_var * g;
+        } else {
+          m = m_pred;
+          p_var = p_pred;
+        }
+        theta_filtered[i, t] = m;
+        theta_filtered_sd[i, t] = sqrt(p_var);
       }
     }
   }

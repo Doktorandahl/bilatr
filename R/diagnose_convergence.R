@@ -8,10 +8,32 @@
 #' reflection symmetry (see [.bilatr_sign_ambiguous_raw_names()]) and
 #' caught by that check, earlier in [.classify_bilatr_tier()]'s
 #' `case_when()`, before this list is ever consulted.
+#'
+#' `mu_intercept_raw`/`mu_theta0` (0.5.0 tidy-up, see NEWS.md) were
+#' dropped from this list: neither exists in any currently registered
+#' model (`mu_intercept` is a plain `sum_to_zero_vector`, not a
+#' non-centered `_raw` parameter, and `mu_theta0` was removed when
+#' `theta0` became `sigma_theta0 * z_theta0` with no separate location
+#' parameter) -- listing them here was dead code that could only ever
+#' silently match nothing.
+#'
+#' `theta_filtered`/`theta_filtered_sd` (0.5.0) need no entry here or
+#' anywhere else in [.classify_bilatr_tier()]: Tier 3 is matched
+#' structurally, by bracket-index count (`n_index >= 2`, see that
+#' function), not by name, so a `theta_filtered[d, t]`/
+#' `theta_filtered_sd[d, t]` variable lands there automatically, the same
+#' way `log_lik[d, t]` already does. One caveat: when
+#' `assemble_stan_data()`'s `filter_dyads` narrows the dyad set, the
+#' `dyad_id`/`index_1` these two variables get in Tier 3 output is the
+#' *position within the filtered subset* (`1..n_filter_dyads`), not the
+#' true `D`-space `dyad_id` -- there is no translation layer back to the
+#' true `dyad_id` here (out of scope for 0.5.0); joining these two
+#' variables' Tier 3 rows to `dyad_ids`/other per-dyad metadata by
+#' `dyad_id` is only valid when `filter_dyads` was `NULL` (i.e. every
+#' dyad was filtered, in `Y`'s original order).
 #' @keywords internal
 .bilatr_tier1_names <- c(
-  "alpha", "mu_intercept", "mu_intercept_raw",
-  "mu_theta0", "sigma_theta0",
+  "alpha", "mu_intercept", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
   "lp__"
 )

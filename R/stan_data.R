@@ -50,6 +50,32 @@
 #'   both registered Stan model variants, gating a per-dyad-period
 #'   `log_lik` in `generated quantities`; left off by default since it is
 #'   `D x T x` draws and file size already scales with dyad count.
+#' @param prior_only `0` (default) or `1`. Data flag consumed by both
+#'   registered Stan model variants, gating the `reduce_sum` likelihood
+#'   call in `model` exactly as `compute_log_lik` gates its generated
+#'   quantity -- `1` fits the prior alone, useful for prior-predictive
+#'   checks and for validating [alpha_prior_moments()] against an actual
+#'   fit.
+#' @param compute_theta_filtered `0` (default) or `1`. Data flag consumed
+#'   by both registered Stan model variants, gating
+#'   `theta_filtered`/`theta_filtered_sd` in `generated quantities`: the
+#'   forward-filtered state (conditional on each draw's hyperparameters,
+#'   a West-Harrison/Fisher-scoring linear-Bayes update; see each `.stan`
+#'   file's `generated quantities` block) as opposed to the smoothed
+#'   `theta` every fit already returns. Left off by default: computing it
+#'   for every dyad is `D * T` iterations with `A` `digamma()` calls each,
+#'   single-threaded (no `reduce_sum` in `generated quantities`), on the
+#'   order of a minute or two per chain for a full production-sized dyad
+#'   set, and adds two more `D x T`-scaled Tier 3 blocks to the output.
+#' @param filter_dyads Optional character vector of dyad names (matched
+#'   against the `dyad_ids` attribute's `dyad` column -- the directed
+#'   `"AAA_BBB"` key, same as everywhere else in this package) naming
+#'   which dyads to compute `theta_filtered` for. Ignored if
+#'   `compute_theta_filtered` is `0`. `NULL` (default) means all dyads,
+#'   once `compute_theta_filtered = 1` is set -- pass a small subset (e.g.
+#'   fifty dyads) to compute the filter cheaply for just those. Errors,
+#'   listing the offending names, if any requested dyad was dropped by
+#'   `min_n_events` or never existed.
 #' @param anchor_scale Scale of the soft sign anchor
 #'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`. Since 0.4.2
 #'   (see NEWS.md), this is consumed only by the LEGACY
@@ -71,7 +97,9 @@
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `rho_prior_a`, `rho_prior_b`,
-#'   `compute_log_lik`, `anchor_scale`. Also carries a `dyad_ids` attribute
+#'   `compute_log_lik`, `prior_only`, `compute_theta_filtered`,
+#'   `n_filter_dyads`, `filter_dyads`, `anchor_scale`. Also carries a
+#'   `dyad_ids` attribute
 #'   (the output of [make_dyad_ids()]) for reattaching identifiers to
 #'   posterior draws; see [extract_theta()].
 #' @examples
@@ -106,6 +134,9 @@ assemble_stan_data <- function(
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
+  prior_only = 0,
+  compute_theta_filtered = 0,
+  filter_dyads = NULL,
   anchor_scale = 0.1
 ) {
   resolution <- match.arg(resolution)
@@ -157,6 +188,32 @@ assemble_stan_data <- function(
     purrr::map(~ unname(as.matrix(dplyr::select(.x, dplyr::starts_with("EventClass_")))))
   events_array <- aperm(simplify2array(events_list), c(3, 1, 2))
 
+  dyad_ids <- make_dyad_ids(
+    agg,
+    years = years,
+    resolution = resolution,
+    min_n_events = min_n_events
+  )
+
+  if (compute_theta_filtered == 1) {
+    dyad_lookup <- dplyr::distinct(dyad_ids, dyad_id, dyad)
+    if (is.null(filter_dyads)) {
+      filter_dyad_ids <- dyad_lookup$dyad_id
+    } else {
+      filter_dyad_ids <- dyad_lookup$dyad_id[match(filter_dyads, dyad_lookup$dyad)]
+      missing_dyads <- filter_dyads[is.na(filter_dyad_ids)]
+      if (length(missing_dyads) > 0) {
+        stop(
+          "`filter_dyads` names not found (dropped by min_n_events, or never existed): ",
+          paste(missing_dyads, collapse = ", "),
+          call. = FALSE
+        )
+      }
+    }
+  } else {
+    filter_dyad_ids <- integer(0)
+  }
+
   stan_data <- list(
     D = D,
     T = Tn,
@@ -174,6 +231,16 @@ assemble_stan_data <- function(
     # `log_lik` in generated quantities (D x T x draws, so off by
     # default).
     compute_log_lik = compute_log_lik,
+    # Consumed by both registered variants; gates the reduce_sum
+    # likelihood call in `model` (off by default -- fits the prior alone
+    # when on).
+    prior_only = prior_only,
+    # Consumed by both registered variants; gates theta_filtered/
+    # theta_filtered_sd in generated quantities for filter_dyad_ids (off
+    # by default -- see @param compute_theta_filtered/filter_dyads).
+    compute_theta_filtered = compute_theta_filtered,
+    n_filter_dyads = length(filter_dyad_ids),
+    filter_dyads = filter_dyad_ids,
     # Only consumed by the legacy stable_soft_anchor/ou_soft_anchor
     # programs (soft sign anchor on alpha[1]); stable/ou identify
     # alpha[1]'s sign by construction and don't declare this field, but
@@ -182,12 +249,7 @@ assemble_stan_data <- function(
     anchor_scale = anchor_scale
   )
 
-  attr(stan_data, "dyad_ids") <- make_dyad_ids(
-    agg,
-    years = years,
-    resolution = resolution,
-    min_n_events = min_n_events
-  )
+  attr(stan_data, "dyad_ids") <- dyad_ids
   attr(stan_data, "event_classes") <- event_classes
 
   stan_data

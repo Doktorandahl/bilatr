@@ -1,4 +1,74 @@
 
+# bilatr 0.5.0
+
+## New features
+
+* **`diagnose_category_merges()`**: for a fitted `alpha`, reports what
+  merging any two (or more) of the `A` event categories would cost in
+  Fisher information about `theta`. Two categories are redundant for the
+  latent scale exactly when their discriminations are equal; the
+  information lost by merging `j`/`k` is exactly
+  `pi_j*pi_k*(alpha_j-alpha_k)^2/(pi_j+pi_k)` (Ward's linkage on `alpha`
+  weighted by category share `pi`), computed per posterior draw and
+  summarised (never at the posterior mean, since the loss is nonlinear
+  and `alpha`'s sum-to-zero/RMS-1 constraints induce strong negative
+  correlation between categories). Returns a `categories` table (with
+  contraction/z-score secondary columns, computed against `alpha`'s
+  actual per-index prior moments -- see `alpha_prior_moments()` below,
+  not a flat `N(0,1)`), a `pairwise` table of every merge's cost, and a
+  `ladder`: the full greedy agglomerative merge path from `A` down to 2,
+  so the whole cost curve can be read at once rather than pricing one
+  grouping at a time. `merge_cost()` prices an explicit grouping already
+  in mind. Documents plainly that `alpha` is a discrimination, not a
+  severity ranking, and that cheapness is a price, not a recommendation
+  -- the function never suggests a grouping.
+* **`alpha_prior_moments()`**: `alpha`'s prior is not exchangeable across
+  action classes even though the underlying construction is -- folding by
+  the sign of the reference class's own raw coordinate
+  (`orientation_sign()`) breaks that symmetry, giving the reference class
+  a materially different prior mean/sd than the rest (e.g. at `A = 10`,
+  mean 0.820/sd 0.572 vs. mean -0.091/sd 0.996). Returns the per-index
+  prior mean/sd by Monte Carlo simulation mirroring the Stan construction
+  exactly, memoised per call signature.
+* **Forward-filtered `theta`**: `theta_filtered`/`theta_filtered_sd` in
+  `generated quantities` (both `stable` and `ou`), a West-Harrison/
+  Fisher-scoring linear-Bayes filter -- conditional on each draw's
+  hyperparameters, `p(theta_t | y_1:t)` rather than the smoothed `theta`
+  every fit already returns (an approximation, since the hyperparameters
+  were themselves fit on all `T` periods). Hand-derived score (no
+  autodiff in `generated quantities`): with the likelihood unweighted
+  since 0.4.6, `conc_0 = phi` is exactly constant in `theta`, so the DM
+  score reduces to a clean sum with no special cases. Gated behind a new
+  `compute_theta_filtered` data flag (default off: `D*T` iterations with
+  `A` `digamma()` calls each, single-threaded, on the order of a minute
+  or two per chain for a full production dyad set), with an optional
+  `filter_dyads` argument on `assemble_stan_data()` (dyad names, matched
+  against the `dyad_ids` attribute) to filter a cheap subset instead of
+  every dyad.
+* **`prior_only`** data flag (both `stable` and `ou`, plumbed through
+  `assemble_stan_data()`): skips the `reduce_sum` likelihood call
+  entirely, fitting the prior alone -- useful for prior-predictive checks
+  and validates `alpha_prior_moments()` against an actual fit (tested).
+
+## Changes
+
+* `.bilatr_tier1_names` drops `mu_intercept_raw`/`mu_theta0`: neither
+  exists in any currently registered model (dead names that could only
+  ever silently match nothing). `theta_filtered`/`theta_filtered_sd` need
+  no entry anywhere in `.classify_bilatr_tier()`: Tier 3 is matched
+  structurally by bracket-index count, so they land there automatically,
+  the same way `log_lik` already does. One documented limitation: when
+  `filter_dyads` narrows the dyad set, these two variables' Tier 3
+  `dyad_id` is the position within the filtered subset, not the true
+  `D`-space `dyad_id` -- there is no translation layer back, out of scope
+  for this release.
+* `tests/testthat/helper_fixtures.R`'s `make_csv_diagnostics_fixture()`
+  no longer builds the retired `dyad_weight`/`period_weight`/
+  `action_weight` fields into its default `data_list` unconditionally
+  (leftover from 0.4.6) -- added only when fitting one of the legacy
+  `stable_soft_anchor`/`ou_soft_anchor` programs, which still declare
+  them.
+
 # bilatr 0.4.6
 
 ## Breaking changes

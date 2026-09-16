@@ -5,7 +5,7 @@
 \alias{.bilatr_tier1_names}
 \title{Names of Stan parameters treated as global/shared (Tier 1)}
 \format{
-An object of class \code{character} of length 10.
+An object of class \code{character} of length 8.
 }
 \usage{
 .bilatr_tier1_names
@@ -19,5 +19,29 @@ action type, not dyad): it is sign-ambiguous under the alpha/theta
 reflection symmetry (see \code{\link[=.bilatr_sign_ambiguous_raw_names]{.bilatr_sign_ambiguous_raw_names()}}) and
 caught by that check, earlier in \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}}'s
 \code{case_when()}, before this list is ever consulted.
+}
+\details{
+\code{mu_intercept_raw}/\code{mu_theta0} (0.5.0 tidy-up, see NEWS.md) were
+dropped from this list: neither exists in any currently registered
+model (\code{mu_intercept} is a plain \code{sum_to_zero_vector}, not a
+non-centered \verb{_raw} parameter, and \code{mu_theta0} was removed when
+\code{theta0} became \code{sigma_theta0 * z_theta0} with no separate location
+parameter) -- listing them here was dead code that could only ever
+silently match nothing.
+
+\code{theta_filtered}/\code{theta_filtered_sd} (0.5.0) need no entry here or
+anywhere else in \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}}: Tier 3 is matched
+structurally, by bracket-index count (\code{n_index >= 2}, see that
+function), not by name, so a \code{theta_filtered[d, t]}/
+\code{theta_filtered_sd[d, t]} variable lands there automatically, the same
+way \code{log_lik[d, t]} already does. One caveat: when
+\code{assemble_stan_data()}'s \code{filter_dyads} narrows the dyad set, the
+\code{dyad_id}/\code{index_1} these two variables get in Tier 3 output is the
+\emph{position within the filtered subset} (\verb{1..n_filter_dyads}), not the
+true \code{D}-space \code{dyad_id} -- there is no translation layer back to the
+true \code{dyad_id} here (out of scope for 0.5.0); joining these two
+variables' Tier 3 rows to \code{dyad_ids}/other per-dyad metadata by
+\code{dyad_id} is only valid when \code{filter_dyads} was \code{NULL} (i.e. every
+dyad was filtered, in \code{Y}'s original order).
 }
 \keyword{internal}

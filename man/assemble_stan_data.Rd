@@ -17,6 +17,9 @@ assemble_stan_data(
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
+  prior_only = 0,
+  compute_theta_filtered = 0,
+  filter_dyads = NULL,
   anchor_scale = 0.1
 )
 }
@@ -78,6 +81,35 @@ both registered Stan model variants, gating a per-dyad-period
 \code{log_lik} in \verb{generated quantities}; left off by default since it is
 \verb{D x T x} draws and file size already scales with dyad count.}
 
+\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by both
+registered Stan model variants, gating the \code{reduce_sum} likelihood
+call in \code{model} exactly as \code{compute_log_lik} gates its generated
+quantity -- \code{1} fits the prior alone, useful for prior-predictive
+checks and for validating \code{\link[=alpha_prior_moments]{alpha_prior_moments()}} against an actual
+fit.}
+
+\item{compute_theta_filtered}{\code{0} (default) or \code{1}. Data flag consumed
+by both registered Stan model variants, gating
+\code{theta_filtered}/\code{theta_filtered_sd} in \verb{generated quantities}: the
+forward-filtered state (conditional on each draw's hyperparameters,
+a West-Harrison/Fisher-scoring linear-Bayes update; see each \code{.stan}
+file's \verb{generated quantities} block) as opposed to the smoothed
+\code{theta} every fit already returns. Left off by default: computing it
+for every dyad is \code{D * T} iterations with \code{A} \code{digamma()} calls each,
+single-threaded (no \code{reduce_sum} in \verb{generated quantities}), on the
+order of a minute or two per chain for a full production-sized dyad
+set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
+
+\item{filter_dyads}{Optional character vector of dyad names (matched
+against the \code{dyad_ids} attribute's \code{dyad} column -- the directed
+\code{"AAA_BBB"} key, same as everywhere else in this package) naming
+which dyads to compute \code{theta_filtered} for. Ignored if
+\code{compute_theta_filtered} is \code{0}. \code{NULL} (default) means all dyads,
+once \code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
+fifty dyads) to compute the filter cheaply for just those. Errors,
+listing the offending names, if any requested dyad was dropped by
+\code{min_n_events} or never existed.}
+
 \item{anchor_scale}{Scale of the soft sign anchor
 \verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}. Since 0.4.2
 (see NEWS.md), this is consumed only by the LEGACY
@@ -100,7 +132,9 @@ already the reference/neutral action class supplied via
 A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
 \code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{rho_prior_a}, \code{rho_prior_b},
-\code{compute_log_lik}, \code{anchor_scale}. Also carries a \code{dyad_ids} attribute
+\code{compute_log_lik}, \code{prior_only}, \code{compute_theta_filtered},
+\code{n_filter_dyads}, \code{filter_dyads}, \code{anchor_scale}. Also carries a
+\code{dyad_ids} attribute
 (the output of \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to
 posterior draws; see \code{\link[=extract_theta]{extract_theta()}}.
 }

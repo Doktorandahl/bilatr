@@ -151,14 +151,24 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
   A <- 4
   Y <- array(sample(0:6, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
   is_obs <- matrix(1L, D, Tn)
-  data_list <- utils::modifyList(
-    list(
-      T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-      dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A),
-      compute_log_lik = 0, anchor_scale = 0.1
-    ),
-    extra_data
+  base_data <- list(
+    T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+    compute_log_lik = 0, prior_only = 0,
+    compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0),
+    anchor_scale = 0.1
   )
+  # Only the legacy stable_soft_anchor/ou_soft_anchor programs (and their
+  # pre-0.4.0 aliases) still declare the likelihood-weighting fields
+  # (retired from stable/ou in 0.4.6, see NEWS.md) -- add unit weights
+  # only when fitting one of those, so stable/ou's default data_list here
+  # doesn't carry dead fields that would mislead a reader into thinking
+  # they're still consumed.
+  if (.canonical_stan_model(stan_model) %in% c("stable_soft_anchor", "ou_soft_anchor")) {
+    base_data <- c(base_data, list(
+      dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A)
+    ))
+  }
+  data_list <- utils::modifyList(base_data, extra_data)
   mod <- .compile_stan_model(stan_model, opt_level = 1)
   outdir <- tempfile()
   dir.create(outdir)
