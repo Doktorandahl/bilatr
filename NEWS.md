@@ -1,4 +1,21 @@
 
+# bilatr 0.5.1
+
+## New features
+
+* Added `EventRootCode4`, a finer alternative to `EventRootCode3`:
+  `041` ("Discuss by telephone") is split out of the "Consult: meet,
+  discuss, or visit" grouping into its own class, and the "Threaten or
+  exhibit force posture" and "Assault, fight, or mass violence" groupings
+  are split back into their individual root codes (Threaten, Exhibit
+  force posture; Assault, Fight, Use unconventional mass violence).
+  `016`/`018`/`019`'s relocations into Reject/diplomatic-cooperation
+  carry over unchanged from `EventRootCode3`. Classes are numbered
+  1-23. `cameo_lookup`/`recode_cameo()` gain `EventRootCode4`,
+  `EventRootCode4Name`, and `EventRootCode4RootCodes` alongside the new
+  `assign_eventrootcode4()`, `eventrootcode4_name()`, and
+  `eventrootcode4_rootcodes()` helpers.
+
 # bilatr 0.5.0
 
 ## New features

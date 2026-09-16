@@ -38,6 +38,19 @@ Threaten-or-force-posture + Protest; see
 \item{EventRootCode3RootCodes}{Character. Comma-separated CAMEO
 root/event codes underlying each \code{EventRootCode3} class; see
 \code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}.}
+\item{EventRootCode4}{Integer, 1-23. A further refinement of
+\code{EventRootCode3} that splits \code{041} ("Discuss by telephone") out of
+its consult-visit grouping into its own class, and splits the
+threaten/force-posture and assault/fight/mass-violence groupings
+back into their individual root codes (Threaten, Exhibit force
+posture; Assault, Fight, Use unconventional mass violence). The
+\code{016}/\code{018}/\code{019} relocations from \code{EventRootCode3} are kept; see
+\code{\link[=assign_eventrootcode4]{assign_eventrootcode4()}}.}
+\item{EventRootCode4Name}{Character. Human-readable label for
+\code{EventRootCode4}; see \code{\link[=eventrootcode4_name]{eventrootcode4_name()}}.}
+\item{EventRootCode4RootCodes}{Character. Comma-separated CAMEO
+root/event codes underlying each \code{EventRootCode4} class; see
+\code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}.}
 \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}

@@ -39,6 +39,19 @@
 #'   \item{EventRootCode3RootCodes}{Character. Comma-separated CAMEO
 #'     root/event codes underlying each `EventRootCode3` class; see
 #'     [eventrootcode3_rootcodes()].}
+#'   \item{EventRootCode4}{Integer, 1-23. A further refinement of
+#'     `EventRootCode3` that splits `041` ("Discuss by telephone") out of
+#'     its consult-visit grouping into its own class, and splits the
+#'     threaten/force-posture and assault/fight/mass-violence groupings
+#'     back into their individual root codes (Threaten, Exhibit force
+#'     posture; Assault, Fight, Use unconventional mass violence). The
+#'     `016`/`018`/`019` relocations from `EventRootCode3` are kept; see
+#'     [assign_eventrootcode4()].}
+#'   \item{EventRootCode4Name}{Character. Human-readable label for
+#'     `EventRootCode4`; see [eventrootcode4_name()].}
+#'   \item{EventRootCode4RootCodes}{Character. Comma-separated CAMEO
+#'     root/event codes underlying each `EventRootCode4` class; see
+#'     [eventrootcode4_rootcodes()].}
 #'   \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 #'     used as the bilatr model's default grouping; see
 #'     [assign_bilatr_class()].}

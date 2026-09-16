@@ -92,6 +92,49 @@ test_that("eventrootcode3_rootcodes lists the codes feeding each class and NAs a
   expect_true(is.na(eventrootcode3_rootcodes(20L)))
 })
 
+test_that("assign_eventrootcode4 splits 041, threaten/force-posture, and assault/fight/mass-violence", {
+  # most roots still map to the same class as EventRootCode3
+  expect_equal(assign_eventrootcode4(c("01", "0211", "17")), c(1L, 2L, 20L))
+  # 016 still moves to Reject (with root 12)
+  expect_equal(assign_eventrootcode4("016"), 15L)
+  expect_equal(assign_eventrootcode4("12"), 15L)
+  # 018/019 still move to diplomatic cooperation (with root 05)
+  expect_equal(assign_eventrootcode4("018"), 8L)
+  expect_equal(assign_eventrootcode4("019"), 8L)
+  expect_equal(assign_eventrootcode4("05"), 8L)
+  # 041 (discuss by telephone) is split out of the meet/discuss/visit class
+  expect_equal(assign_eventrootcode4("041"), 5L)
+  expect_equal(assign_eventrootcode4(c("042", "043", "044")), c(6L, 6L, 6L))
+  # threaten (13), protest (14), and exhibit force posture (15) are all separate
+  expect_equal(assign_eventrootcode4(c("13", "141", "150")), c(16L, 17L, 18L))
+  # assault (18), fight (19), and mass violence (20) are all separate
+  expect_equal(assign_eventrootcode4(c("180", "190", "200")), c(21L, 22L, 23L))
+  expect_true(is.na(assign_eventrootcode4("99")))
+})
+
+test_that("eventrootcode4_name labels every assign_eventrootcode4() output value and NAs anything else", {
+  expect_equal(eventrootcode4_name(5L), "Discuss by telephone")
+  expect_equal(eventrootcode4_name(16L), "Threaten")
+  expect_equal(eventrootcode4_name(18L), "Exhibit force posture")
+  expect_equal(eventrootcode4_name(21L), "Assault")
+  expect_equal(eventrootcode4_name(23L), "Use unconventional mass violence")
+  expect_true(is.na(eventrootcode4_name(24L)))
+
+  produced <- unique(assign_eventrootcode4(cameo_lookup$CAMEOEVENTCODE))
+  expect_false(any(is.na(eventrootcode4_name(produced))))
+  expect_equal(sort(unique(produced)), 1:23)
+})
+
+test_that("eventrootcode4_rootcodes lists the codes feeding each class and NAs anything else", {
+  expect_equal(eventrootcode4_rootcodes(5L), "041")
+  expect_equal(eventrootcode4_rootcodes(6L), "042, 043, 044")
+  expect_equal(eventrootcode4_rootcodes(8L), "05, 018, 019")
+  expect_equal(eventrootcode4_rootcodes(15L), "12, 016")
+  expect_equal(eventrootcode4_rootcodes(16L), "13")
+  expect_equal(eventrootcode4_rootcodes(18L), "15")
+  expect_true(is.na(eventrootcode4_rootcodes(24L)))
+})
+
 test_that("assign_bilatr_class follows EventRootCode2 with per-code refinements", {
   # regrouped-root defaults
   expect_equal(assign_bilatr_class(c("010", "190", "071", "0862")), c(0L, 10L, 5L, 6L))
@@ -133,6 +176,10 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$EventRootCode3Name)))
   expect_false(any(is.na(cameo_lookup$EventRootCode3RootCodes)))
   expect_true(all(cameo_lookup$EventRootCode3 %in% 1:19))
+  expect_false(any(is.na(cameo_lookup$EventRootCode4)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode4Name)))
+  expect_false(any(is.na(cameo_lookup$EventRootCode4RootCodes)))
+  expect_true(all(cameo_lookup$EventRootCode4 %in% 1:23))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
   expect_false(any(is.na(cameo_lookup$BilatrClass2)))
@@ -189,6 +236,22 @@ test_that("recode_cameo also attaches EventRootCode3 and its name/root-codes col
   expect_equal(out$EventRootCode3RootCodes[1], "12, 016")
   expect_equal(out$EventRootCode3RootCodes[2], "05, 018, 019")
   expect_equal(out$EventRootCode3RootCodes[6], "13, 15")
+})
+
+test_that("recode_cameo also attaches EventRootCode4 and its name/root-codes columns", {
+  events <- tibble::tibble(EventCode = c("016", "018", "041", "13", "14", "15", "18", "19", "20"))
+  out <- recode_cameo(events, code_col = "EventCode")
+  expect_true(all(c(
+    "EventRootCode4", "EventRootCode4Name", "EventRootCode4RootCodes"
+  ) %in% names(out)))
+  expect_equal(out$EventRootCode4, c(15L, 8L, 5L, 16L, 17L, 18L, 21L, 22L, 23L))
+  expect_equal(out$EventRootCode4Name, c(
+    "Reject", "Engage in diplomatic cooperation", "Discuss by telephone",
+    "Threaten", "Protest", "Exhibit force posture",
+    "Assault", "Fight", "Use unconventional mass violence"
+  ))
+  expect_equal(out$EventRootCode4RootCodes[1], "12, 016")
+  expect_equal(out$EventRootCode4RootCodes[3], "041")
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {

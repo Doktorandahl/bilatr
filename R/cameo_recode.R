@@ -262,6 +262,158 @@ eventrootcode3_rootcodes <- function(class) {
   unname(codes[as.character(class)])
 }
 
+#' Regroup a CAMEO event code into the bilatr "EventRootCode4" scheme
+#'
+#' `EventRootCode4` is a further refinement of [assign_eventrootcode3()],
+#' splitting three of its remaining merged/aggregated groupings back out
+#' into their individual root/sub-codes, while keeping its relocations of
+#' `016`/`018`/`019`:
+#'
+#' \itemize{
+#'   \item `EventRootCode3`'s "Consult: meet, discuss, or visit" class
+#'     (`041`-`044`) is split so that `041` ("Discuss by telephone")
+#'     becomes its own class, separate from `042`-`044`.
+#'   \item `EventRootCode3`'s "Threaten or exhibit force posture" class
+#'     (roots 13 + 15) is split back into Threaten (root 13) and Exhibit
+#'     force posture (root 15); Protest (root 14) was already its own
+#'     class in [assign_eventrootcode3()] and is unaffected.
+#'   \item `EventRootCode3`'s "Assault, fight, or mass violence" class
+#'     (roots 18 + 19 + 20) is split back into Assault (root 18), Fight
+#'     (root 19), and Use unconventional mass violence (root 20).
+#'   \item `016` ("Deny responsibility") still moves out of root 01 into
+#'     the Reject class (with root 12); `018`/`019` ("Make empathetic
+#'     comment"/"Express accord") still move out of root 01 into the
+#'     diplomatic-cooperation class (with root 05) -- same relocations
+#'     as [assign_eventrootcode3()].
+#'   \item Every other root maps as in [assign_eventrootcode3()].
+#' }
+#'
+#' Classes are numbered 1-23 in ascending root-code order; see
+#' [eventrootcode4_name()] for labels and [eventrootcode4_rootcodes()]
+#' for the underlying CAMEO root/event codes each class draws from.
+#'
+#' @param code Character or numeric vector of CAMEO event codes (e.g.
+#'   `"0211"`, `"19"`).
+#' @return Integer vector of `EventRootCode4` values (1-23).
+#' @keywords internal
+assign_eventrootcode4 <- function(code) {
+  code <- stringr::str_pad(as.character(code), width = 2, pad = "0")
+  root <- get_root(code)
+  sub3 <- stringr::str_sub(code, 1, 3)
+  dplyr::case_when(
+    code == "016" ~ 15L,
+    code == "018" ~ 8L,
+    code == "019" ~ 8L,
+    root == "01" ~ 1L,
+    root == "02" ~ 2L,
+    root == "03" ~ 3L,
+    root == "04" & sub3 == "041" ~ 5L,
+    root == "04" & sub3 %in% c("042", "043", "044") ~ 6L,
+    root == "04" & sub3 %in% c("045", "046") ~ 7L,
+    root == "04" ~ 4L,
+    root == "05" ~ 8L,
+    root == "06" ~ 9L,
+    root == "07" ~ 10L,
+    root == "08" ~ 11L,
+    root == "09" ~ 12L,
+    root == "10" ~ 13L,
+    root == "11" ~ 14L,
+    root == "12" ~ 15L,
+    root == "13" ~ 16L,
+    root == "14" ~ 17L,
+    root == "15" ~ 18L,
+    root == "16" ~ 19L,
+    root == "17" ~ 20L,
+    root == "18" ~ 21L,
+    root == "19" ~ 22L,
+    root == "20" ~ 23L,
+    TRUE ~ NA_integer_
+  )
+}
+
+#' Human-readable label for an `EventRootCode4` value
+#'
+#' Preliminary labels, one per [assign_eventrootcode4()] output value.
+#'
+#' @param class Integer vector of `EventRootCode4` values, as returned
+#'   by [assign_eventrootcode4()].
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 1-23.
+#' @keywords internal
+eventrootcode4_name <- function(class) {
+  names <- c(
+    "1"  = "Make a public statement",
+    "2"  = "Appeal for action",
+    "3"  = "Express intent to cooperate",
+    "4"  = "Consult, unspecified",
+    "5"  = "Discuss by telephone",
+    "6"  = "Consult: meet, discuss, or visit",
+    "7"  = "Consult: negotiate or mediate",
+    "8"  = "Engage in diplomatic cooperation",
+    "9"  = "Engage in material cooperation",
+    "10" = "Provide aid",
+    "11" = "Yield",
+    "12" = "Investigate",
+    "13" = "Demand",
+    "14" = "Disapprove",
+    "15" = "Reject",
+    "16" = "Threaten",
+    "17" = "Protest",
+    "18" = "Exhibit force posture",
+    "19" = "Reduce relations",
+    "20" = "Coerce",
+    "21" = "Assault",
+    "22" = "Fight",
+    "23" = "Use unconventional mass violence"
+  )
+  unname(names[as.character(class)])
+}
+
+#' Underlying CAMEO root/event codes for an `EventRootCode4` value
+#'
+#' For most `EventRootCode4` classes this is just the single two-digit
+#' CAMEO root code the class was built from. Where a class merges
+#' several roots (e.g. "Engage in diplomatic cooperation", which picks
+#' up `018`/`019` from root 01), splits a root into finer sub-codes
+#' (e.g. "Consult: meet, discuss, or visit"), or relocates an individual
+#' code out of its root (e.g. "Reject", which picks up `016` from root
+#' 01), this lists every code that feeds into it, comma-separated in the
+#' order given in [assign_eventrootcode4()]'s docs.
+#'
+#' @param class Integer vector of `EventRootCode4` values, as returned
+#'   by [assign_eventrootcode4()].
+#' @return Character vector of comma-separated CAMEO root/event codes,
+#'   `NA` for values outside 1-23.
+#' @keywords internal
+eventrootcode4_rootcodes <- function(class) {
+  codes <- c(
+    "1"  = "01",
+    "2"  = "02",
+    "3"  = "03",
+    "4"  = "04, 040",
+    "5"  = "041",
+    "6"  = "042, 043, 044",
+    "7"  = "045, 046",
+    "8"  = "05, 018, 019",
+    "9"  = "06",
+    "10" = "07",
+    "11" = "08",
+    "12" = "09",
+    "13" = "10",
+    "14" = "11",
+    "15" = "12, 016",
+    "16" = "13",
+    "17" = "14",
+    "18" = "15",
+    "19" = "16",
+    "20" = "17",
+    "21" = "18",
+    "22" = "19",
+    "23" = "20"
+  )
+  unname(codes[as.character(class)])
+}
+
 #' Human-readable label for a bilatr event class
 #'
 #' @param class Integer vector of `BilatrClass` values (0-10).
@@ -403,6 +555,7 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `PentaClass`,
 #' `PentaClass_modified`, `EventRootCode2`, `EventRootCode2Name`,
 #' `EventRootCode3`, `EventRootCode3Name`, `EventRootCode3RootCodes`,
+#' `EventRootCode4`, `EventRootCode4Name`, `EventRootCode4RootCodes`,
 #' `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
 #' `BilatrClass2Name` columns. `PentaClass_modified` folds low-intensity
 #' verbal cooperation (Goldstein score <= 1) into its own class, which
@@ -413,7 +566,13 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' `EventRootCode3RootCodes` (see [assign_eventrootcode3()],
 #' [eventrootcode3_name()], and [eventrootcode3_rootcodes()]) further
 #' refines `EventRootCode2` by relocating `016`/`018`/`019` and splitting
-#' its `"10"` and `"13"` groupings back out; `BilatrClass` / `BilatrClassName`
+#' its `"10"` and `"13"` groupings back out; `EventRootCode4` /
+#' `EventRootCode4Name` / `EventRootCode4RootCodes` (see
+#' [assign_eventrootcode4()], [eventrootcode4_name()], and
+#' [eventrootcode4_rootcodes()]) further refines `EventRootCode3` by
+#' splitting `041` out of its consult-visit grouping and splitting the
+#' threaten/force-posture and assault/fight/mass-violence groupings back
+#' into their individual roots; `BilatrClass` / `BilatrClassName`
 #' (see [assign_bilatr_class()]) is the 11-level action scheme used as
 #' the model's default; `BilatrClass2` / `BilatrClass2Name` (see
 #' [assign_bilatr_class2()]) is a 9-level coarsening that merges the two

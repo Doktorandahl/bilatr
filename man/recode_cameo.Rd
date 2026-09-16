@@ -22,6 +22,7 @@ Joins \code{data} against the package's built-in \link{cameo_lookup} table to
 attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{PentaClass},
 \code{PentaClass_modified}, \code{EventRootCode2}, \code{EventRootCode2Name},
 \code{EventRootCode3}, \code{EventRootCode3Name}, \code{EventRootCode3RootCodes},
+\code{EventRootCode4}, \code{EventRootCode4Name}, \code{EventRootCode4RootCodes},
 \code{BilatrClass}, \code{BilatrClassName}, \code{BilatrClass2}, and
 \code{BilatrClass2Name} columns. \code{PentaClass_modified} folds low-intensity
 verbal cooperation (Goldstein score <= 1) into its own class, which
@@ -32,7 +33,13 @@ codes; \code{EventRootCode3} / \code{EventRootCode3Name} /
 \code{EventRootCode3RootCodes} (see \code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}},
 \code{\link[=eventrootcode3_name]{eventrootcode3_name()}}, and \code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}) further
 refines \code{EventRootCode2} by relocating \code{016}/\code{018}/\code{019} and splitting
-its \code{"10"} and \code{"13"} groupings back out; \code{BilatrClass} / \code{BilatrClassName}
+its \code{"10"} and \code{"13"} groupings back out; \code{EventRootCode4} /
+\code{EventRootCode4Name} / \code{EventRootCode4RootCodes} (see
+\code{\link[=assign_eventrootcode4]{assign_eventrootcode4()}}, \code{\link[=eventrootcode4_name]{eventrootcode4_name()}}, and
+\code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}) further refines \code{EventRootCode3} by
+splitting \code{041} out of its consult-visit grouping and splitting the
+threaten/force-posture and assault/fight/mass-violence groupings back
+into their individual roots; \code{BilatrClass} / \code{BilatrClassName}
 (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action scheme used as
 the model's default; \code{BilatrClass2} / \code{BilatrClass2Name} (see
 \code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}) is a 9-level coarsening that merges the two
