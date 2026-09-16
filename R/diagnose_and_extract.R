@@ -57,7 +57,7 @@
 #' already summarised once. This function reads Tier 1/2 once and Tier 3
 #' once (chunked, same as [diagnose_convergence()]), reorients whichever
 #' columns [bilatr_orient()] would flip for `stan_model` as part of that
-#' single read, and derives all four outputs from those two summaries
+#' single read, and derives every output from those two summaries
 #' rather than re-reading anything.
 #'
 #' Total file touches per chain file, at production scale (Tier 3 too
@@ -115,7 +115,12 @@
 #' @return A list with elements `diagnostics` (a `bilatr_diagnostics`
 #'   object, as from [diagnose_convergence()]), `theta`, `alpha`, and
 #'   `mu_intercept` (tibbles, in the same shape [extract_theta()]/
-#'   [extract_alpha()]/[extract_mu_intercept()] return).
+#'   [extract_alpha()]/[extract_mu_intercept()] return), plus
+#'   `theta_filtered`/`theta_filtered_sd` (0.5.0+; empty tibbles unless
+#'   `compute_theta_filtered = 1` was set when the fit was assembled) --
+#'   same `dyad_id`/`time_index`/`dyad_ids`-joined shape as `theta`, with
+#'   the position-within-`filter_dyads` index already translated back to
+#'   the true `dyad_id` via `stan_data$filter_dyads`.
 #' @examples
 #' \dontrun{
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
@@ -269,6 +274,32 @@ diagnose_and_extract_bilatr <- function(
     tidyr::separate(variable, into = c("dyad_id", "time_index"), sep = ",", convert = TRUE) %>%
     dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
 
+  # theta_filtered/theta_filtered_sd (0.5.0+, present only if
+  # compute_theta_filtered = 1 was set): their first index is the
+  # POSITION within filter_dyads, not the true D-space dyad_id, whenever
+  # filter_dyads narrowed the dyad set -- see R/diagnose_convergence.R's
+  # .bilatr_tier1_names docs for the caveat this resolves. stan_data$
+  # filter_dyads (assemble_stan_data()'s own resolved integer vector, 1:D
+  # when filter_dyads = NULL was used) maps that position back to the
+  # true dyad_id before joining dyad_ids, so this is correct in both the
+  # "all dyads filtered" and "an explicit subset" cases -- not just the
+  # former.
+  filtered_extract <- function(prefix) {
+    extract_from_summ(prefix) %>%
+      dplyr::mutate(idx = stringr::str_match(variable, "\\[(\\d+),(\\d+)\\]")) %>%
+      dplyr::mutate(
+        filter_index = as.integer(idx[, 2]),
+        time_index = as.integer(idx[, 3])
+      ) %>%
+      dplyr::select(-idx) %>%
+      dplyr::mutate(dyad_id = stan_data$filter_dyads[filter_index]) %>%
+      dplyr::select(-filter_index) %>%
+      dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
+  }
+
+  theta_filtered <- filtered_extract("theta_filtered[")
+  theta_filtered_sd <- filtered_extract("theta_filtered_sd[")
+
   action_extract <- function(prefix) {
     extract_from_summ(prefix) %>%
       dplyr::mutate(action_index = as.integer(stringr::str_extract(variable, "(?<=\\[)\\d+(?=\\])")))
@@ -282,5 +313,9 @@ diagnose_and_extract_bilatr <- function(
     mu_intercept <- dplyr::mutate(mu_intercept, event_class = event_classes[action_index])
   }
 
-  list(diagnostics = diagnostics, theta = theta, alpha = alpha, mu_intercept = mu_intercept)
+  list(
+    diagnostics = diagnostics, theta = theta,
+    theta_filtered = theta_filtered, theta_filtered_sd = theta_filtered_sd,
+    alpha = alpha, mu_intercept = mu_intercept
+  )
 }

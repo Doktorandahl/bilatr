@@ -1,4 +1,22 @@
 
+# bilatr 0.5.2
+
+## Changes
+
+* `diagnose_and_extract_bilatr()` now returns `theta_filtered`/
+  `theta_filtered_sd` (empty tibbles unless `compute_theta_filtered = 1`
+  was set when the fit was assembled) alongside `theta`/`alpha`/
+  `mu_intercept`. These columns were already being read structurally as
+  part of the existing Tier 3 sweep (same bracket-index-count rule as
+  `theta`/`log_lik`; see 0.5.0's NEWS entry), but were silently dropped
+  by the extraction step, which was hardcoded to only pull out
+  `"theta["`-prefixed rows -- no second CSV read is needed for this fix.
+  Correctly translates the position-within-`filter_dyads` index these two
+  variables carry back to the true `dyad_id` via `stan_data$filter_dyads`
+  before joining `dyad_ids`, resolving the documented limitation from
+  0.5.0's own NEWS entry (previously only valid when every dyad was
+  filtered; now correct for an explicit subset too).
+
 # bilatr 0.5.1
 
 ## New features

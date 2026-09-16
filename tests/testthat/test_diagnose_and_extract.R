@@ -46,6 +46,77 @@ test_that("diagnose_and_extract_bilatr() matches calling the four functions sepa
   expect_equal(fused_par$diagnostics$tier3, diag_ref$tier3)
 })
 
+test_that("diagnose_and_extract_bilatr() returns theta_filtered/theta_filtered_sd when compute_theta_filtered = 1, matching a direct read of the fit's own draws", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture(extra_data = list(
+    compute_theta_filtered = 1, n_filter_dyads = 6L, filter_dyads = 1:6
+  ))
+
+  fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt
+  )))
+
+  expect_true(nrow(fused$theta_filtered) > 0)
+  expect_true(nrow(fused$theta_filtered_sd) > 0)
+  expect_setequal(fused$theta_filtered$dyad_id, 1:6)
+
+  direct <- posterior::summarise_draws(
+    posterior::subset_draws(cmdstanr::read_cmdstan_csv(fx$csv_files, variables = "theta_filtered")$post_warmup_draws, variable = "theta_filtered"),
+    mean = mean
+  )
+  direct <- dplyr::mutate(
+    direct,
+    dyad_id = as.integer(stringr::str_match(variable, "\\[(\\d+),")[, 2]),
+    time_index = as.integer(stringr::str_match(variable, ",(\\d+)\\]")[, 2])
+  )
+  cmp <- merge(
+    dplyr::select(fused$theta_filtered, dyad_id, time_index, mean),
+    dplyr::select(direct, dyad_id, time_index, mean_direct = mean),
+    by = c("dyad_id", "time_index")
+  )
+  expect_gt(nrow(cmp), 0)
+  expect_equal(cmp$mean, cmp$mean_direct, tolerance = 1e-8)
+})
+
+test_that("diagnose_and_extract_bilatr()'s theta_filtered translates the filter_dyads subset position back to the true dyad_id, not the position itself", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  # A deliberately non-contiguous, non-identity subset (dyads 3 and 5 out
+  # of 6): if the position (1, 2) were joined against dyad_ids directly
+  # instead of being translated via stan_data$filter_dyads, this would
+  # silently mislabel the filtered rows as dyads 1/2.
+  fx <- make_csv_diagnostics_fixture(extra_data = list(
+    compute_theta_filtered = 1, n_filter_dyads = 2L, filter_dyads = c(3L, 5L)
+  ))
+
+  fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt
+  )))
+
+  expect_setequal(unique(fused$theta_filtered$dyad_id), c(3L, 5L))
+  expect_setequal(unique(fused$theta_filtered_sd$dyad_id), c(3L, 5L))
+})
+
+test_that("diagnose_and_extract_bilatr()'s theta_filtered/theta_filtered_sd are empty tibbles when compute_theta_filtered = 0 (default)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture() # compute_theta_filtered = 0 by default
+
+  fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt
+  )))
+
+  expect_equal(nrow(fused$theta_filtered), 0)
+  expect_equal(nrow(fused$theta_filtered_sd), 0)
+})
+
 test_that("diagnose_and_extract_bilatr() folds Tier 1/2 and Tier 3 into one read when Tier 3 fits a single chunk (default chunk_size)", {
   skip_if_no_cmdstan()
   skip_on_cran()

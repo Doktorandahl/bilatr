@@ -147,7 +147,12 @@ checked (\code{n_workers} itself, \code{1}, half, and double) finds one.}
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}
 object, as from \code{\link[=diagnose_convergence]{diagnose_convergence()}}), \code{theta}, \code{alpha}, and
 \code{mu_intercept} (tibbles, in the same shape \code{\link[=extract_theta]{extract_theta()}}/
-\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} return).
+\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} return), plus
+\code{theta_filtered}/\code{theta_filtered_sd} (0.5.0+; empty tibbles unless
+\code{compute_theta_filtered = 1} was set when the fit was assembled) --
+same \code{dyad_id}/\code{time_index}/\code{dyad_ids}-joined shape as \code{theta}, with
+the position-within-\code{filter_dyads} index already translated back to
+the true \code{dyad_id} via \code{stan_data$filter_dyads}.
 }
 \description{
 A fused counterpart to calling \code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=extract_theta]{extract_theta()}},
@@ -163,7 +168,7 @@ each of those extra calls pays close to a full-file touch for data
 already summarised once. This function reads Tier 1/2 once and Tier 3
 once (chunked, same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}), reorients whichever
 columns \code{\link[=bilatr_orient]{bilatr_orient()}} would flip for \code{stan_model} as part of that
-single read, and derives all four outputs from those two summaries
+single read, and derives every output from those two summaries
 rather than re-reading anything.
 }
 \details{
