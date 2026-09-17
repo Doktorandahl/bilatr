@@ -204,3 +204,112 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
     n_dt = tibble::tibble(dyad_id = seq_len(D), n_dt = apply(Y, 1, sum))
   )
 }
+
+# --- fixtures for test_residual_check.R's calibration/power/subspace
+# tests: a synthetic dyad-period panel simulated directly from the
+# model's own generative process (no CmdStan needed), plus a "fit" whose
+# posterior is a POINT MASS at the known true alpha/mu_intercept/theta/
+# phi (n_pseudo_draws identical pseudo-draws). This isolates the
+# compositional-residual PPC's own frequentist calibration/power from
+# posterior parameter uncertainty, matching how the prompt's own
+# validation ("I simulated it before writing this and it is calibrated")
+# reads -- check_compositional_residuals() only ever needs `fit$draws()`
+# (see .get_draws()), so a hand-built list with a `draws` closure over a
+# posterior::draws_array satisfies its full contract without a real fit.
+#
+# `beta`, if supplied, is a length-A vector (a single dyad-CONSTANT
+# compositional offset, added to every dyad's eta before generating Y) --
+# constant across dyads is a legitimate, simpler special case of a
+# dyad-varying beta_d for testing purposes: the moment estimator's
+# derivation only assumes each dyad carries a per-component offset on the
+# order of `beta`'s RMS, not that beta_d varies across dyads.
+.make_fake_residual_data <- function(D, Tn, A, seed, beta = NULL, phi_val = 10, n_dt = 60) {
+  set.seed(seed)
+  alpha_raw <- stats::rnorm(A)
+  alpha_raw <- alpha_raw - mean(alpha_raw)
+  alpha <- alpha_raw * sqrt(A / sum(alpha_raw^2))
+  if (alpha[1] < 0) alpha <- -alpha
+
+  mu_raw <- stats::rnorm(A)
+  mu_intercept <- mu_raw - mean(mu_raw)
+
+  # A modest random walk, matching inst/stan/bilatr_alphanorm.stan's own
+  # generative process (theta0 ~ N(0, sigma0), innovations a small
+  # fraction of sigma0) rather than iid-per-period noise: within-dyad
+  # theta variation needs to stay small relative to a dyad-constant
+  # offset for the subspace-isolation test below to be meaningful --
+  # clr() is nonlinear, so a per-dyad-constant beta parallel to alpha
+  # only reduces to a pure "along" shift with no perp leakage when theta
+  # is roughly constant within a dyad, which iid-per-period theta is not.
+  sigma0 <- 1
+  process_noise <- 0.2 * sigma0
+  theta0 <- stats::rnorm(D, sd = sigma0)
+  theta <- matrix(NA_real_, D, Tn)
+  theta[, 1] <- theta0 + process_noise * stats::rnorm(D)
+  if (Tn > 1) {
+    for (t in 2:Tn) theta[, t] <- theta[, t - 1] + process_noise * stats::rnorm(D)
+  }
+  phi <- rep(phi_val, D)
+  is_obs <- matrix(1L, D, Tn)
+
+  Y <- array(0L, dim = c(D, Tn, A))
+  for (d in seq_len(D)) {
+    for (t in seq_len(Tn)) {
+      eta <- alpha * theta[d, t] - mu_intercept
+      if (!is.null(beta)) eta <- eta + beta
+      p <- exp(eta - max(eta))
+      p <- p / sum(p)
+      conc <- phi[d] * p
+      q <- stats::rgamma(A, shape = conc, rate = 1)
+      q <- q / sum(q)
+      Y[d, t, ] <- stats::rmultinom(1, n_dt, q)[, 1]
+    }
+  }
+
+  stan_data <- list(D = D, T = Tn, A = A, Y = Y, is_obs = is_obs)
+  attr(stan_data, "dyad_ids") <- tibble::tibble(
+    dyad_id = rep(seq_len(D), each = Tn),
+    time_index = rep(seq_len(Tn), D),
+    dyad = paste0("dyad", rep(seq_len(D), each = Tn)),
+    dyad2 = paste0("dyad", rep(seq_len(D), each = Tn))
+  )
+  attr(stan_data, "event_classes") <- as.character(seq_len(A))
+
+  list(stan_data = stan_data, alpha = alpha, mu_intercept = mu_intercept, theta = theta, phi = phi)
+}
+
+.make_fake_residual_fit <- function(truth, n_pseudo_draws = 300) {
+  D <- nrow(truth$theta)
+  Tn <- ncol(truth$theta)
+  A <- length(truth$alpha)
+
+  alpha_arr <- array(rep(truth$alpha, each = n_pseudo_draws), dim = c(n_pseudo_draws, 1, A))
+  mu_arr <- array(rep(truth$mu_intercept, each = n_pseudo_draws), dim = c(n_pseudo_draws, 1, A))
+  phi_arr <- array(rep(truth$phi, each = n_pseudo_draws), dim = c(n_pseudo_draws, 1, D))
+
+  theta_names <- character(D * Tn)
+  theta_vals <- numeric(D * Tn)
+  idx <- 1L
+  for (d in seq_len(D)) {
+    for (t in seq_len(Tn)) {
+      theta_names[idx] <- paste0("theta[", d, ",", t, "]")
+      theta_vals[idx] <- truth$theta[d, t]
+      idx <- idx + 1L
+    }
+  }
+  theta_arr <- array(rep(theta_vals, each = n_pseudo_draws), dim = c(n_pseudo_draws, 1, length(theta_vals)))
+
+  combined_vals <- c(as.vector(alpha_arr), as.vector(mu_arr), as.vector(phi_arr), as.vector(theta_arr))
+  combined_names <- c(
+    paste0("alpha[", seq_len(A), "]"), paste0("mu_intercept[", seq_len(A), "]"),
+    paste0("phi[", seq_len(D), "]"), theta_names
+  )
+  combined <- array(
+    combined_vals,
+    dim = c(n_pseudo_draws, 1, length(combined_names)),
+    dimnames = list(NULL, NULL, combined_names)
+  )
+  draws <- posterior::as_draws_array(combined)
+
+  list(draws = function(variables) posterior::subset_draws(draws, variable = variables))
+}

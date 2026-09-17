@@ -1,4 +1,44 @@
 
+# bilatr 0.6.0
+
+## New features
+
+* Added `check_compositional_residuals()`, a posterior predictive check
+  for a missing dyad-level compositional offset `beta_d`: the model has
+  no such term, and this checks whether the observed dyad-level
+  residuals in the subspace orthogonal to both `alpha` and `1` (where an
+  identified `beta_d` would have to live) exceed what the
+  Dirichlet-multinomial likelihood itself generates. The pooled
+  statistic (`global$pooled_ppp`) is the headline test; per-dyad PPPs
+  are a secondary "which dyads" diagnostic only, since they are
+  calibrated but nearly powerless at production dyad-period volumes.
+  `global$implied_beta_rms` is a moment-estimator effect size, compared
+  against `global$theta_between_rms` (the dyad-constant offset along
+  `alpha` the model already grants) via `global$beta_signal_ratio`.
+  Dyads are subsampled (stratified by volume) and draws are subsampled
+  for tractability at production scale; only the sampled dyads'
+  observed-period `theta` is ever read. Returns a `bilatr_residual_check`
+  object with `print()`/`autoplot()`/`plot()` methods for three
+  diagnostics (per-dyad `perp` vs. dyad volume; the per-dyad PPP
+  histogram against Uniform(0,1); per-category contribution to the
+  pooled statistic); `write_residual_check()` writes it to disk.
+* Added `icc_curves()`, category response curves
+  `p_k(theta) = softmax(alpha * theta - mu_intercept)_k` over a range of
+  `theta` -- Bock's nominal response model's category response
+  functions, which is what this likelihood is with a random-walk latent
+  trait and Dirichlet-multinomial overdispersion. `type = "information"`
+  gives the per-category Fisher information contribution at `theta`,
+  reusing `diagnose_category_merges()`'s helpers rather than
+  reimplementing, and directly addresses that function's caveat that its
+  own measure is local in `theta`. Cheap except for the default
+  `theta_range`, which is resolved cheapest-path-first: an explicit
+  range, then quantiles of an `extract_theta()`-shaped `theta_summary`,
+  and only as a last resort a small subsample read off `fit`. Also added
+  `icc_crossings()`, the closed-form pairwise category-crossing `theta`
+  values with posterior intervals, tying back to the merge diagnostics
+  (a pair with no crossing in range is a pair the scale never
+  distinguishes).
+
 # bilatr 0.5.2
 
 ## Changes
