@@ -9,6 +9,46 @@ test_that(".clr(softmax(eta)) recovers eta - mean(eta) to numerical tolerance", 
   expect_equal(bilatr:::.clr(p_mat), eta_mat - rowMeans(eta_mat), tolerance = 1e-10)
 })
 
+test_that(".clr() of a composition with an exactly-zero component returns finite values (0.6.1 Cause 2)", {
+  p <- c(0.5, 0.5, 0)
+  expect_true(all(is.finite(bilatr:::.clr(p))))
+
+  p_mat <- rbind(c(0.3, 0.7, 0), c(0.2, 0.3, 0.5))
+  out <- bilatr:::.clr(p_mat)
+  expect_true(all(is.finite(out)))
+  # the non-zero row is untouched (flooring at .Machine$double.xmin is a
+  # no-op for any component that wasn't already zero)
+  expect_equal(out[2, ], bilatr:::.clr(p_mat[2, ]), tolerance = 1e-12)
+})
+
+test_that(".rdirichlet_rows() stays finite at tiny concentrations and matches Dirichlet moments where the old sampler is safe (0.6.1 Cause 1)", {
+  set.seed(101)
+  A <- 23
+  for (phi in c(1e-3, 1e-4, 1e-5, 1e-6)) {
+    conc <- matrix(phi * rep(1 / A, A), nrow = 500, ncol = A, byrow = TRUE)
+    g <- bilatr:::.rdirichlet_rows(conc)
+    expect_true(all(is.finite(g)))
+    expect_equal(unname(rowSums(g)), rep(1, 500), tolerance = 1e-10)
+  }
+
+  # distributional agreement with the analytic Dirichlet moments, at a
+  # concentration safe for the old direct-rgamma sampler too
+  a <- c(2, 3, 5)
+  a0 <- sum(a)
+  conc <- matrix(a, nrow = 1e5, ncol = 3, byrow = TRUE)
+  g <- bilatr:::.rdirichlet_rows(conc)
+
+  mean_analytic <- a / a0
+  var_analytic <- a * (a0 - a) / (a0^2 * (a0 + 1))
+  expect_equal(colMeans(g), mean_analytic, tolerance = 0.01)
+  expect_equal(apply(g, 2, var), var_analytic, tolerance = 0.01)
+})
+
+test_that(".rdirichlet_rows() errors informatively on a non-positive concentration", {
+  conc <- matrix(c(1, 2, 0, 4), nrow = 2, ncol = 2)
+  expect_error(bilatr:::.rdirichlet_rows(conc), "non-positive concentration")
+})
+
 test_that("RMS-1 identification: sd(outer(theta, alpha)) == sqrt(mean(theta^2)) for a sum-to-zero, RMS-1 alpha", {
   # This is the identity 1b.3's comparator formula relies on
   # (implied_beta_rms's per-component comparator reduces to the RMS of
@@ -167,6 +207,81 @@ test_that("determinism: the same seed on the same fit/stan_data reproduces ident
   expect_equal(r1$global$pooled_ppp, r2$global$pooled_ppp)
   expect_equal(r1$global$implied_beta_rms, r2$global$implied_beta_rms)
   expect_equal(r1$dyads, r2$dyads)
+})
+
+test_that(".drop_nonfinite_draws() drops affected draws, warns once, and reports the count (0.6.1 Cause 3)", {
+  n_draws <- 30
+  A <- 4
+  T_obs_acc <- matrix(1, n_draws, 2)
+  T_rep_acc <- matrix(1, n_draws, 2)
+  cat_contrib_obs <- matrix(1, A, n_draws)
+  cat_contrib_rep <- matrix(1, A, n_draws)
+  sum_theta_bar_sq <- rep(1, n_draws)
+  sum_theta_sq <- rep(1, n_draws)
+
+  T_obs_acc[3, 1] <- NaN
+  cat_contrib_rep[2, 7] <- Inf
+
+  expect_warning(
+    out <- bilatr:::.drop_nonfinite_draws(
+      T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
+    ),
+    "2 of 30 posterior draws"
+  )
+  expect_equal(out$n_draws_dropped, 2L)
+  expect_equal(nrow(out$T_obs_acc), 28)
+  expect_equal(ncol(out$cat_contrib_obs), 28)
+  expect_true(all(is.finite(out$T_obs_acc)))
+  expect_true(all(is.finite(out$cat_contrib_rep)))
+  expect_length(out$sum_theta_bar_sq, 28)
+})
+
+test_that(".drop_nonfinite_draws() is a no-op when everything is finite", {
+  n_draws <- 10
+  T_obs_acc <- matrix(1, n_draws, 2)
+  T_rep_acc <- matrix(1, n_draws, 2)
+  cat_contrib_obs <- matrix(1, 4, n_draws)
+  cat_contrib_rep <- matrix(1, 4, n_draws)
+  sum_theta_bar_sq <- rep(1, n_draws)
+  sum_theta_sq <- rep(1, n_draws)
+
+  out <- bilatr:::.drop_nonfinite_draws(
+    T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
+  )
+  expect_equal(out$n_draws_dropped, 0L)
+  expect_identical(out$T_obs_acc, T_obs_acc)
+})
+
+test_that(".drop_nonfinite_draws() stops rather than reports when too few draws survive", {
+  n_draws <- 25
+  T_obs_acc <- matrix(1, n_draws, 2)
+  T_obs_acc[1:10, 1] <- NaN
+  T_rep_acc <- matrix(1, n_draws, 2)
+  cat_contrib_obs <- matrix(1, 4, n_draws)
+  cat_contrib_rep <- matrix(1, 4, n_draws)
+  sum_theta_bar_sq <- rep(1, n_draws)
+  sum_theta_sq <- rep(1, n_draws)
+
+  expect_error(
+    bilatr:::.drop_nonfinite_draws(
+      T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
+    ),
+    "aborting"
+  )
+})
+
+test_that("check_compositional_residuals() reports phi_min per dyad and overall (0.6.1)", {
+  dat <- .make_fake_residual_data(D = 60, Tn = 8, A = 5, seed = 71, beta = NULL, phi_val = 10)
+  fit <- .make_fake_residual_fit(dat, n_pseudo_draws = 50)
+
+  res <- check_compositional_residuals(
+    fit, dat$stan_data, n_dyads = 60, n_strata = 3, n_draws = 50, seed = 5
+  )
+  expect_true("phi_min" %in% names(res$dyads))
+  expect_equal(res$dyads$phi_min, rep(10, nrow(res$dyads)))
+  expect_equal(res$global$phi_min, 10)
+  expect_equal(res$global$n_draws_dropped, 0L)
+  expect_equal(res$settings$n_draws_dropped, 0L)
 })
 
 test_that("check_compositional_residuals() errors without a dyad_ids attribute", {

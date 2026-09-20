@@ -1,4 +1,44 @@
 
+# bilatr 0.6.1
+
+## Bug fixes
+
+* Fixed a crash in `check_compositional_residuals()`
+  (`quantile.default(): missing values and NaN's not allowed`) caused by
+  non-finite compositional residuals reaching the final pooled-statistic
+  quantile calls. Two sources were found and fixed at the point they
+  enter:
+  - `.rdirichlet_rows()` sampled each Dirichlet draw via
+    `rgamma(shape = conc)`, which returns exactly `0` with high
+    probability once `conc = phi_d * p_dt` is well below 1 -- routine for
+    the many dyads whose `phi_d` is barely identified (e.g. `n_d` at or
+    near `min_n_events`). When every component of a row underflowed,
+    `rowSums()` was `0` and the row became `0/0 = NaN`, which then
+    surfaced as `NA`s (and warnings) out of `rbinom()` in
+    `.rmultinom_rows()`. Fixed by sampling in log space via the exact
+    Marsaglia-Tsang boost (`X ~ Gamma(a+1)`, `X * U^(1/a) ~ Gamma(a)`),
+    which stays representable at shapes as small as `1e-6`.
+  - `.clr()` took `log(x) - rowMeans(log(x))`; a composition with one
+    exactly-zero component (possible when `pbar_d`, a weighted mean of
+    `softmax()` rows, underflows in every observed period) gave
+    `log(0) = -Inf`, poisoning the row mean and hence every component of
+    that row. Fixed by flooring at `.Machine$double.xmin` before the log
+    (a no-op for any already-nonzero component).
+  - As a backstop against any future, unanticipated source of
+    non-finite values, `check_compositional_residuals()` now checks its
+    pooled-statistic accumulators before the quantile calls, drops any
+    affected posterior draws from every pooled statistic (never
+    `na.rm = TRUE`, which would hide the problem silently), warns once
+    naming how many draws were dropped, and only `stop()`s if fewer than
+    20 usable draws remain. The count is recorded in
+    `global$n_draws_dropped`/`settings$n_draws_dropped`.
+  - `dyads$phi_min` (the smallest `phi_d` posterior draw seen for that
+    dyad) and `global$phi_min` are now reported, and the overall minimum
+    is printed by `print.bilatr_residual_check()` -- if a dyad's `phi`
+    posterior is genuinely near the underflow boundary, that is a
+    modelling signal worth seeing, not just a numerical detail to fix
+    silently.
+
 # bilatr 0.6.0
 
 ## New features

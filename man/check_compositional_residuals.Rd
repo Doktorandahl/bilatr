@@ -68,14 +68,21 @@ in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
 \value{
 A \code{bilatr_residual_check} object: \code{dyads} (one row per sampled
 dyad: \code{dyad_id}, \code{dyad}, \code{dyad2}, \code{n_d}, \code{n_obs_t}, \code{along_mean},
-\code{along_lower}/\code{along_upper}, \code{perp_norm2_mean}, \code{ppp_dyad}),
+\code{along_lower}/\code{along_upper}, \code{perp_norm2_mean}, \code{ppp_dyad},
+\code{phi_min} -- the smallest \code{phi_d} posterior draw seen for that dyad,
+a modelling signal worth seeing in its own right when a dyad's \code{phi}
+is barely identified),
 \code{categories} (one row per action category: \code{action_index},
 \code{event_class}, \code{class_label}, \code{contribution_obs}/\code{contribution_rep}
 and their intervals, \code{contribution_ratio}), \code{global} (\code{pooled_ppp},
 \code{T_obs_mean}, \code{T_rep_mean}, \code{implied_beta_rms}, \code{theta_between_rms},
 \code{theta_total_rms}, \code{beta_signal_ratio}, \code{eps_sensitivity},
-\code{D_sample}, \code{n_draws_used}), and \code{settings} (the resolved arguments,
-including \code{sampled_dyad_ids}).
+\code{D_sample}, \code{n_draws_used}, \code{n_draws_dropped} -- posterior draws
+excluded from the pooled statistics because they produced a
+non-finite compositional residual, see \code{\link[=.drop_nonfinite_draws]{.drop_nonfinite_draws()}} --
+and \code{phi_min}, the minimum of \code{dyads$phi_min}), and \code{settings} (the
+resolved arguments, including \code{sampled_dyad_ids} and
+\code{n_draws_dropped}).
 }
 \description{
 The model has no dyad-specific compositional offset: \code{eta_dt = alpha * theta_dt - mu_intercept}. An identified offset \code{beta_d} would have to

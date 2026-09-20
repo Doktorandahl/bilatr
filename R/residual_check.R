@@ -35,6 +35,13 @@
 #' @return `clr(x)`, same shape as `x`.
 #' @keywords internal
 .clr <- function(x) {
+  # A component that underflowed to exactly 0 (possible for pbar_d, a
+  # weighted mean of softmax() rows, when every observed period's eta_dt
+  # for that category is extreme enough that exp() underflows) would
+  # otherwise give log(0) = -Inf, poisoning the row mean and hence every
+  # component of the row via NaN. Flooring at the smallest positive
+  # double is a no-op for any component that isn't already zero.
+  x <- pmax(x, .Machine$double.xmin)
   if (is.null(dim(x))) {
     log(x) - mean(log(x))
   } else {
@@ -118,8 +125,24 @@
 #' @return An `n_draws x A` matrix of row-stochastic Dirichlet draws.
 #' @keywords internal
 .rdirichlet_rows <- function(conc_mat) {
-  shape_vec <- as.vector(conc_mat)
-  g <- matrix(stats::rgamma(length(shape_vec), shape = shape_vec, rate = 1), nrow = nrow(conc_mat))
+  a <- as.vector(conc_mat)
+  if (any(a <= 0)) {
+    bad <- which(conc_mat <= 0, arr.ind = TRUE)[1, ]
+    stop(sprintf(
+      "`.rdirichlet_rows()` got a non-positive concentration (%.3g) at draw row %d, category column %d. conc = phi_d * p_dt is positive by construction, so this points to a bug upstream, not a data issue.",
+      conc_mat[bad["row"], bad["col"]], bad["row"], bad["col"]
+    ), call. = FALSE)
+  }
+  # Marsaglia-Tsang boost in log space: shape a+1 >= 1 never underflows, and
+  # log(U)/a carries the small-shape behaviour that a direct rgamma(a) loses
+  # to underflow for a << 1 (which is routine here: conc = phi_d * p_dt, and
+  # phi_d is barely identified for sparse dyads). Exact, not approximate --
+  # if X ~ Gamma(a + 1) and U ~ Uniform(0, 1) then X * U^(1/a) ~ Gamma(a).
+  log_g <- log(stats::rgamma(length(a), shape = a + 1, rate = 1)) +
+    log(stats::runif(length(a))) / a
+  log_g <- matrix(log_g, nrow = nrow(conc_mat))
+  log_g <- log_g - apply(log_g, 1, max) # stabilise; max component -> exp(0) = 1
+  g <- exp(log_g)
   g / rowSums(g)
 }
 
@@ -138,6 +161,80 @@
 #' @keywords internal
 .dirichlet_multinomial_rows <- function(n, conc_mat) {
   .rmultinom_rows(n, .rdirichlet_rows(conc_mat))
+}
+
+#' Drop posterior draws with non-finite compositional-residual accumulators
+#'
+#' A defensive backstop for [check_compositional_residuals()]: both known
+#' sources of non-finite `clr()` residuals are fixed at the source
+#' (`.rdirichlet_rows()`'s Dirichlet-gamma underflow, `.clr()`'s
+#' zero-component log; see `NEWS.md` 0.6.1), but a multi-hour production
+#' run should not die on its last step if some future, unanticipated
+#' source slips a non-finite value through. Rather than `na.rm = TRUE`
+#' (which would hide the problem silently -- how the original crash
+#' reached production undetected), whole draws with any non-finite entry
+#' are dropped from every pooled statistic, with a single warning naming
+#' how many, and a hard `stop()` if too few draws remain to trust the
+#' result.
+#'
+#' @param T_obs_acc,T_rep_acc `n_draws x n_eps` pooled-statistic
+#'   accumulators.
+#' @param cat_contrib_obs,cat_contrib_rep `A x n_draws` per-category
+#'   accumulators.
+#' @param sum_theta_bar_sq,sum_theta_sq Length-`n_draws` accumulators.
+#' @param min_draws Minimum number of surviving draws before this
+#'   `stop()`s instead of warning. Default `20`.
+#' @return A list of the same objects, each subset to the surviving
+#'   draws, plus `n_draws_dropped`.
+#' @keywords internal
+.drop_nonfinite_draws <- function(T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep,
+                                   sum_theta_bar_sq, sum_theta_sq, min_draws = 20L) {
+  n_draws_used <- nrow(T_obs_acc)
+  bad <- apply(T_obs_acc, 1, function(r) any(!is.finite(r))) |
+    apply(T_rep_acc, 1, function(r) any(!is.finite(r))) |
+    apply(cat_contrib_obs, 2, function(cc) any(!is.finite(cc))) |
+    apply(cat_contrib_rep, 2, function(cc) any(!is.finite(cc)))
+  n_dropped <- sum(bad)
+
+  if (n_dropped == 0L) {
+    return(list(
+      T_obs_acc = T_obs_acc, T_rep_acc = T_rep_acc,
+      cat_contrib_obs = cat_contrib_obs, cat_contrib_rep = cat_contrib_rep,
+      sum_theta_bar_sq = sum_theta_bar_sq, sum_theta_sq = sum_theta_sq,
+      n_draws_dropped = 0L
+    ))
+  }
+
+  n_remaining <- n_draws_used - n_dropped
+  if (n_remaining < min_draws) {
+    stop(sprintf(
+      paste(
+        "%d of %d posterior draws produced non-finite compositional residuals,",
+        "leaving only %d usable draws (fewer than %d); aborting rather than",
+        "reporting an unreliable statistic. Check dyads$phi_min -- a phi_d",
+        "posterior near 1e-6 is the known cause (see NEWS.md 0.6.1)."
+      ),
+      n_dropped, n_draws_used, n_remaining, min_draws
+    ), call. = FALSE)
+  }
+  warning(sprintf(
+    paste(
+      "%d of %d posterior draws produced non-finite compositional residuals",
+      "and were dropped from the pooled statistics (see global$n_draws_dropped)."
+    ),
+    n_dropped, n_draws_used
+  ), call. = FALSE)
+
+  good <- !bad
+  list(
+    T_obs_acc = T_obs_acc[good, , drop = FALSE],
+    T_rep_acc = T_rep_acc[good, , drop = FALSE],
+    cat_contrib_obs = cat_contrib_obs[, good, drop = FALSE],
+    cat_contrib_rep = cat_contrib_rep[, good, drop = FALSE],
+    sum_theta_bar_sq = sum_theta_bar_sq[good],
+    sum_theta_sq = sum_theta_sq[good],
+    n_draws_dropped = n_dropped
+  )
 }
 
 #' Stratified sample of dyad indices by a volume statistic
@@ -312,14 +409,21 @@
 #'   [diagnose_category_merges()]'s argument of the same name.
 #' @return A `bilatr_residual_check` object: `dyads` (one row per sampled
 #'   dyad: `dyad_id`, `dyad`, `dyad2`, `n_d`, `n_obs_t`, `along_mean`,
-#'   `along_lower`/`along_upper`, `perp_norm2_mean`, `ppp_dyad`),
+#'   `along_lower`/`along_upper`, `perp_norm2_mean`, `ppp_dyad`,
+#'   `phi_min` -- the smallest `phi_d` posterior draw seen for that dyad,
+#'   a modelling signal worth seeing in its own right when a dyad's `phi`
+#'   is barely identified),
 #'   `categories` (one row per action category: `action_index`,
 #'   `event_class`, `class_label`, `contribution_obs`/`contribution_rep`
 #'   and their intervals, `contribution_ratio`), `global` (`pooled_ppp`,
 #'   `T_obs_mean`, `T_rep_mean`, `implied_beta_rms`, `theta_between_rms`,
 #'   `theta_total_rms`, `beta_signal_ratio`, `eps_sensitivity`,
-#'   `D_sample`, `n_draws_used`), and `settings` (the resolved arguments,
-#'   including `sampled_dyad_ids`).
+#'   `D_sample`, `n_draws_used`, `n_draws_dropped` -- posterior draws
+#'   excluded from the pooled statistics because they produced a
+#'   non-finite compositional residual, see [.drop_nonfinite_draws()] --
+#'   and `phi_min`, the minimum of `dyads$phi_min`), and `settings` (the
+#'   resolved arguments, including `sampled_dyad_ids` and
+#'   `n_draws_dropped`).
 #' @export
 check_compositional_residuals <- function(
   fit,
@@ -508,14 +612,27 @@ check_compositional_residuals <- function(
       along_mean = mean(along_default),
       along_lower = unname(along_q[1]), along_upper = unname(along_q[length(along_q)]),
       perp_norm2_mean = perp_norm2_mean,
-      ppp_dyad = ppp_dyad
+      ppp_dyad = ppp_dyad,
+      phi_min = min(phi_vec_d)
     )
   }
 
   dyads <- dplyr::bind_rows(dyad_rows) %>%
     dplyr::left_join(dplyr::distinct(dyad_ids, dyad_id, dyad, dyad2), by = "dyad_id")
 
-  # --- 6. global summary ---
+  # --- 6. drop any draws with non-finite accumulators, then summarize
+  # (a backstop, not the expected path -- see .drop_nonfinite_draws()) ---
+  dropped <- .drop_nonfinite_draws(
+    T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
+  )
+  T_obs_acc <- dropped$T_obs_acc
+  T_rep_acc <- dropped$T_rep_acc
+  cat_contrib_obs <- dropped$cat_contrib_obs
+  cat_contrib_rep <- dropped$cat_contrib_rep
+  sum_theta_bar_sq <- dropped$sum_theta_bar_sq
+  sum_theta_sq <- dropped$sum_theta_sq
+  n_draws_dropped <- dropped$n_draws_dropped
+
   theta_between_rms <- mean(sqrt(sum_theta_bar_sq / D_sample))
   theta_total_rms <- mean(sqrt(sum_theta_sq / n_dt_total))
 
@@ -555,12 +672,15 @@ check_compositional_residuals <- function(
     beta_signal_ratio = implied_beta_rms[1] / theta_between_rms,
     eps_sensitivity = eps_sensitivity_tbl,
     D_sample = D_sample,
-    n_draws_used = n_draws_used
+    n_draws_used = n_draws_used,
+    n_draws_dropped = n_draws_dropped,
+    phi_min = min(dyads$phi_min)
   )
 
   settings <- list(
     seed = seed, n_dyads_requested = n_dyads, n_strata = n_strata,
     n_draws_requested = n_draws, n_draws_used = n_draws_used,
+    n_draws_dropped = n_draws_dropped,
     eps = eps, eps_sensitivity = eps_sensitivity, probs = probs,
     stan_model = stan_model, D_sample = D_sample,
     sampled_dyad_ids = sampled_dyad_ids
@@ -597,7 +717,17 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
     "beta_signal_ratio = implied_beta_rms / theta_between_rms = %.3f\n(near 0.05 is a curiosity; 0.3-0.5 is a real case for beta_d; theta_total_rms = %.3f for context)\n\n",
     g$beta_signal_ratio, g$theta_total_rms
   ))
-  cat("== eps sensitivity ==\n")
+  cat(sprintf(
+    "minimum phi_d draw seen across sampled dyads: %.3g%s\n",
+    g$phi_min, if (g$phi_min < 1e-3) " (very small; that dyad's phi posterior is barely identified)" else ""
+  ))
+  if (g$n_draws_dropped > 0) {
+    cat(sprintf(
+      "%d of %d posterior draws were dropped from the pooled statistics (non-finite compositional residuals)\n",
+      g$n_draws_dropped, x$settings$n_draws_used
+    ))
+  }
+  cat("\n== eps sensitivity ==\n")
   print(g$eps_sensitivity)
   cat("\n== categories (top contributors to the pooled statistic, obs vs. replicate) ==\n")
   print(utils::head(dplyr::select(x$categories, class_label, contribution_obs, contribution_rep, contribution_ratio), n_categories), n = Inf)
