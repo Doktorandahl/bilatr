@@ -56,6 +56,8 @@ root/event codes underlying each \code{EventRootCode4} class; see
 "Investigate or demand" class; see \code{\link[=assign_erc16nz]{assign_erc16nz()}}.}
 \item{ERC16NZName}{Character. Human-readable label for \code{ERC16NZ};
 see \code{\link[=erc16nz_name]{erc16nz_name()}}.}
+\item{ERC16NZRootCodes}{Character. Comma-separated CAMEO root/event
+codes underlying each \code{ERC16NZ} class; see \code{\link[=erc16nz_rootcodes]{erc16nz_rootcodes()}}.}
 \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}

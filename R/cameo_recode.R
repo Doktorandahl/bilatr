@@ -468,6 +468,44 @@ erc16nz_name <- function(class) {
   unname(names[as.character(class)])
 }
 
+#' Underlying CAMEO root/event codes for an `ERC16NZ` value
+#'
+#' For most `ERC16NZ` classes this is just the single two-digit CAMEO
+#' root code the class was built from. Where a class merges several roots
+#' (e.g. "Investigate or demand"), splits a root into finer sub-codes
+#' (e.g. "Consult: meet, discuss, or visit"), or relocates an individual
+#' code out of its root (e.g. "Reject", which picks up `016` from root
+#' 01), this lists every code that feeds into it, comma-separated.
+#'
+#' @param class Integer vector of `ERC16NZ` values, as returned by
+#'   [assign_erc16nz()].
+#' @return Character vector of comma-separated CAMEO root/event codes,
+#'   `NA` for values outside 1-18.
+#' @keywords internal
+erc16nz_rootcodes <- function(class) {
+  codes <- c(
+    "1"  = "01",
+    "2"  = "02",
+    "3"  = "03",
+    "4"  = "04, 040",
+    "5"  = "041, 042, 043, 044",
+    "6"  = "045, 046",
+    "7"  = "05, 018, 019",
+    "8"  = "06",
+    "9"  = "07",
+    "10" = "08",
+    "11" = "09, 10",
+    "12" = "11",
+    "13" = "12, 016",
+    "14" = "13, 15",
+    "15" = "14",
+    "16" = "16",
+    "17" = "17",
+    "18" = "18, 19, 20"
+  )
+  unname(codes[as.character(class)])
+}
+
 #' Human-readable label for a bilatr event class
 #'
 #' @param class Integer vector of `BilatrClass` values (0-10).
@@ -610,7 +648,7 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' `PentaClass_modified`, `EventRootCode2`, `EventRootCode2Name`,
 #' `EventRootCode3`, `EventRootCode3Name`, `EventRootCode3RootCodes`,
 #' `EventRootCode4`, `EventRootCode4Name`, `EventRootCode4RootCodes`,
-#' `ERC16NZ`, `ERC16NZName`, `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
+#' `ERC16NZ`, `ERC16NZName`, `ERC16NZRootCodes`, `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
 #' `BilatrClass2Name` columns. `PentaClass_modified` folds low-intensity
 #' verbal cooperation (Goldstein score <= 1) into its own class, which
 #' can be useful as a near-neutral reference category. `EventRootCode2` /
@@ -626,8 +664,9 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' [eventrootcode4_rootcodes()]) further refines `EventRootCode3` by
 #' splitting `041` out of its consult-visit grouping and splitting the
 #' threaten/force-posture and assault/fight/mass-violence groupings back
-#' into their individual roots; `ERC16NZ` / `ERC16NZName` (see
-#' [assign_erc16nz()] and [erc16nz_name()]) is `EventRootCode3` with its
+#' into their individual roots; `ERC16NZ` / `ERC16NZName` /
+#' `ERC16NZRootCodes` (see [assign_erc16nz()], [erc16nz_name()], and
+#' [erc16nz_rootcodes()]) is `EventRootCode3` with its
 #' Investigate and Demand classes merged; `BilatrClass` / `BilatrClassName`
 #' (see [assign_bilatr_class()]) is the 11-level action scheme used as
 #' the model's default; `BilatrClass2` / `BilatrClass2Name` (see

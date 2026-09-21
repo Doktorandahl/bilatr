@@ -1,3 +1,12 @@
+# bilatr 0.6.3
+
+## New features
+
+* `cameo_lookup`/`recode_cameo()` gain `ERC16NZRootCodes`, listing the
+  CAMEO root/event codes underlying each `ERC16NZ` class (analogous to
+  `EventRootCode3RootCodes`), alongside the new `erc16nz_rootcodes()`
+  helper.
+
 # bilatr 0.6.2
 
 ## New features

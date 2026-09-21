@@ -183,6 +183,7 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$ERC16NZ)))
   expect_false(any(is.na(cameo_lookup$ERC16NZName)))
   expect_true(all(cameo_lookup$ERC16NZ %in% 1:18))
+  expect_false(any(is.na(cameo_lookup$ERC16NZRootCodes)))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
   expect_false(any(is.na(cameo_lookup$BilatrClass2)))
@@ -283,15 +284,28 @@ test_that("erc16nz_name labels every assign_erc16nz() output value and NAs anyth
   expect_false(any(is.na(erc16nz_name(produced))))
 })
 
-test_that("recode_cameo also attaches ERC16NZ and its name column", {
+test_that("erc16nz_rootcodes lists the codes feeding each class and NAs anything else", {
+  expect_equal(erc16nz_rootcodes(5L), "041, 042, 043, 044")
+  expect_equal(erc16nz_rootcodes(11L), "09, 10")
+  expect_equal(erc16nz_rootcodes(13L), "12, 016")
+  expect_equal(erc16nz_rootcodes(18L), "18, 19, 20")
+  expect_true(is.na(erc16nz_rootcodes(19L)))
+
+  # Consistent with EventRootCode3's root codes, apart from the 09/10 merge.
+  erc3_codes <- eventrootcode3_rootcodes(c(1:10, 13:19))
+  expect_equal(erc16nz_rootcodes(c(1:10, 12:18)), erc3_codes)
+})
+
+test_that("recode_cameo also attaches ERC16NZ and its name/root-codes columns", {
   events <- tibble::tibble(EventCode = c("09", "10", "11", "20"))
   out <- recode_cameo(events, code_col = "EventCode")
-  expect_true(all(c("ERC16NZ", "ERC16NZName") %in% names(out)))
+  expect_true(all(c("ERC16NZ", "ERC16NZName", "ERC16NZRootCodes") %in% names(out)))
   expect_equal(out$ERC16NZ, c(11L, 11L, 12L, 18L))
   expect_equal(out$ERC16NZName, c(
     "Investigate or demand", "Investigate or demand", "Disapprove",
     "Assault, fight, or mass violence"
   ))
+  expect_equal(out$ERC16NZRootCodes, c("09, 10", "09, 10", "11", "18, 19, 20"))
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {
