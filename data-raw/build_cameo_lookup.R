@@ -1,9 +1,10 @@
 # Builds the `cameo_lookup` package data object: one row per CAMEO event
 # code, with its Goldstein score, human-readable label, and the
 # QuadClass / PentaClass / PentaClass_modified / EventRootCode2 /
-# EventRootCode3 / EventRootCode4 / BilatrClass / BilatrClass2 recodings
-# (each with a *Name label where it has one, including
-# EventRootCode2Name, EventRootCode3Name, and EventRootCode4Name;
+# EventRootCode3 / EventRootCode4 / ERC16NZ / BilatrClass / BilatrClass2
+# recodings (each with a *Name label where it has one, including
+# EventRootCode2Name, EventRootCode3Name, EventRootCode4Name, and
+# ERC16NZName;
 # EventRootCode3/EventRootCode4 also get their own *RootCodes column).
 # Source values are taken
 # verbatim from the project's existing CAMEO/Goldstein reference table
@@ -487,6 +488,8 @@ cameo_lookup <- cameo_label %>%
     EventRootCode4 = assign_eventrootcode4(CAMEOEVENTCODE),
     EventRootCode4Name = eventrootcode4_name(EventRootCode4),
     EventRootCode4RootCodes = eventrootcode4_rootcodes(EventRootCode4),
+    ERC16NZ = assign_erc16nz(CAMEOEVENTCODE),
+    ERC16NZName = erc16nz_name(ERC16NZ),
     BilatrClass = assign_bilatr_class(CAMEOEVENTCODE, EventRootCode2),
     BilatrClassName = bilatr_class_name(BilatrClass),
     BilatrClass2 = assign_bilatr_class2(BilatrClass),

@@ -52,6 +52,11 @@
 #'   \item{EventRootCode4RootCodes}{Character. Comma-separated CAMEO
 #'     root/event codes underlying each `EventRootCode4` class; see
 #'     [eventrootcode4_rootcodes()].}
+#'   \item{ERC16NZ}{Integer, 1-18. `EventRootCode3` with its Investigate
+#'     (root 09) and Demand (root 10) classes merged into a single
+#'     "Investigate or demand" class; see [assign_erc16nz()].}
+#'   \item{ERC16NZName}{Character. Human-readable label for `ERC16NZ`;
+#'     see [erc16nz_name()].}
 #'   \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 #'     used as the bilatr model's default grouping; see
 #'     [assign_bilatr_class()].}

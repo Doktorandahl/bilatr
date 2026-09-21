@@ -51,6 +51,11 @@ posture; Assault, Fight, Use unconventional mass violence). The
 \item{EventRootCode4RootCodes}{Character. Comma-separated CAMEO
 root/event codes underlying each \code{EventRootCode4} class; see
 \code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}.}
+\item{ERC16NZ}{Integer, 1-18. \code{EventRootCode3} with its Investigate
+(root 09) and Demand (root 10) classes merged into a single
+"Investigate or demand" class; see \code{\link[=assign_erc16nz]{assign_erc16nz()}}.}
+\item{ERC16NZName}{Character. Human-readable label for \code{ERC16NZ};
+see \code{\link[=erc16nz_name]{erc16nz_name()}}.}
 \item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
 used as the bilatr model's default grouping; see
 \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}

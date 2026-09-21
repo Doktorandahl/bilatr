@@ -414,6 +414,60 @@ eventrootcode4_rootcodes <- function(class) {
   unname(codes[as.character(class)])
 }
 
+#' Regroup a CAMEO event code into the bilatr "ERC16NZ" scheme
+#'
+#' `ERC16NZ` is a variant of [assign_eventrootcode3()] that merges its
+#' "Investigate" (root 09) and "Demand" (root 10) classes back into a
+#' single "Investigate or demand" class. Every other class, including the
+#' `016`/`018`/`019` relocations, is unchanged from `EventRootCode3`.
+#'
+#' Classes are numbered 1-18 in ascending root-code order (so
+#' `EventRootCode3` classes 1-11 keep their values, with 11 now covering
+#' both roots 09 and 10, and `EventRootCode3` classes 13-19 shift down by
+#' one to 12-18); see [erc16nz_name()] for labels.
+#'
+#' @param code Character or numeric vector of CAMEO event codes (e.g.
+#'   `"0211"`, `"19"`).
+#' @return Integer vector of `ERC16NZ` values (1-18).
+#' @keywords internal
+assign_erc16nz <- function(code) {
+  erc3 <- assign_eventrootcode3(code)
+  dplyr::if_else(erc3 >= 12L, erc3 - 1L, erc3)
+}
+
+#' Human-readable label for an `ERC16NZ` value
+#'
+#' Preliminary labels, one per [assign_erc16nz()] output value.
+#'
+#' @param class Integer vector of `ERC16NZ` values, as returned by
+#'   [assign_erc16nz()].
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 1-18.
+#' @keywords internal
+erc16nz_name <- function(class) {
+  names <- c(
+    "1"  = "Make a public statement",
+    "2"  = "Appeal for action",
+    "3"  = "Express intent to cooperate",
+    "4"  = "Consult, unspecified",
+    "5"  = "Consult: meet, discuss, or visit",
+    "6"  = "Consult: negotiate or mediate",
+    "7"  = "Engage in diplomatic cooperation",
+    "8"  = "Engage in material cooperation",
+    "9"  = "Provide aid",
+    "10" = "Yield",
+    "11" = "Investigate or demand",
+    "12" = "Disapprove",
+    "13" = "Reject",
+    "14" = "Threaten or exhibit force posture",
+    "15" = "Protest",
+    "16" = "Reduce relations",
+    "17" = "Coerce",
+    "18" = "Assault, fight, or mass violence"
+  )
+  unname(names[as.character(class)])
+}
+
 #' Human-readable label for a bilatr event class
 #'
 #' @param class Integer vector of `BilatrClass` values (0-10).
@@ -556,7 +610,7 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' `PentaClass_modified`, `EventRootCode2`, `EventRootCode2Name`,
 #' `EventRootCode3`, `EventRootCode3Name`, `EventRootCode3RootCodes`,
 #' `EventRootCode4`, `EventRootCode4Name`, `EventRootCode4RootCodes`,
-#' `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
+#' `ERC16NZ`, `ERC16NZName`, `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
 #' `BilatrClass2Name` columns. `PentaClass_modified` folds low-intensity
 #' verbal cooperation (Goldstein score <= 1) into its own class, which
 #' can be useful as a near-neutral reference category. `EventRootCode2` /
@@ -572,7 +626,9 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' [eventrootcode4_rootcodes()]) further refines `EventRootCode3` by
 #' splitting `041` out of its consult-visit grouping and splitting the
 #' threaten/force-posture and assault/fight/mass-violence groupings back
-#' into their individual roots; `BilatrClass` / `BilatrClassName`
+#' into their individual roots; `ERC16NZ` / `ERC16NZName` (see
+#' [assign_erc16nz()] and [erc16nz_name()]) is `EventRootCode3` with its
+#' Investigate and Demand classes merged; `BilatrClass` / `BilatrClassName`
 #' (see [assign_bilatr_class()]) is the 11-level action scheme used as
 #' the model's default; `BilatrClass2` / `BilatrClass2Name` (see
 #' [assign_bilatr_class2()]) is a 9-level coarsening that merges the two

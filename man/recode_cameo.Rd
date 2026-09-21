@@ -23,7 +23,7 @@ attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{PentaCl
 \code{PentaClass_modified}, \code{EventRootCode2}, \code{EventRootCode2Name},
 \code{EventRootCode3}, \code{EventRootCode3Name}, \code{EventRootCode3RootCodes},
 \code{EventRootCode4}, \code{EventRootCode4Name}, \code{EventRootCode4RootCodes},
-\code{BilatrClass}, \code{BilatrClassName}, \code{BilatrClass2}, and
+\code{ERC16NZ}, \code{ERC16NZName}, \code{BilatrClass}, \code{BilatrClassName}, \code{BilatrClass2}, and
 \code{BilatrClass2Name} columns. \code{PentaClass_modified} folds low-intensity
 verbal cooperation (Goldstein score <= 1) into its own class, which
 can be useful as a near-neutral reference category. \code{EventRootCode2} /
@@ -39,7 +39,9 @@ its \code{"10"} and \code{"13"} groupings back out; \code{EventRootCode4} /
 \code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}) further refines \code{EventRootCode3} by
 splitting \code{041} out of its consult-visit grouping and splitting the
 threaten/force-posture and assault/fight/mass-violence groupings back
-into their individual roots; \code{BilatrClass} / \code{BilatrClassName}
+into their individual roots; \code{ERC16NZ} / \code{ERC16NZName} (see
+\code{\link[=assign_erc16nz]{assign_erc16nz()}} and \code{\link[=erc16nz_name]{erc16nz_name()}}) is \code{EventRootCode3} with its
+Investigate and Demand classes merged; \code{BilatrClass} / \code{BilatrClassName}
 (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action scheme used as
 the model's default; \code{BilatrClass2} / \code{BilatrClass2Name} (see
 \code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}) is a 9-level coarsening that merges the two

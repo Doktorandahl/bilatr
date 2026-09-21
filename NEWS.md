@@ -1,3 +1,16 @@
+# bilatr 0.6.2
+
+## New features
+
+* Added `ERC16NZ`, a variant of `EventRootCode3` that merges its
+  "Investigate" (root 09) and "Demand" (root 10) classes into a single
+  "Investigate or demand" class. All other `EventRootCode3` classes,
+  including the `016`/`018`/`019` relocations, are unchanged. Classes are
+  numbered 1-18 (`EventRootCode3` classes 1-11 keep their values;
+  13-19 shift down by one to 12-18). `cameo_lookup`/`recode_cameo()`
+  gain `ERC16NZ` and `ERC16NZName` alongside the new `assign_erc16nz()`
+  and `erc16nz_name()` helpers.
+
 
 # bilatr 0.6.1
 

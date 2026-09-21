@@ -180,6 +180,9 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$EventRootCode4Name)))
   expect_false(any(is.na(cameo_lookup$EventRootCode4RootCodes)))
   expect_true(all(cameo_lookup$EventRootCode4 %in% 1:23))
+  expect_false(any(is.na(cameo_lookup$ERC16NZ)))
+  expect_false(any(is.na(cameo_lookup$ERC16NZName)))
+  expect_true(all(cameo_lookup$ERC16NZ %in% 1:18))
   expect_false(any(is.na(cameo_lookup$BilatrClass)))
   expect_false(any(is.na(cameo_lookup$BilatrClassName)))
   expect_false(any(is.na(cameo_lookup$BilatrClass2)))
@@ -252,6 +255,43 @@ test_that("recode_cameo also attaches EventRootCode4 and its name/root-codes col
   ))
   expect_equal(out$EventRootCode4RootCodes[1], "12, 016")
   expect_equal(out$EventRootCode4RootCodes[3], "041")
+})
+
+test_that("assign_erc16nz merges investigate and demand and otherwise follows EventRootCode3", {
+  expect_equal(assign_erc16nz(c("09", "091", "10", "100")), c(11L, 11L, 11L, 11L))
+  expect_equal(assign_erc16nz(c("01", "08")), c(1L, 10L))
+  expect_equal(assign_erc16nz(c("11", "12", "016")), c(12L, 13L, 13L))
+  expect_equal(assign_erc16nz(c("13", "15", "14")), c(14L, 14L, 15L))
+  expect_equal(assign_erc16nz(c("16", "17", "18", "19", "20")), c(16L, 17L, 18L, 18L, 18L))
+  expect_true(is.na(assign_erc16nz("99")))
+
+  # Only 09 and 10 collapse; everything else is a 1:1 relabelling of EventRootCode3.
+  codes <- cameo_lookup$CAMEOEVENTCODE
+  erc3 <- assign_eventrootcode3(codes)
+  erc16 <- assign_erc16nz(codes)
+  expect_equal(length(unique(erc16)), length(unique(erc3)) - 1L)
+  expect_equal(nrow(unique(data.frame(erc3, erc16))), length(unique(erc3)))
+})
+
+test_that("erc16nz_name labels every assign_erc16nz() output value and NAs anything else", {
+  expect_equal(erc16nz_name(11L), "Investigate or demand")
+  expect_equal(erc16nz_name(18L), "Assault, fight, or mass violence")
+  expect_true(is.na(erc16nz_name(19L)))
+  expect_true(is.na(erc16nz_name(0L)))
+
+  produced <- unique(assign_erc16nz(cameo_lookup$CAMEOEVENTCODE))
+  expect_false(any(is.na(erc16nz_name(produced))))
+})
+
+test_that("recode_cameo also attaches ERC16NZ and its name column", {
+  events <- tibble::tibble(EventCode = c("09", "10", "11", "20"))
+  out <- recode_cameo(events, code_col = "EventCode")
+  expect_true(all(c("ERC16NZ", "ERC16NZName") %in% names(out)))
+  expect_equal(out$ERC16NZ, c(11L, 11L, 12L, 18L))
+  expect_equal(out$ERC16NZName, c(
+    "Investigate or demand", "Investigate or demand", "Disapprove",
+    "Assault, fight, or mass violence"
+  ))
 })
 
 test_that("recode_cameo leaves unmatched codes as NA rather than erroring", {
