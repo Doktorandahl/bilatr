@@ -1,11 +1,13 @@
 # Builds the `cameo_lookup` package data object: one row per CAMEO event
 # code, with its Goldstein score, human-readable label, and the
-# QuadClass / PentaClass / PentaClass_modified / EventRootCode2 /
-# EventRootCode3 / EventRootCode4 / ERC16NZ / BilatrClass / BilatrClass2
-# recodings (each with a *Name label where it has one, including
-# EventRootCode2Name, EventRootCode3Name, EventRootCode4Name, and
-# ERC16NZName; EventRootCode3/EventRootCode4/ERC16NZ also get their own
-# *RootCodes column).
+# QuadClass / PentaClass / PentaClass_modified / ModifiedRootCode
+# recodings (QuadClass, PentaClass, and ModifiedRootCode each get a
+# *Name label and a *EventCodes column listing the underlying CAMEO
+# root/event codes; ModifiedRootCode was previously named ERC16NZ). A
+# handful of other classification schemes (EventRootCode2/3/4,
+# BilatrClass/BilatrClass2) previously shipped here have been retired;
+# their assign_*()/*_name() functions remain available internally in
+# R/cameo_recode.R for backward compatibility.
 # Source values are taken
 # verbatim from the project's existing CAMEO/Goldstein reference table
 # (O'Brien 2010 scale; quad/penta
@@ -474,28 +476,36 @@ cameo_lookup <- cameo_label %>%
   mutate(
     root = get_root(CAMEOEVENTCODE),
     QuadClass = assign_quad(root),
+    QuadClassName = quadclass_name(QuadClass),
+    QuadClassEventCodes = quadclass_eventcodes(QuadClass),
     PentaClass = assign_penta(root, QuadClass),
+    PentaClassName = pentaclass_name(PentaClass),
+    PentaClassEventCodes = pentaclass_eventcodes(PentaClass),
     PentaClass_modified = if_else(
       GoldsteinScore <= 1 & QuadClass == 1,
       0L,
       PentaClass
     ),
-    EventRootCode2 = assign_eventrootcode2(CAMEOEVENTCODE),
-    EventRootCode2Name = eventrootcode2_name(EventRootCode2),
-    EventRootCode3 = assign_eventrootcode3(CAMEOEVENTCODE),
-    EventRootCode3Name = eventrootcode3_name(EventRootCode3),
-    EventRootCode3RootCodes = eventrootcode3_rootcodes(EventRootCode3),
-    EventRootCode4 = assign_eventrootcode4(CAMEOEVENTCODE),
-    EventRootCode4Name = eventrootcode4_name(EventRootCode4),
-    EventRootCode4RootCodes = eventrootcode4_rootcodes(EventRootCode4),
-    ERC16NZ = assign_erc16nz(CAMEOEVENTCODE),
-    ERC16NZName = erc16nz_name(ERC16NZ),
-    ERC16NZRootCodes = erc16nz_rootcodes(ERC16NZ),
-    BilatrClass = assign_bilatr_class(CAMEOEVENTCODE, EventRootCode2),
-    BilatrClassName = bilatr_class_name(BilatrClass),
-    BilatrClass2 = assign_bilatr_class2(BilatrClass),
-    BilatrClass2Name = bilatr_class2_name(BilatrClass2)
+    ModifiedRootCode = assign_modified_root_code(CAMEOEVENTCODE),
+    ModifiedRootCodeName = modified_root_code_name(ModifiedRootCode),
+    ModifiedRootCodeEventCodes = modified_root_code_eventcodes(ModifiedRootCode)
   ) %>%
+  # Top-level (two-digit) root rows only keep a
+  # ModifiedRootCode/Name/EventCodes when every event code under that
+  # root maps to the same ModifiedRootCode class (e.g. root "02" is
+  # homogeneous; roots "01" and "04" are not, since 016/018/019 are
+  # relocated out of "01" and "04" splits three ways, so those two
+  # top-level rows are blanked).
+  group_by(root) %>%
+  mutate(root_homogeneous = length(unique(ModifiedRootCode)) == 1) %>%
+  ungroup() %>%
+  mutate(
+    blank_top_level = nchar(CAMEOEVENTCODE) == 2 & !root_homogeneous,
+    ModifiedRootCode = if_else(blank_top_level, NA_integer_, ModifiedRootCode),
+    ModifiedRootCodeName = if_else(blank_top_level, NA_character_, ModifiedRootCodeName),
+    ModifiedRootCodeEventCodes = if_else(blank_top_level, NA_character_, ModifiedRootCodeEventCodes)
+  ) %>%
+  select(-root_homogeneous, -blank_top_level) %>%
   select(-root) %>%
   select(CAMEOEVENTCODE, CAMEOLabel, everything()) %>%
   distinct(CAMEOEVENTCODE, .keep_all = TRUE)

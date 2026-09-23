@@ -15,6 +15,10 @@ Character vector of the corresponding class names, \code{NA} for
 values outside 1-23.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
+}
+\details{
 Preliminary labels, one per \code{\link[=assign_eventrootcode4]{assign_eventrootcode4()}} output value.
 }
 \keyword{internal}

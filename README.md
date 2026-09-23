@@ -97,8 +97,7 @@ to read the convergence diagnostics.
 ## Model overview
 
 - **Likelihood**: dyad-period event-type counts follow a
-  Dirichlet-multinomial, with concentration `phi[d] * softmax(alpha .*
-  theta[d,t] - mu_intercept)` (optionally rescaled by
+  Dirichlet-multinomial, with concentration `phi[d] * softmax(alpha .* theta[d,t] - mu_intercept)` (optionally rescaled by
   `dyad_weight`/`period_weight`/`action_weight`, all default to 1s).
 - **Identification**: `alpha[1] = 1` and `mu_intercept[1] = 0` are the
   fixed reference points (discrimination scale/sign, and location); every

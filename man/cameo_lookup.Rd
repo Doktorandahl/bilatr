@@ -14,67 +14,57 @@ code.}
 ranging from -10 (most conflictual) to 10 (most cooperative).}
 \item{QuadClass}{Integer, 1-4. 1 = verbal cooperation, 2 = material
 cooperation, 3 = verbal conflict, 4 = material conflict.}
+\item{QuadClassName}{Character. Human-readable label for
+\code{QuadClass}; see \code{\link[=quadclass_name]{quadclass_name()}}.}
+\item{QuadClassEventCodes}{Character. Comma-separated CAMEO root
+codes underlying each \code{QuadClass} class; see
+\code{\link[=quadclass_eventcodes]{quadclass_eventcodes()}}.}
 \item{PentaClass}{Integer, 0-4. As QuadClass, but with verbal
 cooperation (0) split out from material cooperation (1), and
 protest/reduce-relations events reassigned to their own classes.}
+\item{PentaClassName}{Character. Human-readable label for
+\code{PentaClass}; see \code{\link[=pentaclass_name]{pentaclass_name()}}.}
+\item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
+codes underlying each \code{PentaClass} class; see
+\code{\link[=pentaclass_eventcodes]{pentaclass_eventcodes()}}.}
 \item{PentaClass_modified}{Integer, 0-4. As PentaClass, but low-
 intensity verbal cooperation (Goldstein score <= 1) is folded into
 class 0, useful as a near-neutral reference category.}
-\item{EventRootCode2}{Character. A coarser regrouping of the CAMEO
-root codes (root 04 split three ways; roots 09/14/15/18/20 folded
-into related roots); see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}.}
-\item{EventRootCode2Name}{Character. Human-readable label for
-\code{EventRootCode2}; see \code{\link[=eventrootcode2_name]{eventrootcode2_name()}}.}
-\item{EventRootCode3}{Integer, 1-19. A further refinement of
-\code{EventRootCode2} that relocates \code{016} into the Reject class and
-\code{018}/\code{019} into the diplomatic-cooperation class, and splits its
-\code{"10"}
-(investigate/demand) and \code{"13"} (threaten/protest/force-posture)
-groupings back into Investigate + Demand and
-Threaten-or-force-posture + Protest; see
-\code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}}.}
-\item{EventRootCode3Name}{Character. Human-readable label for
-\code{EventRootCode3}; see \code{\link[=eventrootcode3_name]{eventrootcode3_name()}}.}
-\item{EventRootCode3RootCodes}{Character. Comma-separated CAMEO
-root/event codes underlying each \code{EventRootCode3} class; see
-\code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}.}
-\item{EventRootCode4}{Integer, 1-23. A further refinement of
-\code{EventRootCode3} that splits \code{041} ("Discuss by telephone") out of
-its consult-visit grouping into its own class, and splits the
-threaten/force-posture and assault/fight/mass-violence groupings
-back into their individual root codes (Threaten, Exhibit force
-posture; Assault, Fight, Use unconventional mass violence). The
-\code{016}/\code{018}/\code{019} relocations from \code{EventRootCode3} are kept; see
-\code{\link[=assign_eventrootcode4]{assign_eventrootcode4()}}.}
-\item{EventRootCode4Name}{Character. Human-readable label for
-\code{EventRootCode4}; see \code{\link[=eventrootcode4_name]{eventrootcode4_name()}}.}
-\item{EventRootCode4RootCodes}{Character. Comma-separated CAMEO
-root/event codes underlying each \code{EventRootCode4} class; see
-\code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}.}
-\item{ERC16NZ}{Integer, 1-18. \code{EventRootCode3} with its Investigate
-(root 09) and Demand (root 10) classes merged into a single
-"Investigate or demand" class; see \code{\link[=assign_erc16nz]{assign_erc16nz()}}.}
-\item{ERC16NZName}{Character. Human-readable label for \code{ERC16NZ};
-see \code{\link[=erc16nz_name]{erc16nz_name()}}.}
-\item{ERC16NZRootCodes}{Character. Comma-separated CAMEO root/event
-codes underlying each \code{ERC16NZ} class; see \code{\link[=erc16nz_rootcodes]{erc16nz_rootcodes()}}.}
-\item{BilatrClass}{Integer, 0-10. The 11-level action-class scheme
-used as the bilatr model's default grouping; see
-\code{\link[=assign_bilatr_class]{assign_bilatr_class()}}.}
-\item{BilatrClassName}{Character. Human-readable label for
-\code{BilatrClass}; see \code{\link[=bilatr_class_name]{bilatr_class_name()}}.}
-\item{BilatrClass2}{Integer, 0-8. A 9-level coarsening of
-\code{BilatrClass} that merges levels 7-8 and 9-10; see
-\code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}.}
-\item{BilatrClass2Name}{Character. Human-readable label for
-\code{BilatrClass2}; see \code{\link[=bilatr_class2_name]{bilatr_class2_name()}}.}
+\item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
+root codes that relocates \code{016} into the Reject class and
+\code{018}/\code{019} into the diplomatic-cooperation class, splits root
+\code{04} ("Consult") by kind of consultation, splits root \code{13}
+("Threaten") off from force posture only where noted, and merges
+Investigate (root \code{09}) and Demand (root \code{10}) into a single
+"Investigate or demand" class; see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}. Blank (\code{NA}) on the top-level
+(two-digit) row for a root whose own event codes don't all belong
+to the same \code{ModifiedRootCode} class (currently roots \code{01} and
+\code{04}); populated on that root's individual sub-codes as normal.
+This scheme was previously named \code{ERC16NZ}.}
+\item{ModifiedRootCodeName}{Character. Human-readable label for
+\code{ModifiedRootCode}; see \code{\link[=modified_root_code_name]{modified_root_code_name()}}. \code{NA}
+wherever \code{ModifiedRootCode} is blank.}
+\item{ModifiedRootCodeEventCodes}{Character. Comma-separated CAMEO
+root/event codes underlying each \code{ModifiedRootCode} class; see
+\code{\link[=modified_root_code_eventcodes]{modified_root_code_eventcodes()}}. \code{NA} wherever \code{ModifiedRootCode}
+is blank.}
 }
+
+A handful of other classification schemes previously shipped in this
+table (\code{EventRootCode2}, \code{EventRootCode3}, \code{EventRootCode4},
+\code{BilatrClass}, \code{BilatrClass2}, each with their \verb{*Name}/\verb{*RootCodes}
+columns) have been retired from it. Their \verb{assign_*()}/\verb{*_name()}
+functions are still available internally in \code{R/cameo_recode.R} for
+backward compatibility (see e.g. \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}},
+\code{\link[=assign_bilatr_class]{assign_bilatr_class()}}), but are no longer attached by
+\code{\link[=recode_cameo]{recode_cameo()}}.
 }
 \source{
 GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
 (1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
-\code{EventRootCode2} / \code{BilatrClass} / \code{BilatrClass2} regrouping follows
-this project's established GDELT pipeline
+retired \code{EventRootCode2} / \code{BilatrClass} / \code{BilatrClass2} regrouping
+followed this project's established GDELT pipeline
 (\code{original_code/cameo_df.csv}).
 }
 \usage{
@@ -83,8 +73,8 @@ cameo_lookup
 \description{
 A reference table mapping every CAMEO event code to its Goldstein
 conflict-cooperation score, a human-readable label, and the
-QuadClass/PentaClass recoding used throughout the package. Built by
-\code{data-raw/build_cameo_lookup.R}; see \code{\link[=recode_cameo]{recode_cameo()}} for how it is
-applied to event data.
+QuadClass/PentaClass/ModifiedRootCode recoding used throughout the
+package. Built by \code{data-raw/build_cameo_lookup.R}; see
+\code{\link[=recode_cameo]{recode_cameo()}} for how it is applied to event data.
 }
 \keyword{datasets}

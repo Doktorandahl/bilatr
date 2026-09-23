@@ -26,6 +26,40 @@ assign_quad <- function(root) {
   )
 }
 
+#' Human-readable label for a `QuadClass` value
+#'
+#' @param class Integer vector of `QuadClass` values, as returned by
+#'   [assign_quad()].
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 1-4.
+#' @keywords internal
+quadclass_name <- function(class) {
+  names <- c(
+    "1" = "Verbal cooperation",
+    "2" = "Material cooperation",
+    "3" = "Verbal conflict",
+    "4" = "Material conflict"
+  )
+  unname(names[as.character(class)])
+}
+
+#' Underlying CAMEO root codes for a `QuadClass` value
+#'
+#' @param class Integer vector of `QuadClass` values, as returned by
+#'   [assign_quad()].
+#' @return Character vector of comma-separated CAMEO root codes, `NA` for
+#'   values outside 1-4.
+#' @keywords internal
+quadclass_eventcodes <- function(class) {
+  codes <- c(
+    "1" = "01, 02, 03, 04, 05",
+    "2" = "06, 07, 08, 09",
+    "3" = "10, 11, 12, 13, 14",
+    "4" = "15, 16, 17, 18, 19, 20"
+  )
+  unname(codes[as.character(class)])
+}
+
 #' Assign PentaClass from a CAMEO root code and QuadClass
 #'
 #' Refines QuadClass into a five-level scheme by splitting out verbal
@@ -47,7 +81,47 @@ assign_penta <- function(root, quad) {
   )
 }
 
+#' Human-readable label for a `PentaClass` value
+#'
+#' @param class Integer vector of `PentaClass` values, as returned by
+#'   [assign_penta()].
+#' @return Character vector of the corresponding class names, `NA` for
+#'   values outside 0-4.
+#' @keywords internal
+pentaclass_name <- function(class) {
+  names <- c(
+    "0" = "Make statement",
+    "1" = "Verbal cooperation",
+    "2" = "Material cooperation",
+    "3" = "Verbal conflict",
+    "4" = "Material conflict"
+  )
+  unname(names[as.character(class)])
+}
+
+#' Underlying CAMEO root codes for a `PentaClass` value
+#'
+#' @param class Integer vector of `PentaClass` values, as returned by
+#'   [assign_penta()].
+#' @return Character vector of comma-separated CAMEO root codes, `NA` for
+#'   values outside 0-4.
+#' @keywords internal
+pentaclass_eventcodes <- function(class) {
+  codes <- c(
+    "0" = "01, 02",
+    "1" = "03, 04, 05",
+    "2" = "06, 07, 08, 09",
+    "3" = "10, 11, 12, 13, 16",
+    "4" = "14, 15, 17, 18, 19, 20"
+  )
+  unname(codes[as.character(class)])
+}
+
 #' Regroup a CAMEO event code into the bilatr "EventRootCode2" scheme
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup]. Superseded by `ModifiedRootCode`; see
+#' [assign_modified_root_code()].
 #'
 #' `EventRootCode2` is a coarser regrouping of the 20 CAMEO root codes
 #' used by this project, motivated by how the underlying event types
@@ -87,6 +161,9 @@ assign_eventrootcode2 <- function(code) {
 
 #' Human-readable label for an `EventRootCode2` value
 #'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
+#'
 #' Preliminary labels, one per [assign_eventrootcode2()] output value.
 #' Where an `EventRootCode2` value corresponds exactly to a `BilatrClass`
 #' level (the two root-04 splits `"044"`/`"046"`), the label text matches
@@ -125,6 +202,10 @@ eventrootcode2_name <- function(class) {
 }
 
 #' Regroup a CAMEO event code into the bilatr "EventRootCode3" scheme
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup]. Superseded by `ModifiedRootCode`; see
+#' [assign_modified_root_code()].
 #'
 #' `EventRootCode3` is a further refinement of [assign_eventrootcode2()],
 #' motivated by wanting a few of its coarser groupings split back out
@@ -189,6 +270,9 @@ assign_eventrootcode3 <- function(code) {
 
 #' Human-readable label for an `EventRootCode3` value
 #'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
+#'
 #' Preliminary labels, one per [assign_eventrootcode3()] output value.
 #'
 #' @param class Integer vector of `EventRootCode3` values, as returned
@@ -222,6 +306,9 @@ eventrootcode3_name <- function(class) {
 }
 
 #' Underlying CAMEO root/event codes for an `EventRootCode3` value
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
 #'
 #' For most `EventRootCode3` classes this is just the single two-digit
 #' CAMEO root code the class was built from. Where a class merges
@@ -263,6 +350,10 @@ eventrootcode3_rootcodes <- function(class) {
 }
 
 #' Regroup a CAMEO event code into the bilatr "EventRootCode4" scheme
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup]. Superseded by `ModifiedRootCode`; see
+#' [assign_modified_root_code()].
 #'
 #' `EventRootCode4` is a further refinement of [assign_eventrootcode3()],
 #' splitting three of its remaining merged/aggregated groupings back out
@@ -333,6 +424,9 @@ assign_eventrootcode4 <- function(code) {
 
 #' Human-readable label for an `EventRootCode4` value
 #'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
+#'
 #' Preliminary labels, one per [assign_eventrootcode4()] output value.
 #'
 #' @param class Integer vector of `EventRootCode4` values, as returned
@@ -370,6 +464,9 @@ eventrootcode4_name <- function(class) {
 }
 
 #' Underlying CAMEO root/event codes for an `EventRootCode4` value
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
 #'
 #' For most `EventRootCode4` classes this is just the single two-digit
 #' CAMEO root code the class was built from. Where a class merges
@@ -414,37 +511,38 @@ eventrootcode4_rootcodes <- function(class) {
   unname(codes[as.character(class)])
 }
 
-#' Regroup a CAMEO event code into the bilatr "ERC16NZ" scheme
+#' Regroup a CAMEO event code into the bilatr "ModifiedRootCode" scheme
 #'
-#' `ERC16NZ` is a variant of [assign_eventrootcode3()] that merges its
-#' "Investigate" (root 09) and "Demand" (root 10) classes back into a
+#' `ModifiedRootCode` is a variant of [assign_eventrootcode3()] that merges
+#' its "Investigate" (root 09) and "Demand" (root 10) classes back into a
 #' single "Investigate or demand" class. Every other class, including the
 #' `016`/`018`/`019` relocations, is unchanged from `EventRootCode3`.
 #'
 #' Classes are numbered 1-18 in ascending root-code order (so
 #' `EventRootCode3` classes 1-11 keep their values, with 11 now covering
 #' both roots 09 and 10, and `EventRootCode3` classes 13-19 shift down by
-#' one to 12-18); see [erc16nz_name()] for labels.
+#' one to 12-18); see [modified_root_code_name()] for labels. This scheme
+#' was previously named `ERC16NZ`.
 #'
 #' @param code Character or numeric vector of CAMEO event codes (e.g.
 #'   `"0211"`, `"19"`).
-#' @return Integer vector of `ERC16NZ` values (1-18).
+#' @return Integer vector of `ModifiedRootCode` values (1-18).
 #' @keywords internal
-assign_erc16nz <- function(code) {
+assign_modified_root_code <- function(code) {
   erc3 <- assign_eventrootcode3(code)
   dplyr::if_else(erc3 >= 12L, erc3 - 1L, erc3)
 }
 
-#' Human-readable label for an `ERC16NZ` value
+#' Human-readable label for a `ModifiedRootCode` value
 #'
-#' Preliminary labels, one per [assign_erc16nz()] output value.
+#' Preliminary labels, one per [assign_modified_root_code()] output value.
 #'
-#' @param class Integer vector of `ERC16NZ` values, as returned by
-#'   [assign_erc16nz()].
+#' @param class Integer vector of `ModifiedRootCode` values, as returned by
+#'   [assign_modified_root_code()].
 #' @return Character vector of the corresponding class names, `NA` for
 #'   values outside 1-18.
 #' @keywords internal
-erc16nz_name <- function(class) {
+modified_root_code_name <- function(class) {
   names <- c(
     "1"  = "Make a public statement",
     "2"  = "Appeal for action",
@@ -468,26 +566,32 @@ erc16nz_name <- function(class) {
   unname(names[as.character(class)])
 }
 
-#' Underlying CAMEO root/event codes for an `ERC16NZ` value
+#' Underlying CAMEO event codes for a `ModifiedRootCode` value
 #'
-#' For most `ERC16NZ` classes this is just the single two-digit CAMEO
-#' root code the class was built from. Where a class merges several roots
-#' (e.g. "Investigate or demand"), splits a root into finer sub-codes
-#' (e.g. "Consult: meet, discuss, or visit"), or relocates an individual
-#' code out of its root (e.g. "Reject", which picks up `016` from root
-#' 01), this lists every code that feeds into it, comma-separated.
+#' For most `ModifiedRootCode` classes this is just the single two-digit
+#' CAMEO root code the class was built from. Where a class merges several
+#' roots (e.g. "Investigate or demand"), splits a root into finer
+#' sub-codes (e.g. "Consult: meet, discuss, or visit"), or relocates an
+#' individual code out of its root (e.g. "Reject", which picks up `016`
+#' from root 01), this lists every code that feeds into it, comma-
+#' separated. Root `01`'s own entry notes the codes carved out of it
+#' (`016`/`018`/`019`) as an exception, since the rest of root `01` stays
+#' in this class. The bare two-digit root `04` is omitted from the
+#' "Consult, unspecified" entry (`"040"` only, not `"04, 040"`), since
+#' root `04` itself splits across several `ModifiedRootCode` classes and
+#' so is blanked at the top level; see [cameo_lookup]'s docs.
 #'
-#' @param class Integer vector of `ERC16NZ` values, as returned by
-#'   [assign_erc16nz()].
+#' @param class Integer vector of `ModifiedRootCode` values, as returned
+#'   by [assign_modified_root_code()].
 #' @return Character vector of comma-separated CAMEO root/event codes,
 #'   `NA` for values outside 1-18.
 #' @keywords internal
-erc16nz_rootcodes <- function(class) {
+modified_root_code_eventcodes <- function(class) {
   codes <- c(
-    "1"  = "01",
+    "1"  = "01 except 016, 018, 019",
     "2"  = "02",
     "3"  = "03",
-    "4"  = "04, 040",
+    "4"  = "040",
     "5"  = "041, 042, 043, 044",
     "6"  = "045, 046",
     "7"  = "05, 018, 019",
@@ -507,6 +611,9 @@ erc16nz_rootcodes <- function(class) {
 }
 
 #' Human-readable label for a bilatr event class
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
 #'
 #' @param class Integer vector of `BilatrClass` values (0-10).
 #' @return Character vector of the corresponding class names, `NA` for
@@ -531,6 +638,9 @@ bilatr_class_name <- function(class) {
 
 #' Human-readable label for a coarsened bilatr event class
 #'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
+#'
 #' @param class Integer vector of `BilatrClass2` values (0-8).
 #' @return Character vector of the corresponding class names, `NA` for
 #'   values outside 0-8.
@@ -551,6 +661,9 @@ bilatr_class2_name <- function(class) {
 }
 
 #' Coarsen `BilatrClass` into the 9-level `BilatrClass2` scheme
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
 #'
 #' `BilatrClass2` merges the two adjacent pairs of hostile `BilatrClass`
 #' levels (see [assign_bilatr_class()]) that behave similarly in dyadic
@@ -584,6 +697,9 @@ assign_bilatr_class2 <- function(bilatr_class) {
 }
 
 #' Assign the bilatr event class from a CAMEO event code
+#'
+#' Deprecated: retained internally for backward compatibility; no longer
+#' part of [cameo_lookup].
 #'
 #' `BilatrClass` is an 11-level (0-10) collapse of the CAMEO taxonomy
 #' used as the default action-class scheme for the bilatr model. It is
@@ -641,37 +757,29 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
   )
 }
 
-#' Recode a data frame of CAMEO event codes to quad/penta/bilatr classes
+#' Recode a data frame of CAMEO event codes to quad/penta/modified-root
+#' classes
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
-#' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `PentaClass`,
-#' `PentaClass_modified`, `EventRootCode2`, `EventRootCode2Name`,
-#' `EventRootCode3`, `EventRootCode3Name`, `EventRootCode3RootCodes`,
-#' `EventRootCode4`, `EventRootCode4Name`, `EventRootCode4RootCodes`,
-#' `ERC16NZ`, `ERC16NZName`, `ERC16NZRootCodes`, `BilatrClass`, `BilatrClassName`, `BilatrClass2`, and
-#' `BilatrClass2Name` columns. `PentaClass_modified` folds low-intensity
-#' verbal cooperation (Goldstein score <= 1) into its own class, which
-#' can be useful as a near-neutral reference category. `EventRootCode2` /
-#' `EventRootCode2Name` (see [assign_eventrootcode2()] and
-#' [eventrootcode2_name()]) is a coarser regrouping of the CAMEO root
-#' codes; `EventRootCode3` / `EventRootCode3Name` /
-#' `EventRootCode3RootCodes` (see [assign_eventrootcode3()],
-#' [eventrootcode3_name()], and [eventrootcode3_rootcodes()]) further
-#' refines `EventRootCode2` by relocating `016`/`018`/`019` and splitting
-#' its `"10"` and `"13"` groupings back out; `EventRootCode4` /
-#' `EventRootCode4Name` / `EventRootCode4RootCodes` (see
-#' [assign_eventrootcode4()], [eventrootcode4_name()], and
-#' [eventrootcode4_rootcodes()]) further refines `EventRootCode3` by
-#' splitting `041` out of its consult-visit grouping and splitting the
-#' threaten/force-posture and assault/fight/mass-violence groupings back
-#' into their individual roots; `ERC16NZ` / `ERC16NZName` /
-#' `ERC16NZRootCodes` (see [assign_erc16nz()], [erc16nz_name()], and
-#' [erc16nz_rootcodes()]) is `EventRootCode3` with its
-#' Investigate and Demand classes merged; `BilatrClass` / `BilatrClassName`
-#' (see [assign_bilatr_class()]) is the 11-level action scheme used as
-#' the model's default; `BilatrClass2` / `BilatrClass2Name` (see
-#' [assign_bilatr_class2()]) is a 9-level coarsening that merges the two
-#' adjacent pairs of hostile levels.
+#' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `QuadClassName`,
+#' `QuadClassEventCodes`, `PentaClass`, `PentaClassName`,
+#' `PentaClassEventCodes`, `PentaClass_modified`, `ModifiedRootCode`,
+#' `ModifiedRootCodeName`, and `ModifiedRootCodeEventCodes` columns.
+#' `PentaClass_modified` folds low-intensity verbal cooperation
+#' (Goldstein score <= 1) into its own class, which can be useful as a
+#' near-neutral reference category. `ModifiedRootCode` /
+#' `ModifiedRootCodeName` / `ModifiedRootCodeEventCodes` (see
+#' [assign_modified_root_code()], [modified_root_code_name()], and
+#' [modified_root_code_eventcodes()]) is an 18-level regrouping of the
+#' CAMEO root codes (formerly named `ERC16NZ`).
+#'
+#' A handful of other classification schemes
+#' (`EventRootCode2`/`EventRootCode3`/`EventRootCode4`, `BilatrClass`/
+#' `BilatrClass2`) previously shipped in [cameo_lookup] have been retired
+#' from it; their `assign_*()`/`*_name()` functions are still available
+#' internally (see [assign_eventrootcode2()], [assign_bilatr_class()],
+#' etc.) for backward compatibility, but are no longer attached by this
+#' function.
 #'
 #' Any of these columns that already exist in `data` are left as they are
 #' (not overwritten, no `.x`/`.y` suffixing), with a warning naming them.

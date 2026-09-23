@@ -14,12 +14,16 @@ assign_eventrootcode4(code)
 Integer vector of \code{EventRootCode4} values (1-23).
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}. Superseded by \code{ModifiedRootCode}; see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}.
+}
+\details{
 \code{EventRootCode4} is a further refinement of \code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}},
 splitting three of its remaining merged/aggregated groupings back out
 into their individual root/sub-codes, while keeping its relocations of
 \code{016}/\code{018}/\code{019}:
-}
-\details{
+
 \itemize{
 \item \code{EventRootCode3}'s "Consult: meet, discuss, or visit" class
 (\code{041}-\code{044}) is split so that \code{041} ("Discuss by telephone")

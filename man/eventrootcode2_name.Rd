@@ -15,6 +15,10 @@ Character vector of the corresponding class names, \code{NA} for
 values \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}} does not produce.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
+}
+\details{
 Preliminary labels, one per \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}} output value.
 Where an \code{EventRootCode2} value corresponds exactly to a \code{BilatrClass}
 level (the two root-04 splits \code{"044"}/\code{"046"}), the label text matches

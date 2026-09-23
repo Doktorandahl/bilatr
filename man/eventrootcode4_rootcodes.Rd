@@ -15,6 +15,10 @@ Character vector of comma-separated CAMEO root/event codes,
 \code{NA} for values outside 1-23.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
+}
+\details{
 For most \code{EventRootCode4} classes this is just the single two-digit
 CAMEO root code the class was built from. Where a class merges
 several roots (e.g. "Engage in diplomatic cooperation", which picks

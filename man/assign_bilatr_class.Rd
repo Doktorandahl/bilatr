@@ -18,14 +18,17 @@ Integer vector of \code{BilatrClass} values (0-10), \code{NA} for
 unrecognized codes.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
+}
+\details{
 \code{BilatrClass} is an 11-level (0-10) collapse of the CAMEO taxonomy
 used as the default action-class scheme for the bilatr model. It is
 mostly a function of \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}} (see that function for
 the root regrouping and \code{\link[=bilatr_class_name]{bilatr_class_name()}} for the level labels),
 with a handful of per-code refinements where a specific event type
 fits a different class than its regrouped root:
-}
-\details{
+
 \itemize{
 \item \code{016} "Deny responsibility" -> 8 (Disapprove).
 \item \code{018} "Make empathetic comment" -> 4 (diplomatic cooperation).

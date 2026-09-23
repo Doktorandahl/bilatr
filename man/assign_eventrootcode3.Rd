@@ -14,12 +14,16 @@ assign_eventrootcode3(code)
 Integer vector of \code{EventRootCode3} values (1-19).
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}. Superseded by \code{ModifiedRootCode}; see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}.
+}
+\details{
 \code{EventRootCode3} is a further refinement of \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}},
 motivated by wanting a few of its coarser groupings split back out
 while relocating individual codes that behave more like a different
 category than their root suggests:
-}
-\details{
+
 \itemize{
 \item \code{016} ("Deny responsibility") moves out of root 01 into the
 Reject class (with root 12).

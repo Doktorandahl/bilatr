@@ -14,6 +14,7 @@ Character vector of the corresponding class names, \code{NA} for
 values outside 0-8.
 }
 \description{
-Human-readable label for a coarsened bilatr event class
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
 }
 \keyword{internal}

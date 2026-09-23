@@ -14,11 +14,15 @@ assign_eventrootcode2(code)
 Character vector of \code{EventRootCode2} values.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}. Superseded by \code{ModifiedRootCode}; see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}.
+}
+\details{
 \code{EventRootCode2} is a coarser regrouping of the 20 CAMEO root codes
 used by this project, motivated by how the underlying event types
 behave in dyadic conflict data:
-}
-\details{
+
 \itemize{
 \item Root 04 ("Consult") is \emph{split} by the kind of consultation:
 bare \code{04}/\code{040} stay \code{"040"}; meeting/visiting/phoning

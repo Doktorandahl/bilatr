@@ -15,11 +15,14 @@ Integer vector of \code{BilatrClass2} values (0-8), \code{NA} where
 \code{bilatr_class} is \code{NA} or outside 0-10.
 }
 \description{
+Deprecated: retained internally for backward compatibility; no longer
+part of \link{cameo_lookup}.
+}
+\details{
 \code{BilatrClass2} merges the two adjacent pairs of hostile \code{BilatrClass}
 levels (see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) that behave similarly in dyadic
 conflict data, giving a 9-level (0-8) scheme:
-}
-\details{
+
 \itemize{
 \item \code{BilatrClass} 0-6 are unchanged (\code{BilatrClass2} 0-6).
 \item \code{BilatrClass} 7 ("Investigate, demand, reject, or reduce

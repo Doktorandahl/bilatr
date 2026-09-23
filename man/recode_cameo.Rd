@@ -2,7 +2,8 @@
 % Please edit documentation in R/cameo_recode.R
 \name{recode_cameo}
 \alias{recode_cameo}
-\title{Recode a data frame of CAMEO event codes to quad/penta/bilatr classes}
+\title{Recode a data frame of CAMEO event codes to quad/penta/modified-root
+classes}
 \usage{
 recode_cameo(data, code_col = "EventCode")
 }
@@ -19,36 +20,27 @@ were already present).
 }
 \description{
 Joins \code{data} against the package's built-in \link{cameo_lookup} table to
-attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{PentaClass},
-\code{PentaClass_modified}, \code{EventRootCode2}, \code{EventRootCode2Name},
-\code{EventRootCode3}, \code{EventRootCode3Name}, \code{EventRootCode3RootCodes},
-\code{EventRootCode4}, \code{EventRootCode4Name}, \code{EventRootCode4RootCodes},
-\code{ERC16NZ}, \code{ERC16NZName}, \code{ERC16NZRootCodes}, \code{BilatrClass}, \code{BilatrClassName}, \code{BilatrClass2}, and
-\code{BilatrClass2Name} columns. \code{PentaClass_modified} folds low-intensity
-verbal cooperation (Goldstein score <= 1) into its own class, which
-can be useful as a near-neutral reference category. \code{EventRootCode2} /
-\code{EventRootCode2Name} (see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}} and
-\code{\link[=eventrootcode2_name]{eventrootcode2_name()}}) is a coarser regrouping of the CAMEO root
-codes; \code{EventRootCode3} / \code{EventRootCode3Name} /
-\code{EventRootCode3RootCodes} (see \code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}},
-\code{\link[=eventrootcode3_name]{eventrootcode3_name()}}, and \code{\link[=eventrootcode3_rootcodes]{eventrootcode3_rootcodes()}}) further
-refines \code{EventRootCode2} by relocating \code{016}/\code{018}/\code{019} and splitting
-its \code{"10"} and \code{"13"} groupings back out; \code{EventRootCode4} /
-\code{EventRootCode4Name} / \code{EventRootCode4RootCodes} (see
-\code{\link[=assign_eventrootcode4]{assign_eventrootcode4()}}, \code{\link[=eventrootcode4_name]{eventrootcode4_name()}}, and
-\code{\link[=eventrootcode4_rootcodes]{eventrootcode4_rootcodes()}}) further refines \code{EventRootCode3} by
-splitting \code{041} out of its consult-visit grouping and splitting the
-threaten/force-posture and assault/fight/mass-violence groupings back
-into their individual roots; \code{ERC16NZ} / \code{ERC16NZName} /
-\code{ERC16NZRootCodes} (see \code{\link[=assign_erc16nz]{assign_erc16nz()}}, \code{\link[=erc16nz_name]{erc16nz_name()}}, and
-\code{\link[=erc16nz_rootcodes]{erc16nz_rootcodes()}}) is \code{EventRootCode3} with its
-Investigate and Demand classes merged; \code{BilatrClass} / \code{BilatrClassName}
-(see \code{\link[=assign_bilatr_class]{assign_bilatr_class()}}) is the 11-level action scheme used as
-the model's default; \code{BilatrClass2} / \code{BilatrClass2Name} (see
-\code{\link[=assign_bilatr_class2]{assign_bilatr_class2()}}) is a 9-level coarsening that merges the two
-adjacent pairs of hostile levels.
+attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{QuadClassName},
+\code{QuadClassEventCodes}, \code{PentaClass}, \code{PentaClassName},
+\code{PentaClassEventCodes}, \code{PentaClass_modified}, \code{ModifiedRootCode},
+\code{ModifiedRootCodeName}, and \code{ModifiedRootCodeEventCodes} columns.
+\code{PentaClass_modified} folds low-intensity verbal cooperation
+(Goldstein score <= 1) into its own class, which can be useful as a
+near-neutral reference category. \code{ModifiedRootCode} /
+\code{ModifiedRootCodeName} / \code{ModifiedRootCodeEventCodes} (see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}, \code{\link[=modified_root_code_name]{modified_root_code_name()}}, and
+\code{\link[=modified_root_code_eventcodes]{modified_root_code_eventcodes()}}) is an 18-level regrouping of the
+CAMEO root codes (formerly named \code{ERC16NZ}).
 }
 \details{
+A handful of other classification schemes
+(\code{EventRootCode2}/\code{EventRootCode3}/\code{EventRootCode4}, \code{BilatrClass}/
+\code{BilatrClass2}) previously shipped in \link{cameo_lookup} have been retired
+from it; their \verb{assign_*()}/\verb{*_name()} functions are still available
+internally (see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}, \code{\link[=assign_bilatr_class]{assign_bilatr_class()}},
+etc.) for backward compatibility, but are no longer attached by this
+function.
+
 Any of these columns that already exist in \code{data} are left as they are
 (not overwritten, no \code{.x}/\code{.y} suffixing), with a warning naming them.
 }
