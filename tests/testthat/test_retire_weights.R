@@ -33,12 +33,23 @@ test_that("the 0.4.6 stable program is bit-identical to the pre-0.4.6 one at uni
   # period_weight/action_weight all being 1 must leave the target exactly
   # (not approximately) unchanged, since removing the elementwise
   # multiplies is IEEE-754-exact at unit weights. Compiles a pre-0.4.6
-  # copy of the retired-weighting stable program (git blob ff3e7e1, the
-  # commit immediately before this task) standalone -- NOT via
+  # copy of the retired-weighting stable program (originally git blob
+  # ff3e7e1, the commit immediately before this task; 0.7.1 checked that
+  # historical file in as a fixture instead of shelling out to `git show`
+  # at test time -- the latter fails hermetically under `R CMD check`,
+  # which runs from a temp copy with no `.git` directory, and the
+  # resulting empty `old_stan_src` compiled an "empty model" that then
+  # failed with a confusing, unrelated error) standalone -- NOT via
   # .compile_stan_model(), which always reads the package's live,
   # already-changed inst/stan/ -- and fits it alongside the current one
   # with identical data, a fixed (non-random) init, seed, and adaptation.
-  old_stan_src <- system2("git", c("show", "ff3e7e1:inst/stan/bilatr_alphanorm.stan"), stdout = TRUE)
+  # Copied to a tempfile before compiling, not compiled in place: cmdstanr
+  # writes the compiled executable alongside its source .stan file by
+  # default, which would otherwise leave a stray binary inside
+  # tests/testthat/fixtures/ on every run of this test (caught by
+  # R CMD check's "checking for executable files" -- the same class of
+  # issue this fixture itself was added to fix, just one directory over).
+  old_stan_src <- readLines(testthat::test_path("fixtures", "bilatr_alphanorm_pre_0.4.6.stan"))
   old_stan_file <- tempfile(fileext = ".stan")
   writeLines(old_stan_src, old_stan_file)
 

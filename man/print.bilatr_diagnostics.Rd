@@ -4,13 +4,17 @@
 \alias{print.bilatr_diagnostics}
 \title{Print a \code{bilatr_diagnostics} object}
 \usage{
-\method{print}{bilatr_diagnostics}(x, n_tier2 = 20, ...)
+\method{print}{bilatr_diagnostics}(x, n_tier2 = 20, n_gamma = 10, ...)
 }
 \arguments{
 \item{x}{A \code{bilatr_diagnostics} object, as returned by
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
 \item{n_tier2}{Maximum number of Tier 2 rows to print.}
+
+\item{n_gamma}{(0.7.1) Maximum number of \code{gamma} rows to print, PER
+ranking (worst by \code{rhat}, worst by \code{ess_bulk} -- so up to \code{2 * n_gamma} rows total, fewer if the two rankings overlap or there are
+fewer flagged elements than that).}
 
 \item{...}{Ignored; present for S3 consistency.}
 }
@@ -19,10 +23,15 @@
 }
 \description{
 Tier 1 (global/shared parameters) is always printed in full, since it
-should never be silently summarized away. Tier 2 (per-dyad
-hierarchical parameters) is printed as a compact table sorted with
-dyads flagged as "worse than expected for their sparsity" first. Tier
-3 (per-dyad-period latent states) is expected to be noisy for sparse
-dyads, so it is reported only as aggregate one-line statistics rather
-than flooding the console with per-dyad-period rows.
+should never be silently summarized away. \code{stable_gamma}'s \code{gamma}
+(0.7.1) gets its own section instead of being part of that full-print
+promise -- at production scale it is thousands of parameters, and a
+routine number will flag as a matter of course, so only the worst few
+by Rhat and by ESS are shown (silently absent for a model without
+\code{gamma}; see \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{stan_model} argument). Tier 2
+(per-dyad hierarchical parameters) is printed as a compact table
+sorted with dyads flagged as "worse than expected for their sparsity"
+first. Tier 3 (per-dyad-period latent states) is expected to be noisy
+for sparse dyads, so it is reported only as aggregate one-line
+statistics rather than flooding the console with per-dyad-period rows.
 }

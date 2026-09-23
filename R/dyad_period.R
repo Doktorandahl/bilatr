@@ -37,7 +37,15 @@ validate_reference_class <- function(value, classes, arg_name) {
 #' @return Character vector of unique classes in anchor order.
 #' @keywords internal
 order_event_classes <- function(classes, reference_category = NULL) {
-  classes <- stringr::str_sort(unique(as.character(classes)), numeric = TRUE)
+  # locale = "C" (0.7.1): str_sort()'s default locale is the system's
+  # ("en" here), which is locale-COLLATION-dependent -- and this ordering
+  # *defines* what alpha/mu_intercept/gamma's action-index columns mean
+  # (the same class of concern as assemble_stan_data()'s country index;
+  # see R/stan_data.R). "C" gives byte/ASCII-order collation, so a
+  # stan_data.rds re-derived on a machine with a different locale can't
+  # silently relabel action classes; `numeric = TRUE` still gives the
+  # intended natural/numeric-aware ordering ("2" before "10") under "C".
+  classes <- stringr::str_sort(unique(as.character(classes)), numeric = TRUE, locale = "C")
   middle <- setdiff(classes, reference_category)
   c(reference_category, middle)
 }
@@ -65,6 +73,16 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #'   see [order_event_classes()]). If `NULL` or not present in the data,
 #'   ignored with a warning. All other action classes' discrimination is
 #'   freely estimated.
+#' @param years Integer vector of years, or `NULL` (default). Used
+#'   **only** for the `w_send` computation described below -- restricts
+#'   the event rows pooled into `w_send` to `year %in% years`, matching
+#'   the analysis window [assemble_stan_data()] restricts `Y`'s counts to
+#'   (via [fill_dyad_period_skeleton()]'s right join, downstream). The
+#'   main dyad-period aggregation returned by this function is
+#'   unaffected -- it is still built from every row of `data`, exactly as
+#'   before; only `w_send` narrows. `NULL` pools every year in `data`,
+#'   preserving this function's behaviour for a direct caller that isn't
+#'   going through [assemble_stan_data()] (0.7.0's original behaviour).
 #' @return A data frame with columns `dyad`, `year` (and `month` if
 #'   `resolution = "monthly"`), one `EventClass_<value>` column per
 #'   observed class (ordered per `reference_category`), and `total_events`.
@@ -74,15 +92,20 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #'   dyad, `ctry_a_code`/`ctry_b_code` (side A/B's 3-letter country code,
 #'   `str_sub(dyad, 1, 3)`/`str_sub(dyad, 5, 7)`, the same convention
 #'   [make_dyad_ids()] uses for its own `dyad2`) and `w_send` (the share
-#'   of that pair's events, POOLED over every period in `data` -- not
-#'   per dyad-period, since the country offset this feeds is dyad-
-#'   constant and reused across `t`; a per-period weight would cost an
-#'   `A x D x T` object in [assemble_stan_data()]'s output for nothing --
-#'   with side A as `Actor1CountryCode`). For directed data this is
-#'   exactly `1` by construction (side A IS `Actor1CountryCode` in the
-#'   directed dyad key), asserted internally below as a free check on the
-#'   dyad-key convention (it would silently invert if a future change
-#'   swapped the `paste()` argument order building `dyad` above).
+#'   of that pair's events, POOLED over `years` if supplied (else every
+#'   period in `data`) -- not per dyad-period, since the country offset
+#'   this feeds is dyad-constant and reused across `t`; a per-period
+#'   weight would cost an `A x D x T` object in [assemble_stan_data()]'s
+#'   output for nothing -- with side A as `Actor1CountryCode`). For
+#'   directed data this is exactly `1` by construction (side A IS
+#'   `Actor1CountryCode` in the directed dyad key), asserted internally
+#'   below as a free check on the dyad-key convention (it would silently
+#'   invert if a future change swapped the `paste()` argument order
+#'   building `dyad` above). A row with `NA` `Actor1CountryCode` is
+#'   dropped from this computation (with a `warning()` naming how many)
+#'   rather than propagating `NA` into `w_send` -- an `NA` reaching
+#'   `stan_data$w_send` would otherwise surface as an opaque CmdStan data
+#'   error much later.
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -100,7 +123,8 @@ grouped_events_to_dyad_period <- function(
   resolution = c("monthly", "yearly"),
   grouping_var,
   directed = TRUE,
-  reference_category = NULL
+  reference_category = NULL,
+  years = NULL
 ) {
   resolution <- match.arg(resolution)
 
@@ -143,20 +167,47 @@ grouped_events_to_dyad_period <- function(
     dplyr::left_join(totals, by = group_cols) %>%
     dplyr::select(dplyr::any_of(column_order))
 
-  # w_send (0.7.0; see @return): per-dyad sender share, pooled over every
-  # period in `data` (not per dyad-period -- see @return for why),
-  # computed from the raw event rows rather than from `result`'s
-  # per-period counts, since it needs Actor1CountryCode per event, not
-  # per action class. Side A is str_sub(dyad, 1, 3), matching
-  # make_dyad_ids()'s own convention for dyad2 -- both assume 3-letter
-  # country codes joined by a single "_", the same assumption `dyad`
-  # itself already relies on above.
-  w_send <- data %>%
-    dplyr::mutate(
-      ctry_a_code = stringr::str_sub(dyad, 1, 3),
-      ctry_b_code = stringr::str_sub(dyad, 5, 7),
-      is_side_a_sender = Actor1CountryCode == ctry_a_code
-    ) %>%
+  # w_send (0.7.0; see @return): per-dyad sender share, pooled over
+  # `years` (0.7.1 -- previously every period in `data` regardless of the
+  # analysis window; see @param years) not per dyad-period, computed from
+  # the raw event rows rather than from `result`'s per-period counts,
+  # since it needs Actor1CountryCode per event, not per action class.
+  # Side A is str_sub(dyad, 1, 3), matching make_dyad_ids()'s own
+  # convention for dyad2 -- both assume 3-letter country codes joined by
+  # a single "_", the same assumption `dyad` itself already relies on
+  # above.
+  w_send_data <- if (is.null(years)) data else dplyr::filter(data, year %in% years)
+
+  w_send_data <- dplyr::mutate(
+    w_send_data,
+    ctry_a_code = stringr::str_sub(dyad, 1, 3),
+    ctry_b_code = stringr::str_sub(dyad, 5, 7),
+    is_side_a_sender = Actor1CountryCode == ctry_a_code
+  )
+
+  # NA Actor1CountryCode -> NA is_side_a_sender (comparing NA to anything
+  # is NA in R, regardless of what paste() upstream turned a missing
+  # actor into inside `dyad` itself) -> mean() would silently return NA
+  # for that whole dyad, surfacing as an opaque CmdStan data error only
+  # once `w_send` reaches stan_data (see @return). Dropped here instead,
+  # with a warning naming how many rows/dyads were affected. If an
+  # affected dyad has EVERY row dropped this way, it disappears from the
+  # w_send tibble entirely -- assemble_stan_data()'s own guard (see
+  # R/stan_data.R, 0.7.1's country_info NA check) then stop()s naming
+  # that dyad, rather than silently shipping an NA into ctry_a/w_send.
+  na_rows <- is.na(w_send_data$is_side_a_sender)
+  if (any(na_rows)) {
+    n_dyads_affected <- length(unique(w_send_data$dyad[na_rows]))
+    warning(
+      sum(na_rows), " event row(s) (across ", n_dyads_affected,
+      " dyad(s)) had NA Actor1CountryCode and were dropped from the ",
+      "w_send computation.",
+      call. = FALSE
+    )
+    w_send_data <- w_send_data[!na_rows, , drop = FALSE]
+  }
+
+  w_send <- w_send_data %>%
     dplyr::group_by(dyad) %>%
     dplyr::summarise(
       ctry_a_code = dplyr::first(ctry_a_code),

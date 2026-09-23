@@ -15,7 +15,8 @@ diagnose_convergence(
   parallel = FALSE,
   n_workers = parallelly::availableCores(),
   scratch_dir = NULL,
-  read_seconds = NULL
+  read_seconds = NULL,
+  stan_model = .BILATR_DEFAULT_MODEL
 )
 }
 \arguments{
@@ -149,13 +150,29 @@ supplied, an extra \code{message()} names a \code{n_workers} level that would
 give both lower estimated wall time and lower estimated
 core-seconds than your current \code{n_workers}, if the small grid
 checked (\code{n_workers} itself, \code{1}, half, and double) finds one.}
+
+\item{stan_model}{(0.7.1) Name registered in \code{.bilatr_stan_models}, or
+a recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used
+only to decide whether \code{gamma} (the experimental \code{stable_gamma}
+variant's country-level offset) gets its own report element instead
+of flooding Tier 1 -- see \verb{@return}'s \code{gamma} element. Rhat/ESS
+themselves need no orientation info regardless of \code{stan_model}.}
 }
 \value{
 A list of class \code{bilatr_diagnostics} with elements:
 \describe{
 \item{tier1}{Tibble of global/shared diagnostics, one row per
 monitored quantity, with a \code{flagged} column; \code{NULL} if \code{1} was
-not in \code{tiers}.}
+not in \code{tiers}. Excludes \code{gamma} when \code{stan_model} has one (see
+\code{gamma} below) -- \code{n_tier1_flagged}/\code{n_tier1_total} in \code{summary}
+count only this table, same meaning as pre-0.7.1.}
+\item{gamma}{(0.7.1) Tibble of \code{stable_gamma}'s country-level
+offset diagnostics -- \code{variable}, \code{action_index},
+\code{country_index}, \code{rhat}, \code{ess_bulk}, \code{ess_tail}, \code{flagged}; one
+row per \code{gamma[k,c]} element. \code{NULL} whenever \code{1} was not in
+\code{tiers} or \code{stan_model} has no \code{gamma} (silently absent, not an
+empty tibble) -- see \code{.bilatr_model_has_gamma()}. \code{summary}'s
+\code{n_gamma_flagged}/\code{n_gamma_total} count this table.}
 \item{tier2}{Tibble with one row per dyad found in \code{n_dt} (or in
 the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 and a \code{worse_than_expected} column; \code{NULL} if \code{2} was not in

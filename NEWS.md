@@ -1,3 +1,80 @@
+# bilatr 0.7.1
+
+Six fixes from a review pass on 0.7.0's `stable_gamma` (see
+`dev/claude_code_prompt_0.7.1_gamma_fixes.md`).
+
+## Performance
+
+* `stable_gamma`'s likelihood (`partial_log_lik_offset()`) now folds the
+  per-dyad country offset `g_d` into the intercept ONCE PER DYAD
+  (`mu_eff = mu_intercept + g_d`), rather than subtracting it a second
+  time inside the per-observed-cell `eta` expression. The per-cell body
+  is now the same shape, and the same autodiff cost, as `stable`'s own
+  likelihood -- the added work is `A` new vars per dyad, not per
+  dyad-period. Measured on a toy fixture (direct `$grad_log_prob()`
+  timing, since CmdStan's own printed "Gradient evaluation took"
+  estimate wasn't reliably observable through this environment's
+  progress display): `stable_gamma`'s per-gradient overhead over
+  `stable` dropped from +15.2% to +9.3-10.3%; the improvement should be
+  larger at production scale, where more periods per dyad amortize the
+  now-per-dyad (not per-cell) cost of building `mu_eff`. Also applied
+  to the `compute_log_lik` generated quantity and the forward filter,
+  where it is cosmetic (no autodiff there) but keeps all four sites
+  reading the same way. **Not bit-identical** to 0.7.0 output at
+  `n_countries > 1` (floating-point re-association), but bit-identical
+  at `n_countries = 1`, where `gamma` is identically zero -- no stored
+  0.7.0 result depended on the old association, and no test needed a
+  tolerance change.
+
+## Bug fixes
+
+* `grouped_events_to_dyad_period()`'s `w_send` (consumed by
+  `stable_gamma`) previously pooled every event row in `data`, even
+  years outside the analysis window `assemble_stan_data(years = )`
+  restricts `Y`'s counts to. It now takes a `years` argument (passed
+  through by `assemble_stan_data()`) and pools only the in-window rows.
+  **Production runs to date are unaffected**: `start_year` has always
+  matched the data's own first year, so there were no out-of-window
+  rows to wrongly include -- this is a latent bug being closed before
+  it could silently change a result, not a correction to any existing
+  output.
+* A row with `NA` `Actor1CountryCode` no longer silently propagates
+  `NA` into `w_send` (which would otherwise surface only as an opaque
+  CmdStan data error much later); such rows are dropped from the
+  `w_send` computation with a `warning()` naming how many.
+* `diagnose_convergence()`/`diagnose_and_extract_bilatr()`: `gamma` no
+  longer floods the Tier 1 diagnostics report. It is still classified
+  Tier 1 (correct, and unchanged -- this is what keeps it out of the
+  expensive Tier 3 per-dyad-period sweep), but for *reporting* it now
+  gets its own section (worst elements by `rhat` and by `ess_bulk`,
+  with their country), leaving Tier 1 as the short list of true
+  global/shared parameters it was designed to be.
+  `n_tier1_flagged`/`n_tier1_total` keep their pre-0.7.1 meaning
+  (excluding `gamma`); new `n_gamma_flagged`/`n_gamma_total` cover the
+  new section. `diagnose_convergence()` gains a `stan_model` argument
+  (used only to decide whether a `gamma` section applies). Silently
+  absent for models without `gamma`.
+* `assemble_stan_data()` now `stop()`s naming the offending dyad(s) if
+  any retained dyad has no matching `w_send` entry, instead of silently
+  shipping `NA` into `ctry_a`/`w_send` (not believed reachable given
+  the current call order, but the failure mode was opaque).
+* `assemble_stan_data()`'s country index and `order_event_classes()`'s
+  action-class index (both index-DEFINING orderings -- they decide what
+  `gamma`'s and `alpha`/`mu_intercept`'s columns mean) now sort with
+  `method = "radix"` / `locale = "C"` instead of the system's default
+  (locale-dependent) collation, so a `stan_data.rds` re-derived on a
+  machine with a different locale can't silently relabel countries or
+  action classes.
+
+## Internal
+
+* `tests/testthat/test_retire_weights.R`'s pre-0.4.6 bit-identity test
+  no longer shells out to `git show` (which fails hermetically under
+  `R CMD check`, whose temp build copy has no `.git`, previously
+  causing that test to compile an empty `.stan` file and fail with an
+  unrelated error there): the historical file is now a checked-in
+  fixture (`tests/testthat/fixtures/bilatr_alphanorm_pre_0.4.6.stan`).
+
 # bilatr 0.7.0
 
 ## New features

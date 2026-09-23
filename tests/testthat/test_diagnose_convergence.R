@@ -217,7 +217,11 @@ test_that("diagnose_convergence() Tier 3 is aggregated per dyad, not per dyad-pe
 test_that("diagnose_convergence() returns a bilatr_diagnostics object", {
   diag <- diagnose_convergence(make_fake_draws(), n_dt = make_fake_n_dt())
   expect_s3_class(diag, "bilatr_diagnostics")
-  expect_named(diag, c("tier1", "tier2", "tier3", "summary"))
+  # 0.7.1: always carries a `gamma` element (NULL unless `stan_model` has
+  # one -- default .BILATR_DEFAULT_MODEL here does not; see
+  # .assemble_bilatr_diagnostics()/.bilatr_model_has_gamma()).
+  expect_named(diag, c("tier1", "gamma", "tier2", "tier3", "summary"))
+  expect_null(diag$gamma)
 })
 
 # --- tiers argument ------------------------------------------------------

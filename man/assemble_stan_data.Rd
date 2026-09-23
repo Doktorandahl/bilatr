@@ -28,7 +28,12 @@ assemble_stan_data(
 \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}} or \code{\link[=ingest_icews]{ingest_icews()}} and recoded via
 \code{\link[=recode_cameo]{recode_cameo()}}.}
 
-\item{years}{Integer vector of years to cover.}
+\item{years}{Integer vector of years to cover. Also passed to
+\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}} (0.7.1) to window its \code{w_send}
+computation (consumed only by the experimental \code{stable_gamma}
+variant) to the same analysis window \code{Y}'s counts are restricted to
+-- before 0.7.1, \code{w_send} pooled every year present in \code{data},
+including years outside \code{years} that the likelihood never sees.}
 
 \item{resolution}{Either \code{"monthly"} or \code{"yearly"}.}
 

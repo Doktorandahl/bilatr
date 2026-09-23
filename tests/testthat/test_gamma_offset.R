@@ -141,56 +141,57 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   }
   gamma_ref <- list(gamma_z = matrix(0, A, 1), sigma_gamma = rep(0.4, A))
 
-  # (a) the likelihood + every shared prior is bit-identical between the
-  # two programs at n_countries = 1: holding gamma_z/sigma_gamma fixed,
-  # lp_gamma - lp_stable must be the SAME constant regardless of the
-  # shared parameters' own values -- if the two programs' treatment of
-  # theta/alpha/mu_intercept/phi/etc. diverged in any way (e.g. a bug in
-  # partial_log_lik_offset's g construction), this constant would move
-  # as those values move. This constant is NOT asserted to equal a
-  # hand-derived closed-form value: cmdstanr's log_prob() bridge folds in
-  # Stan's own sum_to_zero_vector/<lower=0> Jacobian bookkeeping, which
-  # is a private implementation detail this test does not reimplement --
-  # what matters, and what this checks, is that it doesn't move.
-  diffs <- vapply(c(11, 22, 33, 44), function(s) {
+  # 0.7.1: lp_gamma - lp_stable equals EXACTLY the gamma_z/sigma_gamma
+  # prior + Jacobian contribution, evaluated Stan's own way -- `~`
+  # distribution statements call the possibly-unnormalized _lupdf/
+  # _lupmf variant, dropping additive terms that don't depend on the
+  # sampled parameter: 0.5*log(2*pi) per gamma_z element (std_normal)
+  # and 0.5*log(2*pi) + log(0.3) per sigma_gamma element (normal(0, 0.3)
+  # -- 0.3 is the FIXED prior scale, not sigma_gamma's own value, so
+  # dropping it is legitimate; contrast the <lower=0> Jacobian below,
+  # which genuinely depends on sigma_gamma and is NOT dropped, since it
+  # isn't part of the `~` statement at all -- it's compiler-generated for
+  # the constrained-parameter transform). An earlier version of this
+  # test used the fully-normalized dnorm(..., log = TRUE) here and found
+  # an exactly reproducible, value-independent ~2.5 nat residual,
+  # speculatively attributed (in the 0.7.0 summary) to cmdstanr's
+  # sum_to_zero_vector Jacobian bookkeeping. That speculation was WRONG:
+  # the dropped-constants total at this fixture's A = 4,
+  # n_countries = 1 is 4*0.5*log(2*pi) + 4*(0.5*log(2*pi) + log(0.3)) =
+  # 2.535616, matching the observed residual (2.535617) to 6 significant
+  # figures -- confirmed by testing the hypothesis, not assuming it (see
+  # dev/summary_0.7.0_country_offsets_2026-09-23.md, "Found along the
+  # way", and dev/claude_code_prompt_0.7.1_gamma_fixes.md Part 4).
+  gamma_prior_contrib_lupdf <- function(gamma_z, sigma_gamma) {
+    gamma_z_kernel <- sum(-0.5 * as.vector(gamma_z)^2)
+    sigma_gamma_kernel <- sum(-0.5 * (sigma_gamma / 0.3)^2)
+    jacobian <- sum(log(sigma_gamma)) # <lower=0> transform; not dropped
+    gamma_z_kernel + sigma_gamma_kernel + jacobian
+  }
+
+  # Varying BOTH the shared parameters and gamma_z/sigma_gamma together
+  # tests invariance (the likelihood + shared priors are bit-identical
+  # between the two programs, since gamma is identically 0) and
+  # sensitivity (the gamma-specific contribution's dependence on
+  # gamma_z/sigma_gamma) simultaneously, via one absolute assertion each
+  # -- strictly stronger than checking either alone.
+  for (s in c(11, 22, 33, 44)) {
     shared <- make_shared_pars(s)
+    set.seed(s + 1000)
+    gz <- matrix(stats::rnorm(A), A, 1)
+    sg <- abs(stats::rnorm(A)) + 0.1
+
     up_s <- fit_stable$unconstrain_variables(variables = shared)
-    up_g <- fit_gamma$unconstrain_variables(variables = c(shared, gamma_ref))
-    fit_gamma$log_prob(up_g) - fit_stable$log_prob(up_s)
-  }, numeric(1))
-  expect_equal(diffs, rep(diffs[1], length(diffs)), tolerance = 1e-6)
+    up_g <- fit_gamma$unconstrain_variables(variables = c(shared, list(gamma_z = gz, sigma_gamma = sg)))
+    actual_diff <- fit_gamma$log_prob(up_g) - fit_stable$log_prob(up_s)
+    predicted_diff <- gamma_prior_contrib_lupdf(gz, sg)
+    expect_equal(actual_diff, predicted_diff, tolerance = 1e-6)
+  }
 
-  # (b) holding the shared parameters fixed, the SENSITIVITY of lp_gamma
-  # to gamma_z/sigma_gamma matches the closed-form prior + Jacobian
-  # contribution exactly: gamma_z ~ std_normal() (identity transform, no
-  # Jacobian) and sigma_gamma ~ normal(0, 0.3) (<lower=0>, Jacobian
-  # log(sigma_gamma)).
+  # gamma itself is exactly 0 in the ACTUAL compiled program's
+  # transformed parameters, for any gamma_z/sigma_gamma (not just the R
+  # reimplementation in the "gamma is identically 0" test above).
   shared_fixed <- make_shared_pars(99)
-  up_shared_fixed <- fit_stable$unconstrain_variables(variables = shared_fixed)
-  lp_shared_fixed <- fit_stable$log_prob(up_shared_fixed)
-
-  eval_gamma_extra <- function(gamma_z, sigma_gamma) {
-    up <- fit_gamma$unconstrain_variables(variables = c(shared_fixed, list(gamma_z = gamma_z, sigma_gamma = sigma_gamma)))
-    fit_gamma$log_prob(up) - lp_shared_fixed
-  }
-  gamma_prior_contrib <- function(gamma_z, sigma_gamma) {
-    sum(stats::dnorm(as.vector(gamma_z), 0, 1, log = TRUE)) +
-      sum(stats::dnorm(sigma_gamma, 0, 0.3, log = TRUE)) +
-      sum(log(sigma_gamma))
-  }
-
-  set.seed(7)
-  gz1 <- matrix(stats::rnorm(A), A, 1)
-  sg1 <- abs(stats::rnorm(A)) + 0.1
-  gz2 <- matrix(stats::rnorm(A), A, 1)
-  sg2 <- abs(stats::rnorm(A)) + 0.1
-
-  actual_delta <- eval_gamma_extra(gz1, sg1) - eval_gamma_extra(gz2, sg2)
-  predicted_delta <- gamma_prior_contrib(gz1, sg1) - gamma_prior_contrib(gz2, sg2)
-  expect_equal(actual_delta, predicted_delta, tolerance = 1e-6)
-
-  # (c) gamma itself is exactly 0 in the ACTUAL compiled program's
-  # transformed parameters (not just the R reimplementation above).
   up_ref <- fit_gamma$unconstrain_variables(variables = c(shared_fixed, gamma_ref))
   gamma_tp <- fit_gamma$constrain_variables(up_ref)$gamma
   expect_equal(as.vector(gamma_tp), rep(0, A))
@@ -469,4 +470,225 @@ test_that("check_compositional_residuals()'s implied_beta_rms is materially smal
 
   expect_lt(with_structure$gamma, with_structure$stable * 0.8)
   expect_gte(without_structure$gamma, without_structure$stable * 0.7)
+})
+
+test_that("w_send is pooled over the `years` window, not every year in `data` (0.7.1)", {
+  # RUS_USA's mix differs between the out-of-window years (1985-1986,
+  # entirely RUS-as-sender) and the in-window year (2018, entirely
+  # USA-as-sender): the unrestricted call must pool both eras, the
+  # years-restricted call must reflect only 2018.
+  events <- tibble::tibble(
+    Actor1CountryCode = c("RUS", "RUS", "RUS", "USA", "USA"),
+    Actor2CountryCode = c("USA", "USA", "USA", "RUS", "RUS"),
+    SQLDATE = c(19850101L, 19850601L, 19861231L, 20180101L, 20180601L),
+    PentaClass = c(0, 1, 0, 1, 0)
+  )
+
+  unrestricted <- grouped_events_to_dyad_period(
+    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
+  )
+  w_send_unrestricted <- attr(unrestricted, "w_send")
+  rus_usa_unrestricted <- dplyr::filter(w_send_unrestricted, dyad == "RUS_USA")
+  expect_equal(rus_usa_unrestricted$w_send, 3 / 5) # 3 of 5 events have RUS (side A) as Actor1
+
+  restricted <- grouped_events_to_dyad_period(
+    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE,
+    years = 2018
+  )
+  w_send_restricted <- attr(restricted, "w_send")
+  rus_usa_restricted <- dplyr::filter(w_send_restricted, dyad == "RUS_USA")
+  expect_equal(rus_usa_restricted$w_send, 0) # both 2018 events have USA (side B) as Actor1
+
+  expect_false(isTRUE(all.equal(rus_usa_unrestricted$w_send, rus_usa_restricted$w_send)))
+})
+
+test_that("assemble_stan_data() passes `years` through to window w_send", {
+  events <- make_fake_events(n = 800, years = 2010:2019)
+  events <- recode_cameo(events, code_col = "EventCode")
+
+  sd_full <- assemble_stan_data(
+    events, years = 2010:2019, resolution = "yearly", grouping_var = "PentaClass",
+    reference_category = 0, min_n_events = 1
+  )
+  sd_window <- assemble_stan_data(
+    events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
+    reference_category = 0, min_n_events = 1
+  )
+  # not asserting a specific relationship (both are legitimate w_send
+  # vectors for different windows) -- just that assemble_stan_data()'s
+  # own `years` reaches grouped_events_to_dyad_period() at all, i.e. the
+  # two windows are free to differ (the fixture's random event mix makes
+  # them differ with overwhelming probability; if they were IDENTICAL
+  # that would mean `years` never reached the w_send computation).
+  expect_true(sd_full$D > 0 && sd_window$D > 0)
+})
+
+test_that("a row with NA Actor1CountryCode is dropped from w_send with a warning, not propagated as NA", {
+  events <- tibble::tibble(
+    Actor1CountryCode = c("USA", NA, "USA"),
+    Actor2CountryCode = c("RUS", "RUS", "RUS"),
+    SQLDATE = 20180101L,
+    PentaClass = c(0, 1, 0)
+  )
+
+  expect_warning(
+    result <- grouped_events_to_dyad_period(
+      events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
+    ),
+    "NA Actor1CountryCode"
+  )
+  w_send <- attr(result, "w_send")
+  expect_false(anyNA(w_send$w_send))
+  # side A is pmin("USA","RUS") = "RUS"; both surviving (non-NA) rows have
+  # USA (side B) as Actor1, so w_send = 0, not NA
+  expect_equal(w_send$w_send, 0)
+})
+
+test_that(".compute_gamma_tier()/has_gamma keeps gamma out of Tier 1 (and sigma_gamma in it)", {
+  summ <- tibble::tibble(
+    variable = c("alpha[1]", "sigma_gamma[1]", "sigma_gamma[2]", "gamma[1,1]", "gamma[2,3]", "lp__"),
+    rhat = c(1.0, 1.0, 1.0, 1.5, 1.02, 1.0),
+    ess_bulk = c(1000, 1000, 1000, 50, 1000, 1000),
+    ess_tail = c(1000, 1000, 1000, 50, 1000, 1000),
+    tier = 1L
+  )
+
+  res_gamma <- .assemble_bilatr_diagnostics(
+    summ, NULL, 1L, 1.01, 400, has_gamma = TRUE, country_codes = c("USA", "RUS", "CHN")
+  )
+  expect_setequal(res_gamma$tier1$variable, c("alpha[1]", "sigma_gamma[1]", "sigma_gamma[2]", "lp__"))
+  expect_setequal(res_gamma$gamma$variable, c("gamma[1,1]", "gamma[2,3]"))
+  expect_identical(res_gamma$gamma$country_code[res_gamma$gamma$variable == "gamma[1,1]"], "USA")
+  expect_identical(res_gamma$gamma$country_code[res_gamma$gamma$variable == "gamma[2,3]"], "CHN")
+  expect_equal(res_gamma$summary$n_tier1_total, 4L)
+  expect_equal(res_gamma$summary$n_gamma_total, 2L)
+  expect_equal(res_gamma$summary$n_gamma_flagged, 2L)
+
+  res_no_gamma <- .assemble_bilatr_diagnostics(summ, NULL, 1L, 1.01, 400, has_gamma = FALSE)
+  expect_null(res_no_gamma$gamma)
+  expect_true(is.na(res_no_gamma$summary$n_gamma_total))
+  # has_gamma = FALSE leaves gamma[...]/sigma_gamma[...] all in tier1,
+  # matching pre-0.7.1 (undifferentiated) behaviour
+  expect_true(all(c("gamma[1,1]", "gamma[2,3]") %in% res_no_gamma$tier1$variable))
+})
+
+test_that("print.bilatr_diagnostics() renders a gamma section only when has_gamma, and it's absent for stable", {
+  summ <- tibble::tibble(
+    variable = c("alpha[1]", "gamma[1,1]"),
+    rhat = c(1.0, 1.0), ess_bulk = c(1000, 1000), ess_tail = c(1000, 1000), tier = 1L
+  )
+  res_gamma <- .assemble_bilatr_diagnostics(summ, NULL, 1L, 1.01, 400, has_gamma = TRUE)
+  expect_output(print(res_gamma), "gamma: country-level offsets")
+
+  res_stable <- .assemble_bilatr_diagnostics(summ, NULL, 1L, 1.01, 400, has_gamma = FALSE)
+  out <- capture.output(print(res_stable))
+  expect_false(any(grepl("gamma: country-level offsets", out)))
+})
+
+test_that("diagnose_and_extract_bilatr()'s gamma table has country_code for stable_gamma and is absent for stable", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  build_fixture <- function(stan_model) {
+    set.seed(11)
+    D <- 6
+    Tn <- 3
+    A <- 3
+    Y <- array(sample(0:4, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+    is_obs <- matrix(1L, D, Tn)
+    data_list <- list(
+      T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
+      compute_log_lik = 0, prior_only = 0, compute_theta_filtered = 0,
+      n_filter_dyads = 0, filter_dyads = integer(0)
+    )
+    if (stan_model == "stable_gamma") {
+      data_list <- utils::modifyList(data_list, list(
+        n_countries = 2L, ctry_a = rep(c(1L, 2L), length.out = D),
+        ctry_b = rep(c(2L, 1L), length.out = D), w_send = rep(1, D)
+      ))
+    }
+    mod <- .compile_stan_model(stan_model, opt_level = 1)
+    outdir <- tempfile()
+    dir.create(outdir)
+    fit <- suppressWarnings(mod$sample(
+      data = data_list, chains = 2, parallel_chains = 2, threads_per_chain = 1,
+      iter_warmup = 15, iter_sampling = 15, seed = 1, refresh = 0,
+      output_dir = outdir, show_messages = FALSE
+    ))
+    stan_data <- data_list
+    attr(stan_data, "dyad_ids") <- tibble::tibble(
+      dyad_id = rep(seq_len(D), each = Tn), time_index = rep(seq_len(Tn), D),
+      dyad = paste0("dyad", rep(seq_len(D), each = Tn)), dyad2 = paste0("dyad", rep(seq_len(D), each = Tn))
+    )
+    attr(stan_data, "event_classes") <- as.character(seq_len(A))
+    if (stan_model == "stable_gamma") attr(stan_data, "country_codes") <- c("USA", "RUS")
+    list(csv_files = fit$output_files(), stan_data = stan_data, n_dt = tibble::tibble(dyad_id = seq_len(D), n_dt = apply(Y, 1, sum)))
+  }
+
+  fx_gamma <- build_fixture("stable_gamma")
+  res_gamma <- diagnose_and_extract_bilatr(
+    fx_gamma$csv_files, fx_gamma$stan_data, n_dt = fx_gamma$n_dt,
+    stan_model = "stable_gamma", tiers = 1
+  )
+  expect_false(is.null(res_gamma$diagnostics$gamma))
+  expect_true("country_code" %in% names(res_gamma$diagnostics$gamma))
+  expect_setequal(res_gamma$diagnostics$gamma$country_code, c("USA", "RUS"))
+  expect_false(any(grepl("^gamma\\[", res_gamma$diagnostics$tier1$variable)))
+
+  fx_stable <- build_fixture("stable")
+  res_stable <- diagnose_and_extract_bilatr(
+    fx_stable$csv_files, fx_stable$stan_data, n_dt = fx_stable$n_dt,
+    stan_model = "stable", tiers = 1
+  )
+  expect_null(res_stable$diagnostics$gamma)
+})
+
+test_that("assemble_stan_data() stop()s naming a retained dyad with no matching w_send entry (0.7.1 guard)", {
+  events <- make_fake_events(n = 400)
+  events <- recode_cameo(events, code_col = "EventCode")
+
+  # Precompute the REAL result, then sabotage its w_send attribute
+  # (drop one dyad's row) and have the mock return that fixed, captured
+  # value regardless of how assemble_stan_data() calls it below -- NOT a
+  # mock that calls back into grouped_events_to_dyad_period() itself,
+  # which would recurse into the mock. Exercises assemble_stan_data()'s
+  # own defensive match()-then-check, independent of how such a mismatch
+  # could arise in practice.
+  real_result <- grouped_events_to_dyad_period(
+    events, resolution = "yearly", grouping_var = "PentaClass",
+    directed = TRUE, reference_category = 0, years = 2015:2019
+  )
+  w_send <- attr(real_result, "w_send")
+  attr(real_result, "w_send") <- w_send[-1, , drop = FALSE]
+
+  testthat::local_mocked_bindings(
+    grouped_events_to_dyad_period = function(...) real_result,
+    .package = "bilatr"
+  )
+
+  expect_error(
+    assemble_stan_data(
+      events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
+      reference_category = 0, min_n_events = 1
+    ),
+    "no matching entry"
+  )
+})
+
+test_that("order_event_classes() is unaffected by the system locale (0.7.1, locale = \"C\")", {
+  classes <- c("10", "2", "1", "18", "5")
+  baseline <- order_event_classes(classes)
+
+  old_locale <- tryCatch(Sys.getlocale("LC_COLLATE"), error = function(e) NA_character_)
+  changed <- tryCatch(
+    suppressWarnings(Sys.setlocale("LC_COLLATE", "C")) != "",
+    error = function(e) FALSE
+  )
+  skip_if_not(changed, "could not set an alternate LC_COLLATE locale on this platform")
+  on.exit(suppressWarnings(Sys.setlocale("LC_COLLATE", old_locale)), add = TRUE)
+
+  under_c_locale <- order_event_classes(classes)
+  expect_identical(baseline, under_c_locale)
+  expect_identical(baseline, c("1", "2", "5", "10", "18"))
 })

@@ -22,8 +22,14 @@
 // COUNTRY-level offset is identifiable: a country appears in dozens to
 // hundreds of dyads.
 //
-// LINEAR PREDICTOR: eta_dt = alpha * theta_dt - mu_intercept - g_d, where
-// g_d is built from the SAME gamma in both directed and undirected data:
+// LINEAR PREDICTOR: eta_dt = alpha * theta_dt - mu_eff_d, where
+// mu_eff_d = mu_intercept + g_d folds the country offset into the
+// intercept ONCE PER DYAD (0.7.1; every call site forms this once,
+// outside its own per-period loop -- see partial_log_lik_offset() in
+// inst/stan/include/partial_log_lik.stanfunctions for why: g_d is
+// dyad-constant, so subtracting it a second time inside the per-cell eta
+// expression cost extra autodiff nodes for nothing). g_d is built from
+// the SAME gamma in both directed and undirected data:
 //   - directed, d = (i -> j): g_d = gamma_i (the sender generates the
 //     events, so its repertoire applies)
 //   - undirected, d = {i, j}: g_d = w_send_d * gamma_i + (1 - w_send_d) *
@@ -37,6 +43,19 @@
 // nest: as sigma_gamma -> 0, both this program and `stable` coincide
 // (see tests/testthat/test_gamma_offset.R's exact-nesting test at
 // n_countries = 1).
+//
+// BIT-IDENTITY (0.7.1). mu_eff_d = mu_intercept + g_d is mathematically
+// identical to but NOT bit-identical with 0.7.0's `mu_intercept - (-g_d)`
+// -- `(x - mu) - g` and `x - (mu + g)` associate floating-point addition
+// differently. The one case where this doesn't matter: at
+// n_countries = 1, gamma is identically zero (the row-centring step
+// alone forces it, regardless of gamma_z/sigma_gamma), so
+// mu_intercept + 0 is exact in IEEE 754 and 0.7.0 fits made at
+// n_countries = 1 remain bit-comparable. This is also why the
+// exact-nesting test (n_countries = 1, comparing against `stable`) stays
+// valid evidence for the shared-gamma design after this change: it
+// exercises the g_d = 0 case, where there is nothing for the
+// re-association to change.
 //
 // IDENTIFICATION: GAMMA CONSTRAINTS. Three constraints on gamma, enforced
 // by construction in transformed parameters below, in this order (the
@@ -153,6 +172,21 @@ functions {
   // any other value mixes ctry_a's and ctry_b's columns by event share (see
   // bilatr_alphanorm_gamma.stan's header for the directed/undirected
   // design this implements).
+  //
+  // 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
+  // mu_intercept + g_d), not subtracted a second time inside the `t`
+  // loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
+  // every observed cell was A extra autodiff nodes per cell for nothing
+  // (~3-8% more nodes in eta's part of the graph at production scale, all
+  // avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
+  // ...`) is now the same shape, and the same autodiff cost, as
+  // partial_log_lik()'s -- the only added work is A new vars per dyad, not
+  // per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
+  // pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
+  // differ in floating-point association) -- but bit-identical at
+  // n_countries = 1, where gamma is identically zero and mu_intercept + 0
+  // is exact in IEEE 754, which is why the exact-nesting test stays valid
+  // evidence for the shared-gamma design after this change.
   real partial_log_lik_offset(array[] int slice_d,
                                int start, int end,
                                int T, int A,
@@ -168,13 +202,15 @@ functions {
                                vector w_send) {
     real lp = 0;
     for (d in start:end) {
-      // once per dyad, not per dyad-period
-      vector[A] g = w_send[d] == 1.0
-                    ? gamma[, ctry_a[d]]
-                    : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]];
+      // fold the country offset into the intercept ONCE PER DYAD: the
+      // per-cell expression below is then character-for-character the
+      // same shape, and the same autodiff cost, as partial_log_lik()'s.
+      vector[A] mu_eff = mu_intercept + (w_send[d] == 1.0
+                         ? gamma[, ctry_a[d]]
+                         : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]]);
       for (t in 1:T) {
         if (is_obs[d, t] == 1) {
-          vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept - g;
+          vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_eff;
           vector[A] p = softmax(eta);
           vector[A] conc = phi[d] * p;
           lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
@@ -207,19 +243,23 @@ functions {
 
   // Offset-aware per-dyad-period log-likelihood, not reduced/summed --
   // used only by the compute_log_lik generated quantities block below.
-  // Must stay numerically identical to the per-cell term inside
-  // partial_log_lik_offset() above (same eta/softmax/conc/
-  // dirichlet_multinomial_lpmf, now with g_d precomputed by the caller
-  // once per dyad -- see country_offset() above). Duplicated rather than
-  // shared via the GENERATED mechanism for the same reason
-  // dyad_period_log_lik() is in bilatr_alphanorm.stan: GQ-only, small.
+  // 0.7.1: takes `mu_intercept` already folded with g_d (the caller
+  // forms `mu_eff = mu_intercept + country_offset(...)` once per dyad,
+  // outside its own t loop -- see country_offset() above and
+  // partial_log_lik_offset()'s header comment for why), so this
+  // function's own body is now byte-identical to
+  // bilatr_alphanorm.stan's dyad_period_log_lik() -- only the name
+  // differs, kept distinct for discoverability at each call site.
+  // Duplicated rather than shared via the GENERATED mechanism for the
+  // same reason dyad_period_log_lik() is in bilatr_alphanorm.stan:
+  // GQ-only, small.
   real dyad_period_log_lik_offset(int obs_dt, array[] int y_dt, real theta_dt,
                                    int A, vector mu_intercept, real phi_d,
-                                   vector alpha, vector g_d) {
+                                   vector alpha) {
     if (obs_dt == 0) {
       return 0;
     }
-    vector[A] eta = alpha .* rep_vector(theta_dt, A) - mu_intercept - g_d;
+    vector[A] eta = alpha .* rep_vector(theta_dt, A) - mu_intercept;
     vector[A] p = softmax(eta);
     vector[A] conc = phi_d * p;
     return dirichlet_multinomial_lpmf(y_dt | conc);
@@ -403,10 +443,15 @@ generated quantities {
 
   if (compute_log_lik) {
     for (d in 1:D) {
-      vector[A] g_d = country_offset(gamma, ctry_a[d], ctry_b[d], w_send[d]);
+      // 0.7.1: fold once per dyad, same as partial_log_lik_offset() --
+      // see that function's header comment. No autodiff here (generated
+      // quantities), so this is cosmetic, not a performance fix; done
+      // anyway so all four sites (the two likelihood functions, this
+      // block, and the forward filter below) read the same way.
+      vector[A] mu_eff = mu_intercept + country_offset(gamma, ctry_a[d], ctry_b[d], w_send[d]);
       for (t in 1:T) {
         log_lik[d, t] = dyad_period_log_lik_offset(
-          is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha, g_d
+          is_obs[d, t], Y[d, t], theta[d, t], A, mu_eff, phi[d], alpha
         );
       }
     }
@@ -417,12 +462,13 @@ generated quantities {
   // observations -- an approximation to p(theta_t | y_1:t), not the exact
   // marginal. See bilatr_alphanorm.stan's header for the full derivation
   // of the score/information; the offset changes exactly one thing here
-  // -- eta gains `- g_d` -- because d(eta_k)/d(theta) = alpha_k
-  // regardless of g_d (g_d does not depend on theta), so the score and
-  // information keep their form and are simply evaluated at
-  // p = softmax(alpha * m_pred - mu_intercept - g_d). g_d is computed
-  // once per filtered dyad, outside the t loop, same reasoning as
-  // partial_log_lik_offset()'s per-dyad g.
+  // -- eta uses mu_eff (mu_intercept folded with g_d) in place of
+  // mu_intercept -- because d(eta_k)/d(theta) = alpha_k regardless of
+  // g_d (g_d does not depend on theta), so the score and information
+  // keep their form and are simply evaluated at
+  // p = softmax(alpha * m_pred - mu_eff). mu_eff is computed once per
+  // filtered dyad, outside the t loop, same reasoning as
+  // partial_log_lik_offset()'s per-dyad fold.
   array[compute_theta_filtered ? n_filter_dyads : 0,
         compute_theta_filtered ? T : 0] real theta_filtered;
   array[compute_theta_filtered ? n_filter_dyads : 0,
@@ -431,14 +477,14 @@ generated quantities {
   if (compute_theta_filtered) {
     for (i in 1:n_filter_dyads) {
       int d = filter_dyads[i];
-      vector[A] g_d = country_offset(gamma, ctry_a[d], ctry_b[d], w_send[d]);
+      vector[A] mu_eff = mu_intercept + country_offset(gamma, ctry_a[d], ctry_b[d], w_send[d]);
       real m = 0;
       real p_var = square(sigma_theta0);
       for (t in 1:T) {
         real m_pred = m;
         real p_pred = p_var + square(process_noise[d]);
         if (is_obs[d, t] == 1) {
-          vector[A] eta = alpha .* rep_vector(m_pred, A) - mu_intercept - g_d;
+          vector[A] eta = alpha .* rep_vector(m_pred, A) - mu_eff;
           vector[A] p = softmax(eta);
           real a_bar = dot_product(p, alpha);
           int n = sum(Y[d, t]);

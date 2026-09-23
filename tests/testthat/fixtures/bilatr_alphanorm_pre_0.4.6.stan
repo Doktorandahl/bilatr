@@ -11,18 +11,6 @@
 // retired to inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan and
 // bilatr_ou_pre_0.4.0.stan respectively -- not this file.
 //
-// 0.4.6: the dyad_weight/period_weight/action_weight likelihood-weighting
-// data fields are retired from this file (and from partial_log_lik() /
-// dyad_period_log_lik() / assemble_stan_data()) -- never used in
-// production, and action_weight in particular made the Dirichlet-
-// multinomial concentration depend on theta, complicating the
-// hand-differentiated forward filter built on top of this likelihood.
-// At unit weights (the only weights ever used) this is an exact,
-// bit-identical no-op; see NEWS.md. The legacy stable_soft_anchor
-// program (inst/stan/legacy/bilatr_stable_soft_anchor.stan) still
-// declares and applies all three, unchanged, since it must keep
-// matching the fits that produced its output.
-//
 // 0.4.2: alpha_raw's sum_to_zero_vector[A] (with only a SOFT sign anchor
 // on alpha[1]) was briefly replaced with a hand-built construction whose
 // first element was positive BY DECLARATION (real<lower=0> alpha_raw_1).
@@ -271,81 +259,21 @@ functions {
                         array[,] real theta,
                         vector mu_intercept,
                         vector phi,
-                        vector alpha) {
+                        vector alpha,
+                        vector dyad_weight,
+                        vector period_weight,
+                        vector action_weight) {
     real lp = 0;
     for (d in start:end) {
       for (t in 1:T) {
         if (is_obs[d, t] == 1) {
           vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept;
           vector[A] p = softmax(eta);
-          vector[A] conc = phi[d] * p;
-          lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
-        }
-      }
-    }
-    return lp;
-  }
-
-  // Country-offset variant of partial_log_lik(), added alongside it (0.7.0,
-  // bilatr_alphanorm_gamma.stan / registered `stable_gamma`) -- not a fork,
-  // per this file's own header: partial_log_lik() itself is untouched, and
-  // every other registered program (stable, ou, and the legacy soft-anchor
-  // pair) gets this spliced in too via data-raw/sync_stan_functions.R, as
-  // an unused extra function, so their .stan text changes (one-time
-  // recompile) but their data/parameter blocks -- and hence fits already on
-  // disk -- are untouched.
-  //
-  // g_d, the per-dyad country offset, is built ONCE PER DYAD, outside the
-  // `t` loop -- not stored anywhere (see bilatr_alphanorm_gamma.stan's
-  // header, "Part 0b": a per-dyad-period or per-dyad matrix in transformed
-  // parameters would be written to the output CSV at prohibitive cost).
-  // w_send[d] == 1 covers directed data (g_d = gamma[, ctry_a[d]] exactly,
-  // ctry_b[d] unused) and the directed-as-degenerate-undirected case alike;
-  // any other value mixes ctry_a's and ctry_b's columns by event share (see
-  // bilatr_alphanorm_gamma.stan's header for the directed/undirected
-  // design this implements).
-  //
-  // 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
-  // mu_intercept + g_d), not subtracted a second time inside the `t`
-  // loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
-  // every observed cell was A extra autodiff nodes per cell for nothing
-  // (~3-8% more nodes in eta's part of the graph at production scale, all
-  // avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
-  // ...`) is now the same shape, and the same autodiff cost, as
-  // partial_log_lik()'s -- the only added work is A new vars per dyad, not
-  // per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
-  // pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
-  // differ in floating-point association) -- but bit-identical at
-  // n_countries = 1, where gamma is identically zero and mu_intercept + 0
-  // is exact in IEEE 754, which is why the exact-nesting test stays valid
-  // evidence for the shared-gamma design after this change.
-  real partial_log_lik_offset(array[] int slice_d,
-                               int start, int end,
-                               int T, int A,
-                               array[,] int is_obs,
-                               array[,,] int Y,
-                               array[,] real theta,
-                               vector mu_intercept,
-                               vector phi,
-                               vector alpha,
-                               matrix gamma,
-                               array[] int ctry_a,
-                               array[] int ctry_b,
-                               vector w_send) {
-    real lp = 0;
-    for (d in start:end) {
-      // fold the country offset into the intercept ONCE PER DYAD: the
-      // per-cell expression below is then character-for-character the
-      // same shape, and the same autodiff cost, as partial_log_lik()'s.
-      vector[A] mu_eff = mu_intercept + (w_send[d] == 1.0
-                         ? gamma[, ctry_a[d]]
-                         : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]]);
-      for (t in 1:T) {
-        if (is_obs[d, t] == 1) {
-          vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_eff;
-          vector[A] p = softmax(eta);
-          vector[A] conc = phi[d] * p;
-          lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
+          // action_weight rescales concentration per action type
+          vector[A] conc = phi[d] * (action_weight .* p);
+          // dyad_weight/period_weight scale each dyad-period's contribution
+          lp += dyad_weight[d] * period_weight[t] *
+            dirichlet_multinomial_lpmf(Y[d, t] | conc);
         }
       }
     }
@@ -363,14 +291,15 @@ functions {
   // three files is lower-risk than extending the sync tooling for it.
   real dyad_period_log_lik(int obs_dt, array[] int y_dt, real theta_dt,
                             int A, vector mu_intercept, real phi_d,
-                            vector alpha) {
+                            vector alpha, real dyad_weight_d,
+                            real period_weight_t, vector action_weight) {
     if (obs_dt == 0) {
       return 0;
     }
     vector[A] eta = alpha .* rep_vector(theta_dt, A) - mu_intercept;
     vector[A] p = softmax(eta);
-    vector[A] conc = phi_d * p;
-    return dirichlet_multinomial_lpmf(y_dt | conc);
+    vector[A] conc = phi_d * (action_weight .* p);
+    return dyad_weight_d * period_weight_t * dirichlet_multinomial_lpmf(y_dt | conc);
   }
 
   // +1/-1 orientation of a draw, from the reference class's sign. Applied
@@ -390,19 +319,12 @@ data {
   int<lower=1> C;                            // reduce_sum grainsize
   array[D, T] int<lower=0, upper=1> is_obs;  // observed indicator
   array[D, T, A] int<lower=0> Y;             // event counts
+  vector<lower=0>[D] dyad_weight;            // per-dyad reweighting, default 1s
+  vector<lower=0>[T] period_weight;          // per-period reweighting, default 1s
+  vector<lower=0>[A] action_weight;          // per-action-type reweighting, default 1s
   int<lower=0, upper=1> compute_log_lik;     // 1 = also compute per-dyad-period
                                               // log_lik in generated quantities
                                               // (D x T x draws; default 0/off)
-  int<lower=0, upper=1> prior_only;          // 1 = skip the likelihood entirely
-                                              // (fit the prior only; see
-                                              // alpha_prior_moments())
-  int<lower=0, upper=1> compute_theta_filtered; // 1 = also compute
-                                              // theta_filtered/theta_filtered_sd
-                                              // in generated quantities, for the
-                                              // dyads in filter_dyads
-  int<lower=0> n_filter_dyads;               // length of filter_dyads; 0 if
-                                              // compute_theta_filtered is 0
-  array[n_filter_dyads] int<lower=1, upper=D> filter_dyads; // which dyads to filter
 }
 parameters {
   // Latent states per dyad
@@ -479,14 +401,11 @@ model {
   // itself.
   alpha_raw ~ std_normal();
 
-  // likelihood, chunked via reduce_sum -- skipped entirely if prior_only,
-  // gating this exactly the way compute_log_lik gates its own generated
-  // quantity below
-  if (!prior_only) {
-    array[D] int dyad_seq = linspaced_int_array(D, 1, D);
-    target += reduce_sum(partial_log_lik, dyad_seq, C,
-                          T, A, is_obs, Y, theta, mu_intercept, phi, alpha);
-  }
+  // likelihood, chunked via reduce_sum
+  array[D] int dyad_seq = linspaced_int_array(D, 1, D);
+  target += reduce_sum(partial_log_lik, dyad_seq, C,
+                        T, A, is_obs, Y, theta, mu_intercept, phi, alpha,
+                        dyad_weight, period_weight, action_weight);
 }
 generated quantities {
   array[compute_log_lik ? D : 0, compute_log_lik ? T : 0] real log_lik;
@@ -495,61 +414,9 @@ generated quantities {
     for (d in 1:D) {
       for (t in 1:T) {
         log_lik[d, t] = dyad_period_log_lik(
-          is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha
+          is_obs[d, t], Y[d, t], theta[d, t], A, mu_intercept, phi[d], alpha,
+          dyad_weight[d], period_weight[t], action_weight
         );
-      }
-    }
-  }
-
-  // Forward-filtered theta: conditional on THIS draw's hyperparameters,
-  // a Fisher-scoring (West-Harrison linear-Bayes) filter over the
-  // observations -- an approximation to p(theta_t | y_1:t), not the exact
-  // marginal (the hyperparameters here were themselves fit on all T
-  // periods). No autodiff in generated quantities, so the score is
-  // hand-derived (see data-raw or dev notes for the derivation): with
-  // conc_0 = phi[d] constant in theta (true unconditionally since the
-  // weights were retired in 0.4.6), d/dtheta log P(y|conc) reduces to
-  // sum_k phi[d]*p_k*(alpha_k - a_bar) * (digamma(y_k + phi[d]*p_k) -
-  // digamma(phi[d]*p_k)); the Fisher information uses the standard DM
-  // overdispersion correction n*(1+phi)/(n+phi) applied to
-  // Var_pi(alpha) = dot_product(p, square(alpha - a_bar)) (see
-  // diagnose_category_merges()'s use of the same quantity). No
-  // orientation_sign() call anywhere here: alpha, mu_intercept,
-  // sigma_theta0, and process_noise are already-oriented quantities, and
-  // the initial state (0) is orientation-free, so the recursion's output
-  // is automatically on the same oriented scale as theta.
-  array[compute_theta_filtered ? n_filter_dyads : 0,
-        compute_theta_filtered ? T : 0] real theta_filtered;
-  array[compute_theta_filtered ? n_filter_dyads : 0,
-        compute_theta_filtered ? T : 0] real theta_filtered_sd;
-
-  if (compute_theta_filtered) {
-    for (i in 1:n_filter_dyads) {
-      int d = filter_dyads[i];
-      real m = 0;
-      real p_var = square(sigma_theta0);
-      for (t in 1:T) {
-        real m_pred = m;
-        real p_pred = p_var + square(process_noise[d]);
-        if (is_obs[d, t] == 1) {
-          vector[A] eta = alpha .* rep_vector(m_pred, A) - mu_intercept;
-          vector[A] p = softmax(eta);
-          real a_bar = dot_product(p, alpha);
-          int n = sum(Y[d, t]);
-          real info = n * (1 + phi[d]) / (n + phi[d]) * dot_product(p, square(alpha - a_bar));
-          real g = 0;
-          for (k in 1:A) {
-            real conc_k = phi[d] * p[k];
-            g += conc_k * (alpha[k] - a_bar) * (digamma(Y[d, t, k] + conc_k) - digamma(conc_k));
-          }
-          p_var = 1 / (1 / p_pred + info);
-          m = m_pred + p_var * g;
-        } else {
-          m = m_pred;
-          p_var = p_pred;
-        }
-        theta_filtered[i, t] = m;
-        theta_filtered_sd[i, t] = sqrt(p_var);
       }
     }
   }

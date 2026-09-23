@@ -207,6 +207,21 @@ functions {
   // any other value mixes ctry_a's and ctry_b's columns by event share (see
   // bilatr_alphanorm_gamma.stan's header for the directed/undirected
   // design this implements).
+  //
+  // 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
+  // mu_intercept + g_d), not subtracted a second time inside the `t`
+  // loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
+  // every observed cell was A extra autodiff nodes per cell for nothing
+  // (~3-8% more nodes in eta's part of the graph at production scale, all
+  // avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
+  // ...`) is now the same shape, and the same autodiff cost, as
+  // partial_log_lik()'s -- the only added work is A new vars per dyad, not
+  // per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
+  // pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
+  // differ in floating-point association) -- but bit-identical at
+  // n_countries = 1, where gamma is identically zero and mu_intercept + 0
+  // is exact in IEEE 754, which is why the exact-nesting test stays valid
+  // evidence for the shared-gamma design after this change.
   real partial_log_lik_offset(array[] int slice_d,
                                int start, int end,
                                int T, int A,
@@ -222,13 +237,15 @@ functions {
                                vector w_send) {
     real lp = 0;
     for (d in start:end) {
-      // once per dyad, not per dyad-period
-      vector[A] g = w_send[d] == 1.0
-                    ? gamma[, ctry_a[d]]
-                    : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]];
+      // fold the country offset into the intercept ONCE PER DYAD: the
+      // per-cell expression below is then character-for-character the
+      // same shape, and the same autodiff cost, as partial_log_lik()'s.
+      vector[A] mu_eff = mu_intercept + (w_send[d] == 1.0
+                         ? gamma[, ctry_a[d]]
+                         : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]]);
       for (t in 1:T) {
         if (is_obs[d, t] == 1) {
-          vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept - g;
+          vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_eff;
           vector[A] p = softmax(eta);
           vector[A] conc = phi[d] * p;
           lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);

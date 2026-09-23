@@ -9,7 +9,9 @@
   n_dt_tbl,
   tiers,
   rhat_threshold,
-  ess_threshold
+  ess_threshold,
+  has_gamma = FALSE,
+  country_codes = NULL
 )
 }
 \arguments{
@@ -23,6 +25,18 @@ excludes both 2 and 3.}
 \item{tiers}{Validated (via \link{.validate_tiers}) tiers to compute.}
 
 \item{rhat_threshold, ess_threshold}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
+
+\item{has_gamma}{(0.7.1) Whether the model being diagnosed has a
+\code{gamma} (country-level offset) parameter -- from
+\code{\link[=.bilatr_model_has_gamma]{.bilatr_model_has_gamma()}}, never inferred by checking \code{summ} for a
+\code{gamma} name. When \code{TRUE} and Tier 1 was requested, \code{gamma} is
+pulled out of \code{tier1} into its own \code{gamma} element (see
+\code{\link[=.compute_gamma_tier]{.compute_gamma_tier()}}); when \code{FALSE}, \code{gamma} is \code{NULL} and
+\verb{n_gamma_*} are \code{NA_integer_}, so a model without \code{gamma} gets no
+trace of the section at all.}
+
+\item{country_codes}{(0.7.1) Optional character vector for labelling
+\code{gamma}'s \code{country_index}; see \code{\link[=.compute_gamma_tier]{.compute_gamma_tier()}}.}
 }
 \value{
 A list of class \code{bilatr_diagnostics}; see

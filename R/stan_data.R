@@ -7,7 +7,12 @@
 #' @param data A data frame of event-level records, as produced by
 #'   [extract_all_relevant_gdelt()] or [ingest_icews()] and recoded via
 #'   [recode_cameo()].
-#' @param years Integer vector of years to cover.
+#' @param years Integer vector of years to cover. Also passed to
+#'   [grouped_events_to_dyad_period()] (0.7.1) to window its `w_send`
+#'   computation (consumed only by the experimental `stable_gamma`
+#'   variant) to the same analysis window `Y`'s counts are restricted to
+#'   -- before 0.7.1, `w_send` pooled every year present in `data`,
+#'   including years outside `years` that the likelihood never sees.
 #' @param resolution Either `"monthly"` or `"yearly"`.
 #' @param grouping_var Name of the event-class column to aggregate on
 #'   (e.g. `"QuadClass"`, `"PentaClass"`).
@@ -171,7 +176,8 @@ assemble_stan_data <- function(
     resolution = resolution,
     grouping_var = grouping_var,
     directed = directed,
-    reference_category = reference_category
+    reference_category = reference_category,
+    years = years
   )
   # Captured here, immediately, rather than relied on to survive the
   # dplyr pipeline below (fill_dyad_period_skeleton()'s right_join/
@@ -211,7 +217,36 @@ assemble_stan_data <- function(
   # [make_dyad_ids()] assigns below, so ctry_a/ctry_b/w_send end up
   # indexed 1:D the same way Y/is_obs/dyad_ids already are.
   country_info <- w_send_tbl[match(dyads, w_send_tbl$dyad), ]
-  countries_present <- sort(unique(c(country_info$ctry_a_code, country_info$ctry_b_code)))
+
+  # 0.7.1 guard: match() above yields an NA row for any retained dyad
+  # missing from w_send_tbl (e.g. every one of its w_send-window rows
+  # dropped -- see grouped_events_to_dyad_period()'s NA-Actor1CountryCode
+  # handling, R/dyad_period.R). Not expected given the current call
+  # order, but the failure mode otherwise is a silent NA in ctry_a/
+  # w_send that only surfaces as an opaque CmdStan data error.
+  missing_dyads <- dyads[is.na(country_info$dyad)]
+  if (length(missing_dyads) > 0) {
+    stop(
+      "assemble_stan_data(): ", length(missing_dyads), " retained dyad(s) ",
+      "have no matching entry in grouped_events_to_dyad_period()'s w_send ",
+      "attribute, so their ctry_a/ctry_b/w_send would be NA: ",
+      paste(utils::head(missing_dyads, 10), collapse = ", "),
+      if (length(missing_dyads) > 10) ", ..." else "",
+      call. = FALSE
+    )
+  }
+
+  # method = "radix" (0.7.1): base sort()'s default method is locale-
+  # collation-dependent for character input, and this ordering *defines*
+  # what gamma's columns mean -- a stan_data.rds re-derived on a machine
+  # with a different locale must not silently relabel countries. radix
+  # is C-locale/byte order, so this is deterministic across machines (see
+  # order_event_classes()'s locale = "C" str_sort() for the same
+  # treatment of the action-class index).
+  countries_present <- sort(
+    unique(c(country_info$ctry_a_code, country_info$ctry_b_code)),
+    method = "radix"
+  )
   n_countries <- length(countries_present)
   country_index <- stats::setNames(seq_len(n_countries), countries_present)
   ctry_a <- unname(country_index[country_info$ctry_a_code])

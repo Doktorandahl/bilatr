@@ -9,7 +9,8 @@ grouped_events_to_dyad_period(
   resolution = c("monthly", "yearly"),
   grouping_var,
   directed = TRUE,
-  reference_category = NULL
+  reference_category = NULL,
+  years = NULL
 )
 }
 \arguments{
@@ -32,6 +33,17 @@ action: \code{stable}/\code{ou} build \code{alpha[1]} positive by construction -
 see \code{\link[=order_event_classes]{order_event_classes()}}). If \code{NULL} or not present in the data,
 ignored with a warning. All other action classes' discrimination is
 freely estimated.}
+
+\item{years}{Integer vector of years, or \code{NULL} (default). Used
+\strong{only} for the \code{w_send} computation described below -- restricts
+the event rows pooled into \code{w_send} to \code{year \%in\% years}, matching
+the analysis window \code{\link[=assemble_stan_data]{assemble_stan_data()}} restricts \code{Y}'s counts to
+(via \code{\link[=fill_dyad_period_skeleton]{fill_dyad_period_skeleton()}}'s right join, downstream). The
+main dyad-period aggregation returned by this function is
+unaffected -- it is still built from every row of \code{data}, exactly as
+before; only \code{w_send} narrows. \code{NULL} pools every year in \code{data},
+preserving this function's behaviour for a direct caller that isn't
+going through \code{\link[=assemble_stan_data]{assemble_stan_data()}} (0.7.0's original behaviour).}
 }
 \value{
 A data frame with columns \code{dyad}, \code{year} (and \code{month} if
@@ -43,15 +55,20 @@ variant -- see \code{R/model_registry.R}): a tibble with one row per
 dyad, \code{ctry_a_code}/\code{ctry_b_code} (side A/B's 3-letter country code,
 \code{str_sub(dyad, 1, 3)}/\code{str_sub(dyad, 5, 7)}, the same convention
 \code{\link[=make_dyad_ids]{make_dyad_ids()}} uses for its own \code{dyad2}) and \code{w_send} (the share
-of that pair's events, POOLED over every period in \code{data} -- not
-per dyad-period, since the country offset this feeds is dyad-
-constant and reused across \code{t}; a per-period weight would cost an
-\verb{A x D x T} object in \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s output for nothing --
-with side A as \code{Actor1CountryCode}). For directed data this is
-exactly \code{1} by construction (side A IS \code{Actor1CountryCode} in the
-directed dyad key), asserted internally below as a free check on the
-dyad-key convention (it would silently invert if a future change
-swapped the \code{paste()} argument order building \code{dyad} above).
+of that pair's events, POOLED over \code{years} if supplied (else every
+period in \code{data}) -- not per dyad-period, since the country offset
+this feeds is dyad-constant and reused across \code{t}; a per-period
+weight would cost an \verb{A x D x T} object in \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s
+output for nothing -- with side A as \code{Actor1CountryCode}). For
+directed data this is exactly \code{1} by construction (side A IS
+\code{Actor1CountryCode} in the directed dyad key), asserted internally
+below as a free check on the dyad-key convention (it would silently
+invert if a future change swapped the \code{paste()} argument order
+building \code{dyad} above). A row with \code{NA} \code{Actor1CountryCode} is
+dropped from this computation (with a \code{warning()} naming how many)
+rather than propagating \code{NA} into \code{w_send} -- an \code{NA} reaching
+\code{stan_data$w_send} would otherwise surface as an opaque CmdStan data
+error much later.
 }
 \description{
 Collapses event-level data (as produced by \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}

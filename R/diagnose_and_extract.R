@@ -180,6 +180,16 @@ diagnose_and_extract_bilatr <- function(
     )
   }
 
+  # 0.7.1: has_gamma/country_codes for .assemble_bilatr_diagnostics()'s
+  # gamma-vs-Tier-1 split (see R/diagnose_convergence.R). This function
+  # already has both stan_model and stan_data in scope, unlike plain
+  # diagnose_convergence(), so its gamma table gets human-readable
+  # country_code labels -- the runscripts call this function, not
+  # diagnose_convergence() directly, so this is where the labelled
+  # version matters most.
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
+  country_codes <- attr(stan_data, "country_codes")
+
   prepared <- .prepare_fast_csv_read(csv_files)
 
   var_tiers <- .classify_bilatr_tier(prepared$variables)
@@ -261,7 +271,10 @@ diagnose_and_extract_bilatr <- function(
   }
 
   summ <- dplyr::left_join(dplyr::bind_rows(tier12_summ, tier3_summ), var_tiers, by = "variable")
-  diagnostics <- .assemble_bilatr_diagnostics(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold)
+  diagnostics <- .assemble_bilatr_diagnostics(
+    summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
+    has_gamma = has_gamma, country_codes = country_codes
+  )
 
   extract_from_summ <- function(prefix) {
     summ %>%

@@ -4,7 +4,19 @@
 \alias{.compute_tier1}
 \title{Compute the Tier 1 (global/shared) diagnostics tibble}
 \usage{
-.compute_tier1(summ, rhat_threshold, ess_threshold)
+.compute_tier1(summ, rhat_threshold, ess_threshold, exclude_pattern = NULL)
+}
+\arguments{
+\item{exclude_pattern}{Optional regex; \code{variable}s matching it are
+excluded before \code{flagged} is computed. Used (0.7.1) to pull \code{gamma}
+out of this table and into its own (see \code{\link[=.compute_gamma_tier]{.compute_gamma_tier()}} and
+\code{\link[=.assemble_bilatr_diagnostics]{.assemble_bilatr_diagnostics()}}) -- \code{gamma} is correctly Tier 1 for
+\emph{classification} (see \code{.bilatr_tier1_names}), but at production
+scale it is \verb{A x n_countries} (~thousands of parameters), and Tier 1
+is also a \emph{reporting} category designed around a handful of global
+scalars: \code{sigma_gamma[...]} (a per-category scalar, not
+country-indexed) is NOT excluded by the \code{stable_gamma} caller's
+pattern and stays in this table.}
 }
 \description{
 Compute the Tier 1 (global/shared) diagnostics tibble

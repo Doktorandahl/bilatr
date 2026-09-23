@@ -273,15 +273,72 @@
 }
 
 #' Compute the Tier 1 (global/shared) diagnostics tibble
+#'
+#' @param exclude_pattern Optional regex; `variable`s matching it are
+#'   excluded before `flagged` is computed. Used (0.7.1) to pull `gamma`
+#'   out of this table and into its own (see [.compute_gamma_tier()] and
+#'   [.assemble_bilatr_diagnostics()]) -- `gamma` is correctly Tier 1 for
+#'   *classification* (see `.bilatr_tier1_names`), but at production
+#'   scale it is `A x n_countries` (~thousands of parameters), and Tier 1
+#'   is also a *reporting* category designed around a handful of global
+#'   scalars: `sigma_gamma[...]` (a per-category scalar, not
+#'   country-indexed) is NOT excluded by the `stable_gamma` caller's
+#'   pattern and stays in this table.
 #' @keywords internal
-.compute_tier1 <- function(summ, rhat_threshold, ess_threshold) {
-  summ %>%
-    dplyr::filter(tier == 1L) %>%
+.compute_tier1 <- function(summ, rhat_threshold, ess_threshold, exclude_pattern = NULL) {
+  t1 <- dplyr::filter(summ, tier == 1L)
+  if (!is.null(exclude_pattern)) {
+    t1 <- dplyr::filter(t1, !grepl(exclude_pattern, variable))
+  }
+  t1 %>%
     dplyr::mutate(
       flagged = .flag_diagnostic(rhat, ess_bulk, ess_tail, rhat_threshold, ess_threshold)
     ) %>%
     dplyr::select(variable, rhat, ess_bulk, ess_tail, flagged) %>%
     dplyr::arrange(dplyr::desc(flagged))
+}
+
+#' Compute the `gamma` (country-level offset) diagnostics tibble
+#'
+#' Split out of Tier 1 (0.7.1) so that a routine number of flagged
+#' `gamma` elements -- dozens to hundreds at production scale, just from
+#' `ess_threshold` against ~4,000 draws -- doesn't flood
+#' [print.bilatr_diagnostics()]'s Tier 1 block or dominate
+#' `n_tier1_flagged`. `country_code`/`action_index` are parsed directly
+#' from the `gamma[k,c]` variable name (self-contained; does not depend
+#' on [.classify_bilatr_tier()] exposing raw bracket indices), the same
+#' pattern [extract_gamma()] uses.
+#'
+#' @param summ A tibble as produced by [posterior::summarise_draws()],
+#'   left-joined with [.classify_bilatr_tier]'s `tier` column.
+#' @param country_codes Optional character vector (in `country_index`
+#'   order, e.g. `stan_data`'s `"country_codes"` attribute) for labelling
+#'   `country_index`. `NULL` (e.g. plain [diagnose_convergence()], which
+#'   has no `stan_data`) leaves the table with `country_index` only.
+#' @return A tibble: `variable`, `action_index`, `country_index` (and
+#'   `country_code` if `country_codes` is supplied), `rhat`, `ess_bulk`,
+#'   `ess_tail`, `flagged`.
+#' @keywords internal
+.compute_gamma_tier <- function(summ, rhat_threshold, ess_threshold, country_codes = NULL) {
+  g <- summ %>%
+    dplyr::filter(tier == 1L, startsWith(variable, "gamma[")) %>%
+    dplyr::mutate(
+      idx = stringr::str_match(variable, "\\[(\\d+),(\\d+)\\]"),
+      action_index = as.integer(idx[, 2]),
+      country_index = as.integer(idx[, 3]),
+      flagged = .flag_diagnostic(rhat, ess_bulk, ess_tail, rhat_threshold, ess_threshold)
+    ) %>%
+    dplyr::select(-idx)
+
+  if (!is.null(country_codes)) {
+    g <- dplyr::mutate(g, country_code = country_codes[country_index])
+  }
+
+  dplyr::select(
+    g,
+    dplyr::any_of(c("variable", "action_index", "country_index", "country_code")),
+    rhat, ess_bulk, ess_tail, flagged
+  )
 }
 
 #' Compute the Tier 2 (per-dyad hierarchical parameter) diagnostics tibble
@@ -364,12 +421,32 @@
 #'   excludes both 2 and 3.
 #' @param tiers Validated (via [.validate_tiers]) tiers to compute.
 #' @param rhat_threshold,ess_threshold See [diagnose_convergence()].
+#' @param has_gamma (0.7.1) Whether the model being diagnosed has a
+#'   `gamma` (country-level offset) parameter -- from
+#'   [.bilatr_model_has_gamma()], never inferred by checking `summ` for a
+#'   `gamma` name. When `TRUE` and Tier 1 was requested, `gamma` is
+#'   pulled out of `tier1` into its own `gamma` element (see
+#'   [.compute_gamma_tier()]); when `FALSE`, `gamma` is `NULL` and
+#'   `n_gamma_*` are `NA_integer_`, so a model without `gamma` gets no
+#'   trace of the section at all.
+#' @param country_codes (0.7.1) Optional character vector for labelling
+#'   `gamma`'s `country_index`; see [.compute_gamma_tier()].
 #' @return A list of class `bilatr_diagnostics`; see
 #'   [diagnose_convergence()]'s `@return` for the element-by-element
 #'   description.
 #' @keywords internal
-.assemble_bilatr_diagnostics <- function(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold) {
-  tier1 <- if (1L %in% tiers) .compute_tier1(summ, rhat_threshold, ess_threshold) else NULL
+.assemble_bilatr_diagnostics <- function(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
+                                          has_gamma = FALSE, country_codes = NULL) {
+  tier1 <- if (1L %in% tiers) {
+    .compute_tier1(summ, rhat_threshold, ess_threshold, exclude_pattern = if (has_gamma) "^gamma\\[" else NULL)
+  } else {
+    NULL
+  }
+  gamma_diag <- if (1L %in% tiers && has_gamma) {
+    .compute_gamma_tier(summ, rhat_threshold, ess_threshold, country_codes = country_codes)
+  } else {
+    NULL
+  }
   tier2_result <- if (2L %in% tiers) .compute_tier2(summ, n_dt_tbl) else NULL
   tier2 <- tier2_result$tier2
   tier3 <- if (3L %in% tiers) .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold) else NULL
@@ -378,6 +455,8 @@
     tiers_computed = tiers,
     n_tier1_flagged = if (!is.null(tier1)) sum(tier1$flagged, na.rm = TRUE) else NA_integer_,
     n_tier1_total = if (!is.null(tier1)) nrow(tier1) else NA_integer_,
+    n_gamma_flagged = if (!is.null(gamma_diag)) sum(gamma_diag$flagged, na.rm = TRUE) else NA_integer_,
+    n_gamma_total = if (!is.null(gamma_diag)) nrow(gamma_diag) else NA_integer_,
     n_dyads_tier2 = if (!is.null(tier2)) nrow(tier2) else NA_integer_,
     n_dyads_tier2_worse_than_expected = if (!is.null(tier2)) sum(tier2$worse_than_expected, na.rm = TRUE) else NA_integer_,
     n_dyads_missing_from_n_dt = if (!is.null(tier2_result)) tier2_result$n_dyads_missing_from_n_dt else NA_integer_,
@@ -393,7 +472,7 @@
   )
 
   structure(
-    list(tier1 = tier1, tier2 = tier2, tier3 = tier3, summary = summary_info),
+    list(tier1 = tier1, gamma = gamma_diag, tier2 = tier2, tier3 = tier3, summary = summary_info),
     class = "bilatr_diagnostics"
   )
 }
@@ -1306,11 +1385,26 @@
 #'   give both lower estimated wall time and lower estimated
 #'   core-seconds than your current `n_workers`, if the small grid
 #'   checked (`n_workers` itself, `1`, half, and double) finds one.
+#' @param stan_model (0.7.1) Name registered in `.bilatr_stan_models`, or
+#'   a recognized pre-0.4.0 alias; see [.canonical_stan_model()]. Used
+#'   only to decide whether `gamma` (the experimental `stable_gamma`
+#'   variant's country-level offset) gets its own report element instead
+#'   of flooding Tier 1 -- see `@return`'s `gamma` element. Rhat/ESS
+#'   themselves need no orientation info regardless of `stan_model`.
 #' @return A list of class `bilatr_diagnostics` with elements:
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
 #'       monitored quantity, with a `flagged` column; `NULL` if `1` was
-#'       not in `tiers`.}
+#'       not in `tiers`. Excludes `gamma` when `stan_model` has one (see
+#'       `gamma` below) -- `n_tier1_flagged`/`n_tier1_total` in `summary`
+#'       count only this table, same meaning as pre-0.7.1.}
+#'     \item{gamma}{(0.7.1) Tibble of `stable_gamma`'s country-level
+#'       offset diagnostics -- `variable`, `action_index`,
+#'       `country_index`, `rhat`, `ess_bulk`, `ess_tail`, `flagged`; one
+#'       row per `gamma[k,c]` element. `NULL` whenever `1` was not in
+#'       `tiers` or `stan_model` has no `gamma` (silently absent, not an
+#'       empty tibble) -- see `.bilatr_model_has_gamma()`. `summary`'s
+#'       `n_gamma_flagged`/`n_gamma_total` count this table.}
 #'     \item{tier2}{Tibble with one row per dyad found in `n_dt` (or in
 #'       the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 #'       and a `worse_than_expected` column; `NULL` if `2` was not in
@@ -1348,8 +1442,15 @@ diagnose_convergence <- function(
   parallel = FALSE,
   n_workers = parallelly::availableCores(),
   scratch_dir = NULL,
-  read_seconds = NULL
+  read_seconds = NULL,
+  stan_model = .BILATR_DEFAULT_MODEL
 ) {
+  # stan_model (0.7.1) is used ONLY to decide has_gamma below (via
+  # .bilatr_model_has_gamma()) -- Rhat/ESS are already invariant to the
+  # alpha/theta reflection symmetry's sign flip (see
+  # .chunked_summarise_csv()'s own docs), so this adds no orientation
+  # logic here, unlike extract_theta()/extract_alpha()/etc.
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
   max_memory_mb_missing <- missing(max_memory_mb)
   if (!is.null(scratch_dir)) {
     warning(
@@ -1391,26 +1492,35 @@ diagnose_convergence <- function(
     summ <- dplyr::left_join(summ, var_tiers, by = "variable")
   }
 
-  .assemble_bilatr_diagnostics(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold)
+  .assemble_bilatr_diagnostics(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold, has_gamma = has_gamma)
 }
 
 #' Print a `bilatr_diagnostics` object
 #'
 #' Tier 1 (global/shared parameters) is always printed in full, since it
-#' should never be silently summarized away. Tier 2 (per-dyad
-#' hierarchical parameters) is printed as a compact table sorted with
-#' dyads flagged as "worse than expected for their sparsity" first. Tier
-#' 3 (per-dyad-period latent states) is expected to be noisy for sparse
-#' dyads, so it is reported only as aggregate one-line statistics rather
-#' than flooding the console with per-dyad-period rows.
+#' should never be silently summarized away. `stable_gamma`'s `gamma`
+#' (0.7.1) gets its own section instead of being part of that full-print
+#' promise -- at production scale it is thousands of parameters, and a
+#' routine number will flag as a matter of course, so only the worst few
+#' by Rhat and by ESS are shown (silently absent for a model without
+#' `gamma`; see [diagnose_convergence()]'s `stan_model` argument). Tier 2
+#' (per-dyad hierarchical parameters) is printed as a compact table
+#' sorted with dyads flagged as "worse than expected for their sparsity"
+#' first. Tier 3 (per-dyad-period latent states) is expected to be noisy
+#' for sparse dyads, so it is reported only as aggregate one-line
+#' statistics rather than flooding the console with per-dyad-period rows.
 #'
 #' @param x A `bilatr_diagnostics` object, as returned by
 #'   [diagnose_convergence()].
 #' @param n_tier2 Maximum number of Tier 2 rows to print.
+#' @param n_gamma (0.7.1) Maximum number of `gamma` rows to print, PER
+#'   ranking (worst by `rhat`, worst by `ess_bulk` -- so up to `2 *
+#'   n_gamma` rows total, fewer if the two rankings overlap or there are
+#'   fewer flagged elements than that).
 #' @param ... Ignored; present for S3 consistency.
 #' @return `x`, invisibly.
 #' @export
-print.bilatr_diagnostics <- function(x, n_tier2 = 20, ...) {
+print.bilatr_diagnostics <- function(x, n_tier2 = 20, n_gamma = 10, ...) {
   cat("<bilatr_diagnostics>\n\n")
 
   if (1L %in% x$summary$tiers_computed) {
@@ -1422,6 +1532,23 @@ print.bilatr_diagnostics <- function(x, n_tier2 = 20, ...) {
       print(dplyr::filter(x$tier1, flagged), n = Inf)
     } else {
       cat("No Tier 1 issues: all global/shared parameters (and lp__) meet threshold.\n")
+    }
+    cat("\n")
+  }
+
+  if (!is.null(x$gamma)) {
+    cat(sprintf(
+      "== gamma: country-level offsets (%d/%d flagged) ==\n",
+      x$summary$n_gamma_flagged, x$summary$n_gamma_total
+    ))
+    if (x$summary$n_gamma_flagged > 0) {
+      flagged_gamma <- dplyr::filter(x$gamma, flagged)
+      cat("worst by rhat:\n")
+      print(utils::head(dplyr::arrange(flagged_gamma, dplyr::desc(rhat)), n_gamma), n = Inf)
+      cat("worst by ess_bulk:\n")
+      print(utils::head(dplyr::arrange(flagged_gamma, ess_bulk), n_gamma), n = Inf)
+    } else {
+      cat("No gamma issues: all country-level offsets meet threshold.\n")
     }
     cat("\n")
   }
