@@ -17,6 +17,7 @@ icc_curves(
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
   stan_model = .BILATR_DEFAULT_MODEL,
+  country = NULL,
   n_dyads_fallback = 300,
   seed = 1
 )
@@ -64,6 +65,21 @@ contribution (see Details).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
 recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+
+\item{country}{Only meaningful for \code{stan_model = "stable_gamma"} (see
+\code{R/model_registry.R}'s \code{.bilatr_model_has_gamma()}) -- ignored, with
+a warning if supplied, for any other \code{stan_model}. \code{NULL} (default)
+evaluates the curves at the \code{gamma = 0} GLOBAL baseline, i.e. what
+every non-\code{gamma} model already computes -- this is the right
+default (a country-specific curve is the exception, not the norm,
+and every existing caller/test comparing curves across models stays
+valid). A single country code (character, matched against
+\code{stan_data}'s \code{"country_codes"} attribute) or a raw integer country
+index gives that country's curves instead, subtracting its \code{gamma_c}
+from \code{eta} (\code{gamma}, read once, Tier 1/cheap, alongside \code{alpha}/
+\code{mu_intercept} above -- \code{gamma} needs no \code{\link[=bilatr_orient]{bilatr_orient()}} call,
+since it is orientation-free by construction; see
+\code{inst/stan/bilatr_alphanorm_gamma.stan}'s header).}
 
 \item{n_dyads_fallback}{Number of dyads to subsample for the
 last-resort \code{theta_range} fallback (see Details). Default \code{300}.}
@@ -119,4 +135,15 @@ the curve is computed per posterior draw and summarised by
 dispersion around them, so observed shares scatter more widely than
 the bands suggest -- the bands are posterior uncertainty in the curve
 itself, not a predictive interval for an observation.
+
+\strong{\code{stan_model = "stable_gamma"} (0.7.0):} \code{eta} includes \code{- gamma_c}
+for whichever country \code{country} selects. The default, \code{country = NULL},
+evaluates at \code{gamma = 0} -- the GLOBAL curve, ignoring every country's
+idiosyncratic repertoire, not any particular country's actual curve.
+This is the right default (it is what every other registered model
+already computes, and what makes curves comparable across
+\code{stan_model}s), but it is worth being explicit that it is a baseline,
+not an average or a "typical country". \code{type = "information"} is
+unaffected beyond this: it is computed downstream of the (now
+possibly offset) \code{p_mat}, so no separate change was needed there.
 }

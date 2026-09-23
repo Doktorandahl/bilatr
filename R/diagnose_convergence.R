@@ -31,10 +31,23 @@
 #' variables' Tier 3 rows to `dyad_ids`/other per-dyad metadata by
 #' `dyad_id` is only valid when `filter_dyads` was `NULL` (i.e. every
 #' dyad was filtered, in `Y`'s original order).
+#' `gamma` (0.7.0, `stable_gamma` only: `A x n_countries`) is listed here
+#' too, for the same by-name reason as `alpha`: it has two `[...]`
+#' indices (action, country), which the structural
+#' `n_index >= 2 -> Tier 3` rule below would otherwise misclassify as a
+#' dyad-indexed quantity, reading the country index as a `dyad_id` and
+#' sweeping it into the expensive Tier 3 per-dyad-period pass (see
+#' inst/stan/bilatr_alphanorm_gamma.stan's header and
+#' dev/claude_code_prompt_0.7.0_country_offsets.md, "Part 4"). `gamma` is
+#' fully identified (unlike `gamma_z`, which is prior-only pinned in its
+#' projected-out directions -- see [.bilatr_sign_tied_names()] in
+#' `R/orient.R` for where THAT is excluded instead, via the `tier = NA`
+#' path below, for a different reason than sign ambiguity).
 #' @keywords internal
 .bilatr_tier1_names <- c(
   "alpha", "mu_intercept", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
+  "gamma", "sigma_gamma",
   "lp__"
 )
 

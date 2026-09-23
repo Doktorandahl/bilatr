@@ -450,6 +450,23 @@ check_compositional_residuals <- function(
     )
   }
 
+  # Model-aware, via the registry (R/model_registry.R's
+  # .bilatr_model_has_gamma()) rather than a user-facing flag: `eta` for
+  # a `stable_gamma` fit is alpha*theta - mu_intercept - g_d, and this
+  # function is the one that motivated the offset in the first place, so
+  # it must subtract g_d or it is simply testing the wrong model (see
+  # inst/stan/bilatr_alphanorm_gamma.stan's header).
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
+  if (has_gamma && is.null(stan_data$ctry_a)) {
+    stop(
+      "`stan_data` is missing `ctry_a`/`ctry_b`/`w_send`, needed to ",
+      "compute stable_gamma's country offset g_d. This means `stan_data` ",
+      "was assembled by a pre-0.7.0 assemble_stan_data() -- re-assemble ",
+      "it (>= 0.7.0) before checking a stable_gamma fit; see NEWS.md.",
+      call. = FALSE
+    )
+  }
+
   D <- stan_data$D
   Tn <- stan_data$T
   A <- stan_data$A
@@ -488,6 +505,22 @@ check_compositional_residuals <- function(
 
   alpha_mat <- .as_plain_matrix(am_mat[draw_idx, alpha_vars, drop = FALSE])
   mu_mat <- .as_plain_matrix(am_mat[draw_idx, mu_vars, drop = FALSE])
+
+  # --- 2b. read gamma too, for stable_gamma fits (Tier 1, cheap: A x
+  # n_countries). gamma is orientation-FREE by construction (see
+  # inst/stan/bilatr_alphanorm_gamma.stan's header) -- unlike alpha/
+  # mu_intercept above, it is never passed through bilatr_orient(). Row i
+  # of `gamma_mat` corresponds to the SAME posterior draw as row i of
+  # `alpha_mat`/`mu_mat` (draw_idx, already determined above, is reused
+  # rather than re-derived -- same reasoning the module's existing
+  # comment gives for phi/theta below).
+  gamma_col <- NULL
+  if (has_gamma) {
+    gamma_draws <- .get_draws(fit, "gamma")
+    gamma_mat_full <- posterior::as_draws_matrix(gamma_draws)
+    gamma_mat <- .as_plain_matrix(gamma_mat_full[draw_idx, , drop = FALSE])
+    gamma_col <- function(c) gamma_mat[, paste0("gamma[", seq_len(A), ",", c, "]"), drop = FALSE]
+  }
 
   # --- 3. read phi for the sampled dyads only ---
   phi_vars <- paste0("phi[", sampled_dyad_ids, "]")
@@ -566,9 +599,23 @@ check_compositional_residuals <- function(
     yrep_d <- matrix(0, n_draws_used, A)
     phi_vec_d <- phi_mat[, i]
 
+    # g_d, once per dyad (reused across every observed period below), not
+    # once per dyad-period -- matching stable_gamma's own Stan likelihood
+    # (see inst/stan/include/partial_log_lik.stanfunctions'
+    # partial_log_lik_offset(), which builds g the same way, once per
+    # dyad, outside its own t loop).
+    g_d <- if (has_gamma) {
+      ca <- stan_data$ctry_a[d]
+      cb <- stan_data$ctry_b[d]
+      wsend <- stan_data$w_send[d]
+      if (wsend == 1) gamma_col(ca) else wsend * gamma_col(ca) + (1 - wsend) * gamma_col(cb)
+    } else {
+      0
+    }
+
     for (j in seq_len(k_t)) {
       theta_dt <- theta_d[, j]
-      eta <- alpha_mat * theta_dt - mu_mat
+      eta <- alpha_mat * theta_dt - mu_mat - g_d
       p_dt <- .softmax_rows(eta)
       n_dt <- n_dt_vec[j]
       pbar_num <- pbar_num + n_dt * p_dt

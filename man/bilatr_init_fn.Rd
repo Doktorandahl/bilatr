@@ -23,6 +23,10 @@ registered models' distinct parameter sets (a non-centered
 identical parameter set and so share one \code{switch()} branch each --
 they differ only in what the \code{.stan} program does with \code{alpha_raw}'s
 sign once sampled (see \code{\link[=.alpha_raw_sum0_init]{.alpha_raw_sum0_init()}}), not in shape.
+\code{stable_gamma} (0.7.0) gets its own branch: \code{stable}'s init list plus
+\code{gamma_z}/\code{sigma_gamma}, both started small (not exactly 0 -- same
+reasoning as \code{alpha_raw}'s non-zero start: an all-zero init is valid
+but leaves no spread to move away from the prior mode with).
 Unrecognised names are rejected upstream by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}},
 so the \code{stop()} below should be unreachable in practice.
 }

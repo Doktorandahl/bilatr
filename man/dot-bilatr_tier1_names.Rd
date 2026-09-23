@@ -5,7 +5,7 @@
 \alias{.bilatr_tier1_names}
 \title{Names of Stan parameters treated as global/shared (Tier 1)}
 \format{
-An object of class \code{character} of length 8.
+An object of class \code{character} of length 10.
 }
 \usage{
 .bilatr_tier1_names
@@ -43,5 +43,17 @@ true \code{dyad_id} here (out of scope for 0.5.0); joining these two
 variables' Tier 3 rows to \code{dyad_ids}/other per-dyad metadata by
 \code{dyad_id} is only valid when \code{filter_dyads} was \code{NULL} (i.e. every
 dyad was filtered, in \code{Y}'s original order).
+\code{gamma} (0.7.0, \code{stable_gamma} only: \verb{A x n_countries}) is listed here
+too, for the same by-name reason as \code{alpha}: it has two \verb{[...]}
+indices (action, country), which the structural
+\verb{n_index >= 2 -> Tier 3} rule below would otherwise misclassify as a
+dyad-indexed quantity, reading the country index as a \code{dyad_id} and
+sweeping it into the expensive Tier 3 per-dyad-period pass (see
+inst/stan/bilatr_alphanorm_gamma.stan's header and
+dev/claude_code_prompt_0.7.0_country_offsets.md, "Part 4"). \code{gamma} is
+fully identified (unlike \code{gamma_z}, which is prior-only pinned in its
+projected-out directions -- see \code{\link[=.bilatr_sign_tied_names]{.bilatr_sign_tied_names()}} in
+\code{R/orient.R} for where THAT is excluded instead, via the \code{tier = NA}
+path below, for a different reason than sign ambiguity).
 }
 \keyword{internal}

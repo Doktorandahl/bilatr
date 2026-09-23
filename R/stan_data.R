@@ -98,10 +98,27 @@
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `rho_prior_a`, `rho_prior_b`,
 #'   `compute_log_lik`, `prior_only`, `compute_theta_filtered`,
-#'   `n_filter_dyads`, `filter_dyads`, `anchor_scale`. Also carries a
-#'   `dyad_ids` attribute
-#'   (the output of [make_dyad_ids()]) for reattaching identifiers to
-#'   posterior draws; see [extract_theta()].
+#'   `n_filter_dyads`, `filter_dyads`, `anchor_scale`, and (0.7.0,
+#'   unconditionally -- see the fields' own inline comments in this
+#'   function's body) `n_countries`, `ctry_a`, `ctry_b`, `w_send` (only
+#'   consumed by the experimental `stable_gamma` variant; see
+#'   `R/model_registry.R`). `n_countries` counts only the countries
+#'   actually present in the RETAINED dyads (after `min_n_events`
+#'   filtering) -- a country appearing only in a dropped dyad consumes no
+#'   index. `ctry_a`/`ctry_b` are 1-indexed into that country set, in
+#'   `dyad_id` order (`ctry_a` is the sender for directed dyads, side A
+#'   for undirected); `w_send` is per-dyad (not per dyad-period -- see
+#'   [grouped_events_to_dyad_period()]'s `w_send` attribute), exactly `1`
+#'   for every directed dyad. A `message()` at assembly time reports
+#'   `n_countries` and the dyads-per-country distribution (min/median/
+#'   max), so a country identified from only one or two dyads (whose
+#'   `gamma_c` is then close to confounded with those dyads' own `theta`)
+#'   is visible before fitting, not after. Also carries a `dyad_ids`
+#'   attribute (the output of [make_dyad_ids()]) for reattaching
+#'   identifiers to posterior draws (see [extract_theta()]), an
+#'   `event_classes` attribute, and (0.7.0) a `country_codes` attribute
+#'   (character, in `ctry_a`/`ctry_b` index order) for labelling `gamma`
+#'   (see [extract_gamma()]).
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -156,6 +173,15 @@ assemble_stan_data <- function(
     directed = directed,
     reference_category = reference_category
   )
+  # Captured here, immediately, rather than relied on to survive the
+  # dplyr pipeline below (fill_dyad_period_skeleton()'s right_join/
+  # arrange/mutate chain, then the min_n_events dplyr::filter()): custom
+  # attributes are not guaranteed to pass through dplyr verbs, so this is
+  # kept as a plain local tibble and joined back onto the SURVIVING
+  # `dyads` explicitly below (see @return / Part 2a of the build
+  # prompt) -- achieving the same "dropped dyads drop their weights with
+  # them" outcome without depending on attribute pass-through.
+  w_send_tbl <- attr(agg, "w_send")
   agg <- fill_dyad_period_skeleton(agg, years, resolution)
 
   drop_dyads <- agg %>%
@@ -175,6 +201,31 @@ assemble_stan_data <- function(
     )
   }
   Tn <- nrow(agg) / D
+
+  # Country index and per-dyad ctry_a/ctry_b/w_send (0.7.0; consumed only
+  # by the experimental stable_gamma Stan variant, but built and attached
+  # UNCONDITIONALLY for every model -- see @param n_countries below for
+  # why). Row i of `country_info` corresponds to `dyads[i]` (matched
+  # explicitly via `match()`, not assumed pre-sorted the same way) --
+  # `dyads`' own D-indexing is exactly the `dyad_id` order
+  # [make_dyad_ids()] assigns below, so ctry_a/ctry_b/w_send end up
+  # indexed 1:D the same way Y/is_obs/dyad_ids already are.
+  country_info <- w_send_tbl[match(dyads, w_send_tbl$dyad), ]
+  countries_present <- sort(unique(c(country_info$ctry_a_code, country_info$ctry_b_code)))
+  n_countries <- length(countries_present)
+  country_index <- stats::setNames(seq_len(n_countries), countries_present)
+  ctry_a <- unname(country_index[country_info$ctry_a_code])
+  ctry_b <- unname(country_index[country_info$ctry_b_code])
+  w_send <- country_info$w_send
+
+  dyads_per_country <- table(c(ctry_a, ctry_b))
+  message(sprintf(
+    "assemble_stan_data(): n_countries = %d (dyads per country -- min %d, median %s, max %d)",
+    n_countries, min(dyads_per_country),
+    format(stats::median(as.numeric(dyads_per_country)), nsmall = 1),
+    max(dyads_per_country)
+  ))
+
   event_classes <- stringr::str_remove(
     grep("^EventClass_", names(agg), value = TRUE), "^EventClass_"
   )
@@ -246,11 +297,25 @@ assemble_stan_data <- function(
     # alpha[1]'s sign by construction and don't declare this field, but
     # it's passed unconditionally regardless (CmdStan ignores data a
     # program doesn't declare) -- see @param anchor_scale above.
-    anchor_scale = anchor_scale
+    anchor_scale = anchor_scale,
+    # Consumed only by the experimental stable_gamma variant
+    # (R/model_registry.R); unused by every other registered program,
+    # whose Stan code doesn't declare these fields -- CmdStan ignores
+    # data a program doesn't declare, so (matching rho_prior_a/b and
+    # anchor_scale above) these are passed unconditionally rather than
+    # gated on which program will be fit, so a caller doesn't need to
+    # know the model name at assembly time. BREAKING: a `stan_data.rds`
+    # saved before 0.7.0 lacks these four fields and cannot be used with
+    # `stable_gamma` -- see NEWS.md.
+    n_countries = n_countries,
+    ctry_a = ctry_a,
+    ctry_b = ctry_b,
+    w_send = w_send
   )
 
   attr(stan_data, "dyad_ids") <- dyad_ids
   attr(stan_data, "event_classes") <- event_classes
+  attr(stan_data, "country_codes") <- countries_present
 
   stan_data
 }

@@ -133,10 +133,27 @@ A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
 \code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{rho_prior_a}, \code{rho_prior_b},
 \code{compute_log_lik}, \code{prior_only}, \code{compute_theta_filtered},
-\code{n_filter_dyads}, \code{filter_dyads}, \code{anchor_scale}. Also carries a
-\code{dyad_ids} attribute
-(the output of \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching identifiers to
-posterior draws; see \code{\link[=extract_theta]{extract_theta()}}.
+\code{n_filter_dyads}, \code{filter_dyads}, \code{anchor_scale}, and (0.7.0,
+unconditionally -- see the fields' own inline comments in this
+function's body) \code{n_countries}, \code{ctry_a}, \code{ctry_b}, \code{w_send} (only
+consumed by the experimental \code{stable_gamma} variant; see
+\code{R/model_registry.R}). \code{n_countries} counts only the countries
+actually present in the RETAINED dyads (after \code{min_n_events}
+filtering) -- a country appearing only in a dropped dyad consumes no
+index. \code{ctry_a}/\code{ctry_b} are 1-indexed into that country set, in
+\code{dyad_id} order (\code{ctry_a} is the sender for directed dyads, side A
+for undirected); \code{w_send} is per-dyad (not per dyad-period -- see
+\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}'s \code{w_send} attribute), exactly \code{1}
+for every directed dyad. A \code{message()} at assembly time reports
+\code{n_countries} and the dyads-per-country distribution (min/median/
+max), so a country identified from only one or two dyads (whose
+\code{gamma_c} is then close to confounded with those dyads' own \code{theta})
+is visible before fitting, not after. Also carries a \code{dyad_ids}
+attribute (the output of \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching
+identifiers to posterior draws (see \code{\link[=extract_theta]{extract_theta()}}), an
+\code{event_classes} attribute, and (0.7.0) a \code{country_codes} attribute
+(character, in \code{ctry_a}/\code{ctry_b} index order) for labelling \code{gamma}
+(see \code{\link[=extract_gamma]{extract_gamma()}}).
 }
 \description{
 Aggregates CAMEO-coded event data to dyad-period action-class counts

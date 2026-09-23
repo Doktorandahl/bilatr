@@ -20,7 +20,8 @@ fragment_lines <- readLines(fragment_path)
 # must not be rewritten by this script.
 target_files <- c(
   "inst/stan/bilatr_alphanorm.stan",
-  "inst/stan/bilatr_alphanorm_ou.stan"
+  "inst/stan/bilatr_alphanorm_ou.stan",
+  "inst/stan/bilatr_alphanorm_gamma.stan"
 )
 
 for (f in target_files) {

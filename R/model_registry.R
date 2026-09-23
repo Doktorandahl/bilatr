@@ -48,6 +48,40 @@
     ),
     status = "experimental"
   ),
+  stable_gamma = list(
+    file = "bilatr_alphanorm_gamma.stan",
+    description = paste(
+      "Since 0.7.0 (see NEWS.md): adds a country-level category-offset",
+      "vector `gamma` on top of stable's identification (same alpha/theta/",
+      "mu_intercept construction, orientation fold, and RMS-1 alpha",
+      "normalization, all unchanged).",
+      "eta_dt = alpha*theta_dt - mu_intercept - g_d, with g_d built from the",
+      "SAME `gamma` for directed (g_d = gamma[, ctry_a[d]]) and undirected",
+      "(g_d = w_send[d]*gamma[, ctry_a[d]] + (1-w_send[d])*gamma[, ctry_b[d]])",
+      "dyads -- one program, one shared parameter, the difference following",
+      "mechanically from what a dyad-year is in each. `gamma` is",
+      "identified by three constraints enforced in transformed parameters",
+      "(orthogonal to `alpha`, since theta already absorbs any component",
+      "along it; orthogonal to `1` per country, softmax shift invariance;",
+      "centred across countries per category, since the common part is",
+      "absorbed by mu_intercept) -- see the .stan file's header for the",
+      "four-step derivation and why the order matters. Averaging",
+      "gamma_i/gamma_j for undirected dyads is a first-order approximation",
+      "to the true two-component mixture likelihood, accurate when gamma is",
+      "small (deliberate, documented trade-off -- see the .stan file's",
+      "header, \"HONEST CAVEAT\"). Nests `stable` exactly as",
+      "sigma_gamma -> 0 (and exactly, not just in the limit, at",
+      "n_countries = 1). Motivated by check_compositional_residuals()",
+      "(0.6.0), which found a dyad-level compositional residual a",
+      "dyad-specific beta_d cannot identify (theta already absorbs it) but",
+      "a country-level offset can (a country appears in many dyads).",
+      "Needs `stan_data` assembled by assemble_stan_data() >= 0.7.0",
+      "(`n_countries`/`ctry_a`/`ctry_b`/`w_send`); check_compositional_residuals()",
+      "and icc_curves() are gamma-aware for this model (see NEWS.md). Still",
+      "experimental: not yet fit at production scale."
+    ),
+    status = "experimental"
+  ),
   stable_soft_anchor = list(
     file = "legacy/bilatr_stable_soft_anchor.stan",
     description = paste(
@@ -243,4 +277,24 @@
     )
   }
   path
+}
+
+#' Does a registered Stan model declare a country-level `gamma` offset?
+#'
+#' The single source of truth for whether a `stan_model` needs `gamma`-
+#' aware behaviour downstream (0.7.0+): [check_compositional_residuals()]
+#' and [icc_curves()] both branch on this, via the registry rather than a
+#' user-facing flag, so a future `gamma`-bearing variant only needs an
+#' entry here, not a change at every call site. `stable_gamma` is
+#' currently the only one; written as an explicit set (not, say, a
+#' `has_gamma` field on `.bilatr_stan_models` entries) because only one
+#' entry needs it so far and this keeps the registry's existing shape
+#' unchanged for every other model.
+#'
+#' @param stan_model Name registered in `.bilatr_stan_models`, or a
+#'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
+#' @return `TRUE`/`FALSE`.
+#' @keywords internal
+.bilatr_model_has_gamma <- function(stan_model) {
+  .canonical_stan_model(stan_model) %in% c("stable_gamma")
 }

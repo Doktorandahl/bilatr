@@ -78,6 +78,33 @@
       raw = c("alpha_raw", "z_theta0", "theta_raw"),
       derived = c("alpha", "theta", "theta0")
     ),
+    # stable_gamma (0.7.0) shares `stable`'s alpha_raw/z_theta0/theta_raw
+    # reflection symmetry unchanged (it is built from a copy of `stable`;
+    # see inst/stan/bilatr_alphanorm_gamma.stan's header), so `raw`
+    # includes the same three names -- plus `gamma_z`, which is listed
+    # here too even though it is NOT tied to alpha's sign (the
+    # bilatr_alphanorm_gamma.stan projection that builds `gamma` from
+    # `gamma_z` is invariant to alpha_raw -> -alpha_raw; see that file's
+    # header). `gamma_z` is unidentified for a different reason: its
+    # projected-out directions (the alpha direction, the all-ones
+    # direction, the across-country mean) are pinned only by
+    # `gamma_z ~ std_normal()`, not by the likelihood, so its cross-chain
+    # Rhat is just as uninformative as a genuinely sign-ambiguous raw
+    # parameter's -- listing it here (in `raw`, not `derived`) reuses
+    # R/diagnose_convergence.R's .bilatr_sign_ambiguous_raw_names()/
+    # .classify_bilatr_tier() `tier = NA` exclusion for that different
+    # reason, rather than inventing a second exclusion mechanism.
+    # `derived` matches stable's exactly (gamma itself is NOT included --
+    # it is fully identified and must stay in the tiered tables, as Tier
+    # 1; see .bilatr_tier1_names in R/diagnose_convergence.R). Neither
+    # list is actually consulted by [.bilatr_flip_variables()] for
+    # `stable_gamma` (only the soft-anchor legacy models are), so this
+    # has no effect on `bilatr_orient()`'s no-op behaviour for it -- only
+    # on the Tier `NA` exclusion.
+    stable_gamma = list(
+      raw = c("alpha_raw", "z_theta0", "theta_raw", "gamma_z"),
+      derived = c("alpha", "theta", "theta0")
+    ),
     ou = ,
     ou_soft_anchor = list(
       raw = c("alpha_raw", "mu_dyad_raw", "theta_raw"),

@@ -1,7 +1,7 @@
-test_that("the registry contains stable/ou plus their retired legacy soft-anchor entries", {
+test_that("the registry contains stable/ou/stable_gamma plus their retired legacy soft-anchor entries", {
   expect_setequal(
     names(.bilatr_stan_models),
-    c("stable", "ou", "stable_soft_anchor", "ou_soft_anchor")
+    c("stable", "ou", "stable_gamma", "stable_soft_anchor", "ou_soft_anchor")
   )
   expect_identical(.BILATR_DEFAULT_MODEL, "stable")
   # retired variants that are NOT kept registered (the pre-0.4.0
@@ -14,10 +14,11 @@ test_that("the registry contains stable/ou plus their retired legacy soft-anchor
   ))
 })
 
-test_that("stable/ou are 'stable'/'experimental'; the retired soft-anchor entries are 'legacy'", {
+test_that("stable is 'stable'; ou/stable_gamma are 'experimental'; the retired soft-anchor entries are 'legacy'", {
   statuses <- vapply(.bilatr_stan_models, function(x) x$status, character(1))
   expect_identical(statuses[["stable"]], "stable")
   expect_identical(statuses[["ou"]], "experimental")
+  expect_identical(statuses[["stable_gamma"]], "experimental")
   expect_identical(statuses[["stable_soft_anchor"]], "legacy")
   expect_identical(statuses[["ou_soft_anchor"]], "legacy")
 })
@@ -28,9 +29,18 @@ test_that(".resolve_stan_model() resolves valid names to existing files", {
   expect_match(stable_path, "bilatr_alphanorm\\.stan$")
 
   expect_match(.resolve_stan_model("ou"), "bilatr_alphanorm_ou\\.stan$")
+  expect_match(.resolve_stan_model("stable_gamma"), "bilatr_alphanorm_gamma\\.stan$")
 
   expect_match(.resolve_stan_model("stable_soft_anchor"), "legacy/bilatr_stable_soft_anchor\\.stan$")
   expect_match(.resolve_stan_model("ou_soft_anchor"), "legacy/bilatr_ou_soft_anchor\\.stan$")
+})
+
+test_that(".bilatr_model_has_gamma() is TRUE only for stable_gamma", {
+  expect_true(.bilatr_model_has_gamma("stable_gamma"))
+  expect_false(.bilatr_model_has_gamma("stable"))
+  expect_false(.bilatr_model_has_gamma("ou"))
+  expect_false(.bilatr_model_has_gamma("stable_soft_anchor"))
+  expect_false(.bilatr_model_has_gamma("ou_soft_anchor"))
 })
 
 test_that(".resolve_stan_model() errors informatively on an unknown name", {

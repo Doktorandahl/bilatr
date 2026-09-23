@@ -37,6 +37,21 @@ freely estimated.}
 A data frame with columns \code{dyad}, \code{year} (and \code{month} if
 \code{resolution = "monthly"}), one \verb{EventClass_<value>} column per
 observed class (ordered per \code{reference_category}), and \code{total_events}.
+Also carries a \code{w_send} attribute (0.7.0; consumed by
+\code{\link[=assemble_stan_data]{assemble_stan_data()}} for the experimental \code{stable_gamma} Stan
+variant -- see \code{R/model_registry.R}): a tibble with one row per
+dyad, \code{ctry_a_code}/\code{ctry_b_code} (side A/B's 3-letter country code,
+\code{str_sub(dyad, 1, 3)}/\code{str_sub(dyad, 5, 7)}, the same convention
+\code{\link[=make_dyad_ids]{make_dyad_ids()}} uses for its own \code{dyad2}) and \code{w_send} (the share
+of that pair's events, POOLED over every period in \code{data} -- not
+per dyad-period, since the country offset this feeds is dyad-
+constant and reused across \code{t}; a per-period weight would cost an
+\verb{A x D x T} object in \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s output for nothing --
+with side A as \code{Actor1CountryCode}). For directed data this is
+exactly \code{1} by construction (side A IS \code{Actor1CountryCode} in the
+directed dyad key), asserted internally below as a free check on the
+dyad-key convention (it would silently invert if a future change
+swapped the \code{paste()} argument order building \code{dyad} above).
 }
 \description{
 Collapses event-level data (as produced by \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}

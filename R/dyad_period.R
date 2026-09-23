@@ -68,6 +68,21 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #' @return A data frame with columns `dyad`, `year` (and `month` if
 #'   `resolution = "monthly"`), one `EventClass_<value>` column per
 #'   observed class (ordered per `reference_category`), and `total_events`.
+#'   Also carries a `w_send` attribute (0.7.0; consumed by
+#'   [assemble_stan_data()] for the experimental `stable_gamma` Stan
+#'   variant -- see `R/model_registry.R`): a tibble with one row per
+#'   dyad, `ctry_a_code`/`ctry_b_code` (side A/B's 3-letter country code,
+#'   `str_sub(dyad, 1, 3)`/`str_sub(dyad, 5, 7)`, the same convention
+#'   [make_dyad_ids()] uses for its own `dyad2`) and `w_send` (the share
+#'   of that pair's events, POOLED over every period in `data` -- not
+#'   per dyad-period, since the country offset this feeds is dyad-
+#'   constant and reused across `t`; a per-period weight would cost an
+#'   `A x D x T` object in [assemble_stan_data()]'s output for nothing --
+#'   with side A as `Actor1CountryCode`). For directed data this is
+#'   exactly `1` by construction (side A IS `Actor1CountryCode` in the
+#'   directed dyad key), asserted internally below as a free check on the
+#'   dyad-key convention (it would silently invert if a future change
+#'   swapped the `paste()` argument order building `dyad` above).
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -124,9 +139,45 @@ grouped_events_to_dyad_period <- function(
   totals <- data %>%
     dplyr::count(dplyr::across(dplyr::all_of(group_cols)), name = "total_events")
 
-  counts %>%
+  result <- counts %>%
     dplyr::left_join(totals, by = group_cols) %>%
     dplyr::select(dplyr::any_of(column_order))
+
+  # w_send (0.7.0; see @return): per-dyad sender share, pooled over every
+  # period in `data` (not per dyad-period -- see @return for why),
+  # computed from the raw event rows rather than from `result`'s
+  # per-period counts, since it needs Actor1CountryCode per event, not
+  # per action class. Side A is str_sub(dyad, 1, 3), matching
+  # make_dyad_ids()'s own convention for dyad2 -- both assume 3-letter
+  # country codes joined by a single "_", the same assumption `dyad`
+  # itself already relies on above.
+  w_send <- data %>%
+    dplyr::mutate(
+      ctry_a_code = stringr::str_sub(dyad, 1, 3),
+      ctry_b_code = stringr::str_sub(dyad, 5, 7),
+      is_side_a_sender = Actor1CountryCode == ctry_a_code
+    ) %>%
+    dplyr::group_by(dyad) %>%
+    dplyr::summarise(
+      ctry_a_code = dplyr::first(ctry_a_code),
+      ctry_b_code = dplyr::first(ctry_b_code),
+      w_send = mean(is_side_a_sender),
+      .groups = "drop"
+    )
+
+  if (directed && !all(w_send$w_send == 1)) {
+    stop(
+      "Internal invariant violated: computed w_send != 1 for directed ",
+      "data. Side A (str_sub(dyad, 1, 3)) should always equal ",
+      "Actor1CountryCode for a directed dyad key -- this points to a bug ",
+      "in how `dyad` is built above (e.g. the paste() argument order), ",
+      "not a data issue.",
+      call. = FALSE
+    )
+  }
+
+  attr(result, "w_send") <- w_send
+  result
 }
 
 #' Build a full dyad x period skeleton, filling in gaps as zero-count rows

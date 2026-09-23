@@ -204,6 +204,18 @@
 #' correlated, so `sd(alpha_j - alpha_k)` is emphatically not
 #' `sqrt(sd_j^2 + sd_k^2)`).
 #'
+#' **`stan_model = "stable_gamma"` (0.7.0):** every measure here (`alpha`,
+#' its correlation structure, the reference `shares`) is evaluated
+#' exactly as for any other model -- `gamma`/`g_d` never enter this
+#' function's computation at all. For `stable_gamma`, that means the
+#' reference share vector implicitly used (whether the empirical default,
+#' `"theta0"`, or a user-supplied `shares`) is the `gamma = 0` baseline,
+#' the same baseline [icc_curves()]'s `country = NULL` default uses --
+#' not any particular country's actual share vector. Left this way
+#' deliberately (unchanged computation, documented meaning): a
+#' country-specific merge analysis is a coherent further extension but is
+#' not implemented here.
+#'
 #' @param fit A `CmdStanMCMC`-like fit object, or a character vector of
 #'   CmdStan CSV file paths (see [.get_draws()]).
 #' @param stan_data The Stan data list used to produce `fit`, as returned

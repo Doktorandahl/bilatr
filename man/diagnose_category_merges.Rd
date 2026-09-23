@@ -123,4 +123,16 @@ also handles \code{alpha}'s correlation structure for free (the sum-to-zero
 and RMS-1 constraints make the \code{alpha_k} strongly negatively
 correlated, so \code{sd(alpha_j - alpha_k)} is emphatically not
 \code{sqrt(sd_j^2 + sd_k^2)}).
+
+\strong{\code{stan_model = "stable_gamma"} (0.7.0):} every measure here (\code{alpha},
+its correlation structure, the reference \code{shares}) is evaluated
+exactly as for any other model -- \code{gamma}/\code{g_d} never enter this
+function's computation at all. For \code{stable_gamma}, that means the
+reference share vector implicitly used (whether the empirical default,
+\code{"theta0"}, or a user-supplied \code{shares}) is the \code{gamma = 0} baseline,
+the same baseline \code{\link[=icc_curves]{icc_curves()}}'s \code{country = NULL} default uses --
+not any particular country's actual share vector. Left this way
+deliberately (unchanged computation, documented meaning): a
+country-specific merge analysis is a coherent further extension but is
+not implemented here.
 }

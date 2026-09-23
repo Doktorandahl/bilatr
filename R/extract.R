@@ -328,3 +328,163 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
   }
   out
 }
+
+#' Extract country-level category offsets (`gamma`) with country/action
+#' labels
+#'
+#' Pulls posterior summaries of the country-level category-offset matrix
+#' `gamma` out of a `stable_gamma` fit (0.7.0; see `R/model_registry.R`
+#' -- the only currently-registered model with one). `gamma` is fully
+#' identified by construction (three constraints enforced in
+#' `transformed parameters`; see `inst/stan/bilatr_alphanorm_gamma.stan`'s
+#' header) and orientation-FREE (the alpha/theta reflection symmetry's
+#' fold does not touch it -- see that header, "gamma is NOT multiplied by
+#' orientation_sign"), so this needs no [bilatr_orient()] call at all,
+#' unlike [extract_alpha()]/[extract_mu_intercept()].
+#'
+#' `fit` also accepts a character vector of raw CmdStan CSV file paths,
+#' the same forms [extract_alpha()]/[.get_draws()] accept. `gamma` is
+#' Tier 1 (small: `A x n_countries`, see `.bilatr_tier1_names` in
+#' `R/diagnose_convergence.R`), so -- like `extract_alpha()`/
+#' `extract_mu_intercept()` -- this is one plain, unchunked read, never
+#' the chunked Tier 3 machinery `extract_theta()` needs.
+#'
+#' @param fit A `CmdStanMCMC` fit object from a `stable_gamma` fit (via
+#'   `fit_panel_dev()`/`fit_dyad_ts_dev()`, since `stable_gamma` is
+#'   experimental and not reachable via `fit_panel()`/`fit_dyad_ts()`),
+#'   or a character vector of raw CmdStan CSV file paths.
+#' @param stan_data The Stan data list used to produce `fit`, as returned
+#'   by [assemble_stan_data()] `>= 0.7.0` (must carry its
+#'   `country_codes` attribute).
+#' @param probs Posterior quantiles to report alongside the mean.
+#' @param event_classes Optional character vector of event-class labels,
+#'   in the same order used to build `stan_data` (i.e. `stan_data`'s
+#'   `"event_classes"` attribute, the default).
+#' @param class_label_fn Optional function mapping an integer
+#'   `action_index` vector to pretty labels, matching
+#'   [diagnose_category_merges()]'s argument of the same name.
+#' @return A tibble (subclassed `bilatr_gamma`, with an [autoplot()]/
+#'   [plot()] method) with one row per (country, action type):
+#'   `country_code`, `country_index`, `action_index` (and
+#'   `event_class`/`class_label` if supplied), the posterior `mean` of
+#'   `gamma`, and one column per requested quantile.
+#' @examples
+#' \dontrun{
+#' gamma <- extract_gamma(fit, stan_data)
+#' gamma_norm(gamma)
+#' }
+#' @export
+extract_gamma <- function(
+  fit, stan_data, probs = c(0.05, 0.5, 0.95),
+  event_classes = attr(stan_data, "event_classes"),
+  class_label_fn = NULL
+) {
+  country_codes <- attr(stan_data, "country_codes")
+  if (is.null(country_codes)) {
+    stop(
+      "`stan_data` must be the output of assemble_stan_data() >= 0.7.0 ",
+      "(missing the 'country_codes' attribute -- a stan_data.rds saved ",
+      "before 0.7.0 cannot be used with stable_gamma; see NEWS.md).",
+      call. = FALSE
+    )
+  }
+
+  draws <- .get_draws(fit, "gamma")
+  out <- posterior::summarise_draws(
+    draws,
+    mean = mean,
+    ~ stats::quantile(.x, probs = probs)
+  ) %>%
+    dplyr::mutate(
+      idx = stringr::str_match(variable, "\\[(\\d+),(\\d+)\\]"),
+      action_index = as.integer(idx[, 2]),
+      country_index = as.integer(idx[, 3]),
+      country_code = country_codes[country_index]
+    ) %>%
+    dplyr::select(-idx, -variable)
+
+  if (!is.null(event_classes)) {
+    out <- dplyr::mutate(out, event_class = event_classes[action_index])
+  }
+  if (!is.null(class_label_fn)) {
+    out <- dplyr::mutate(out, class_label = as.character(class_label_fn(action_index)))
+  }
+
+  meta_cols <- c("country_code", "country_index", "action_index", intersect(c("event_class", "class_label"), names(out)))
+  out <- dplyr::relocate(out, dplyr::all_of(meta_cols))
+
+  class(out) <- c("bilatr_gamma", class(out))
+  out
+}
+
+#' Per-country RMS of `gamma`, the "how idiosyncratic is this country's
+#' repertoire" summary
+#'
+#' `sqrt(mean(gamma_c^2))` across action categories, for each country --
+#' the natural ranking key for which countries carry the largest
+#' country-level offset (see [extract_gamma()] and
+#' `inst/stan/bilatr_alphanorm_gamma.stan`'s header). Computed from
+#' `x$mean` (posterior means), not per-draw: a summary of a summary,
+#' adequate for ranking/ordering (e.g. [autoplot.bilatr_gamma()]'s
+#' country axis) but not itself a posterior quantity -- no interval is
+#' reported.
+#'
+#' @param x An [extract_gamma()] tibble.
+#' @return A tibble, one row per country, `country_code`, `country_index`,
+#'   `gamma_norm`, sorted descending by `gamma_norm`.
+#' @export
+gamma_norm <- function(x) {
+  stopifnot(inherits(x, "bilatr_gamma"))
+  x %>%
+    dplyr::group_by(.data$country_code, .data$country_index) %>%
+    dplyr::summarise(gamma_norm = sqrt(mean(.data$mean^2)), .groups = "drop") %>%
+    dplyr::arrange(dplyr::desc(.data$gamma_norm))
+}
+
+.plot_gamma <- function(x) {
+  fill_col <- if ("50%" %in% names(x)) "50%" else "mean"
+  label_col <- if ("class_label" %in% names(x)) "class_label" else if ("event_class" %in% names(x)) "event_class" else "action_index"
+
+  order <- gamma_norm(x)
+  d <- x %>%
+    dplyr::mutate(
+      country_code = factor(.data$country_code, levels = order$country_code),
+      .label = factor(.data[[label_col]], levels = unique(.data[[label_col]]))
+    )
+
+  ggplot2::ggplot(d, ggplot2::aes(x = .data$country_code, y = .data$.label, fill = .data[[fill_col]])) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient2(name = "gamma", low = "#3B4CC0", mid = "white", high = "#B40426", midpoint = 0) +
+    ggplot2::labs(
+      x = "country (ordered by gamma_norm())", y = NULL,
+      title = "Country-level category offsets (gamma)",
+      subtitle = if (fill_col == "50%") "fill: posterior median" else "fill: posterior mean"
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1, vjust = 0.5))
+}
+
+#' Plot `extract_gamma()` output
+#'
+#' Countries on the x-axis (ordered by [gamma_norm()], largest first, so
+#' the structure is visible rather than alphabetical), action categories
+#' on the y-axis, posterior median as fill (falling back to the mean if
+#' `x` was built with quantiles that don't include the median).
+#'
+#' @param object,x A `bilatr_gamma` tibble, as returned by
+#'   [extract_gamma()].
+#' @param ... Ignored; present for S3 consistency.
+#' @return A `ggplot` object.
+#' @exportS3Method ggplot2::autoplot
+autoplot.bilatr_gamma <- function(object, ...) {
+  rlang::check_installed("ggplot2", "for autoplot.bilatr_gamma()")
+  .plot_gamma(object)
+}
+
+#' @rdname autoplot.bilatr_gamma
+#' @export
+plot.bilatr_gamma <- function(x, ...) {
+  rlang::check_installed("ggplot2", "for plot.bilatr_gamma()")
+  print(ggplot2::autoplot(x))
+  invisible(x)
+}

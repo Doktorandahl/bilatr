@@ -1,3 +1,71 @@
+# bilatr 0.7.0
+
+## New features
+
+* Added `stable_gamma`, an **experimental** Stan model variant giving
+  each country a category-level offset vector `gamma_c` -- its
+  characteristic action repertoire, relative to the global baseline,
+  beyond what relationship quality (`theta`) already implies. Motivated
+  by `check_compositional_residuals()` (0.6.0), which found a dyad-level
+  compositional residual (implied RMS ~= 0.217) that a dyad-specific
+  `beta_d` cannot identify (each dyad already has a free `theta`) but a
+  country-level offset can (a country appears in dozens to hundreds of
+  dyads). `eta_dt = alpha*theta_dt - mu_intercept - g_d`, with `g_d`
+  built from the same `gamma` for directed dyads (`g_d = gamma[,
+  ctry_a[d]]`) and undirected dyads (`g_d = w_send[d]*gamma[, ctry_a[d]]
+  + (1-w_send[d])*gamma[, ctry_b[d]]`, `w_send` the observed sender
+  share) -- one Stan program serves both. `gamma` is identified by three
+  constraints (orthogonal to `alpha`, orthogonal to `1` per country,
+  centred across countries per category) enforced in `transformed
+  parameters`; nests `stable` exactly as `sigma_gamma -> 0` (and exactly,
+  not just in the limit, at `n_countries = 1`). Averaging `gamma_i`/
+  `gamma_j` for undirected dyads is a documented first-order
+  approximation to the true two-component mixture likelihood. See
+  `inst/stan/bilatr_alphanorm_gamma.stan`'s header and
+  `dev/claude_code_prompt_0.7.0_country_offsets.md` for the full design.
+* Added `extract_gamma()` (posterior summaries of `gamma`, with country/
+  action-class labels) and `gamma_norm()` (per-country RMS of `gamma_c`,
+  the "how idiosyncratic is this country's repertoire" ranking key),
+  with `autoplot()`/`plot()` methods for `extract_gamma()`'s output
+  (countries x categories, ordered by `gamma_norm()`).
+* `icc_curves()` gains a `country` argument (only meaningful for
+  `stan_model = "stable_gamma"`): `NULL` (default) evaluates at the
+  `gamma = 0` global baseline; a country code or index evaluates that
+  country's curves instead.
+* `check_compositional_residuals()` is now model-aware: for a
+  `stable_gamma` fit, it subtracts each sampled dyad's `g_d` when
+  building `pbar_d`, so the check correctly tests the offset model
+  rather than silently reusing `stable`'s formula. `stop()`s with a
+  clear message if handed a `stable_gamma` fit whose `stan_data` lacks
+  the 0.7.0 country fields.
+* `diagnose_category_merges()`'s roxygen documents that, for
+  `stable_gamma`, its reference share vector is evaluated at the
+  `gamma = 0` baseline (no computation change).
+
+## Breaking changes
+
+* `assemble_stan_data()` unconditionally returns four new fields --
+  `n_countries`, `ctry_a`, `ctry_b`, `w_send` -- and attaches a new
+  `country_codes` attribute, regardless of which Stan model will be fit
+  (harmless for `stable`/`ou`, which don't declare these data fields; see
+  `R/stan_data.R`). **A `stan_data.rds` saved before 0.7.0 lacks these
+  fields and cannot be used with `stable_gamma`** -- it must be
+  re-assembled with `assemble_stan_data() >= 0.7.0`.
+* `grouped_events_to_dyad_period()`'s return value now also carries a
+  `w_send` attribute (a per-dyad tibble); this is additive and does not
+  change the function's visible data-frame columns.
+
+## Internal
+
+* `stable`/`ou`'s `.stan` files change only by an additional, unused
+  Stan function (`partial_log_lik_offset()`, spliced in alongside
+  `partial_log_lik()` from the canonical
+  `inst/stan/include/partial_log_lik.stanfunctions` -- see
+  `data-raw/sync_stan_functions.R`). Their `data`/`parameters` blocks are
+  untouched, so fits already on disk under these two models stay
+  readable and parameter-comparable; recompilation is needed once
+  because the `.stan` file text changed.
+
 # bilatr 0.6.3
 
 ## New features

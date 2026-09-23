@@ -100,6 +100,17 @@
 #' the bands suggest -- the bands are posterior uncertainty in the curve
 #' itself, not a predictive interval for an observation.
 #'
+#' **`stan_model = "stable_gamma"` (0.7.0):** `eta` includes `- gamma_c`
+#' for whichever country `country` selects. The default, `country = NULL`,
+#' evaluates at `gamma = 0` -- the GLOBAL curve, ignoring every country's
+#' idiosyncratic repertoire, not any particular country's actual curve.
+#' This is the right default (it is what every other registered model
+#' already computes, and what makes curves comparable across
+#' `stan_model`s), but it is worth being explicit that it is a baseline,
+#' not an average or a "typical country". `type = "information"` is
+#' unaffected beyond this: it is computed downstream of the (now
+#' possibly offset) `p_mat`, so no separate change was needed there.
+#'
 #' @param fit A `CmdStanMCMC` fit object, or a character vector of raw
 #'   CmdStan CSV file paths -- the same forms [.get_draws()] accepts.
 #' @param stan_data The Stan data list used to produce `fit`, as returned
@@ -131,6 +142,20 @@
 #'   contribution (see Details).
 #' @param stan_model Name registered in `.bilatr_stan_models`, or a
 #'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
+#' @param country Only meaningful for `stan_model = "stable_gamma"` (see
+#'   `R/model_registry.R`'s `.bilatr_model_has_gamma()`) -- ignored, with
+#'   a warning if supplied, for any other `stan_model`. `NULL` (default)
+#'   evaluates the curves at the `gamma = 0` GLOBAL baseline, i.e. what
+#'   every non-`gamma` model already computes -- this is the right
+#'   default (a country-specific curve is the exception, not the norm,
+#'   and every existing caller/test comparing curves across models stays
+#'   valid). A single country code (character, matched against
+#'   `stan_data`'s `"country_codes"` attribute) or a raw integer country
+#'   index gives that country's curves instead, subtracting its `gamma_c`
+#'   from `eta` (`gamma`, read once, Tier 1/cheap, alongside `alpha`/
+#'   `mu_intercept` above -- `gamma` needs no [bilatr_orient()] call,
+#'   since it is orientation-free by construction; see
+#'   `inst/stan/bilatr_alphanorm_gamma.stan`'s header).
 #' @param n_dyads_fallback Number of dyads to subsample for the
 #'   last-resort `theta_range` fallback (see Details). Default `300`.
 #' @param seed Seed for the last-resort fallback's dyad subsample.
@@ -152,12 +177,23 @@ icc_curves <- function(
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
   stan_model = .BILATR_DEFAULT_MODEL,
+  country = NULL,
   n_dyads_fallback = 300,
   seed = 1
 ) {
   type <- match.arg(type)
   stan_model <- .canonical_stan_model(stan_model)
   needs_orient <- length(.bilatr_flip_variables(stan_model)) > 0
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
+
+  if (!is.null(country) && !has_gamma) {
+    warning(
+      "`country` is ignored: `stan_model` = \"", stan_model, "\" has no ",
+      "country-level offset (only \"stable_gamma\" does).",
+      call. = FALSE
+    )
+    country <- NULL
+  }
 
   am_draws <- .get_draws(fit, c("alpha", "mu_intercept"))
   if (needs_orient) {
@@ -167,6 +203,36 @@ icc_curves <- function(
   mu_mat <- .as_plain_matrix(.as_ordered_matrix(am_draws, "mu_intercept"))
   A <- ncol(alpha_mat)
   n_draws <- nrow(alpha_mat)
+
+  # gamma_vec (0.7.0): the fixed A-length-per-draw country offset
+  # subtracted from every grid point's eta below -- 0 (the global
+  # baseline) unless `country` was supplied for a stable_gamma fit. Read
+  # once here (Tier 1, cheap: A x n_countries), never through
+  # bilatr_orient() (gamma is orientation-free by construction).
+  gamma_vec <- 0
+  if (!is.null(country)) {
+    if (is.character(country)) {
+      country_codes <- attr(stan_data, "country_codes")
+      if (is.null(country_codes)) {
+        stop(
+          "`country` was given as a code, but `stan_data` is missing its ",
+          "'country_codes' attribute -- pass `stan_data` from ",
+          "assemble_stan_data() >= 0.7.0, or pass `country` as a raw ",
+          "integer country index instead.",
+          call. = FALSE
+        )
+      }
+      country_index <- match(country, country_codes)
+      if (is.na(country_index)) {
+        stop("`country` = \"", country, "\" not found in `stan_data`'s country_codes.", call. = FALSE)
+      }
+    } else {
+      country_index <- as.integer(country)
+    }
+    gamma_draws <- .get_draws(fit, "gamma")
+    gamma_mat <- .as_plain_matrix(posterior::as_draws_matrix(gamma_draws))
+    gamma_vec <- gamma_mat[, paste0("gamma[", seq_len(A), ",", country_index, "]"), drop = FALSE]
+  }
 
   if (is.null(event_classes) && !is.null(stan_data)) {
     event_classes <- attr(stan_data, "event_classes")
@@ -204,7 +270,7 @@ icc_curves <- function(
 
   for (g in seq_len(n_grid)) {
     theta_g <- theta_grid[g]
-    eta <- alpha_mat * theta_g - mu_mat
+    eta <- alpha_mat * theta_g - mu_mat - gamma_vec
     p_mat <- .softmax_rows(eta)
 
     if (type == "probability") {
@@ -253,7 +319,7 @@ icc_curves <- function(
   }
   attr(result, "settings") <- list(
     n_grid = n_grid, quantile_probs = quantile_probs, stan_model = stan_model,
-    categories = categories, n_draws = n_draws
+    categories = categories, n_draws = n_draws, country = country
   )
 
   result

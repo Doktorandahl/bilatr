@@ -37,3 +37,52 @@ real partial_log_lik(array[] int slice_d,
   }
   return lp;
 }
+
+// Country-offset variant of partial_log_lik(), added alongside it (0.7.0,
+// bilatr_alphanorm_gamma.stan / registered `stable_gamma`) -- not a fork,
+// per this file's own header: partial_log_lik() itself is untouched, and
+// every other registered program (stable, ou, and the legacy soft-anchor
+// pair) gets this spliced in too via data-raw/sync_stan_functions.R, as
+// an unused extra function, so their .stan text changes (one-time
+// recompile) but their data/parameter blocks -- and hence fits already on
+// disk -- are untouched.
+//
+// g_d, the per-dyad country offset, is built ONCE PER DYAD, outside the
+// `t` loop -- not stored anywhere (see bilatr_alphanorm_gamma.stan's
+// header, "Part 0b": a per-dyad-period or per-dyad matrix in transformed
+// parameters would be written to the output CSV at prohibitive cost).
+// w_send[d] == 1 covers directed data (g_d = gamma[, ctry_a[d]] exactly,
+// ctry_b[d] unused) and the directed-as-degenerate-undirected case alike;
+// any other value mixes ctry_a's and ctry_b's columns by event share (see
+// bilatr_alphanorm_gamma.stan's header for the directed/undirected
+// design this implements).
+real partial_log_lik_offset(array[] int slice_d,
+                             int start, int end,
+                             int T, int A,
+                             array[,] int is_obs,
+                             array[,,] int Y,
+                             array[,] real theta,
+                             vector mu_intercept,
+                             vector phi,
+                             vector alpha,
+                             matrix gamma,
+                             array[] int ctry_a,
+                             array[] int ctry_b,
+                             vector w_send) {
+  real lp = 0;
+  for (d in start:end) {
+    // once per dyad, not per dyad-period
+    vector[A] g = w_send[d] == 1.0
+                  ? gamma[, ctry_a[d]]
+                  : w_send[d] * gamma[, ctry_a[d]] + (1 - w_send[d]) * gamma[, ctry_b[d]];
+    for (t in 1:T) {
+      if (is_obs[d, t] == 1) {
+        vector[A] eta = alpha .* rep_vector(theta[d, t], A) - mu_intercept - g;
+        vector[A] p = softmax(eta);
+        vector[A] conc = phi[d] * p;
+        lp += dirichlet_multinomial_lpmf(Y[d, t] | conc);
+      }
+    }
+  }
+  return lp;
+}

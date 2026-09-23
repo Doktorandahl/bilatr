@@ -119,6 +119,10 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #' identical parameter set and so share one `switch()` branch each --
 #' they differ only in what the `.stan` program does with `alpha_raw`'s
 #' sign once sampled (see [.alpha_raw_sum0_init()]), not in shape.
+#' `stable_gamma` (0.7.0) gets its own branch: `stable`'s init list plus
+#' `gamma_z`/`sigma_gamma`, both started small (not exactly 0 -- same
+#' reasoning as `alpha_raw`'s non-zero start: an all-zero init is valid
+#' but leaves no spread to move away from the prior mode with).
 #' Unrecognised names are rejected upstream by [.resolve_stan_model()],
 #' so the `stop()` below should be unreachable in practice.
 #'
@@ -152,6 +156,35 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       mu_log_phi = 0,
       sigma_log_phi = 0.5
     ),
+    stable_gamma = {
+      n_countries <- stan_data$n_countries
+      c(
+        list(
+          theta_raw = matrix(0, D, Tn),
+          mu_intercept = rep(0, A),
+          alpha_raw = .alpha_raw_sum0_init(A),
+          sigma_theta0 = 0.5,
+          z_theta0 = stats::rnorm(D, 0, 0.5),
+          log_process_noise_raw = rep(0, D),
+          mu_log_noise = log(0.2),
+          sigma_log_noise = 0.3,
+          phi = rep(1, D),
+          mu_log_phi = 0,
+          sigma_log_phi = 0.5
+        ),
+        # gamma_z near (but not at) 0: an all-zero init is valid (gamma_z
+        # is unconstrained) but, like alpha_raw above, leaves the
+        # projected-out directions exactly at their prior mode with no
+        # spread to break out of -- a small non-zero draw is the more
+        # conservative default. sigma_gamma starts small (its
+        # half-normal(0, 0.3) prior means the data should pull it up if
+        # warranted, not down from an over-confident large start).
+        list(
+          gamma_z = matrix(stats::rnorm(A * n_countries, 0, 0.1), A, n_countries),
+          sigma_gamma = rep(0.1, A)
+        )
+      )
+    },
     ou = ,
     ou_soft_anchor = list(
       theta_raw = matrix(0, D, Tn),

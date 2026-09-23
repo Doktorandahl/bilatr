@@ -12,15 +12,15 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # `stable`/`ou` (current, alpha[1] > 0 by construction) plus the
-  # retired `stable_soft_anchor`/`ou_soft_anchor` (pre-0.4.2, kept
-  # registered so their CmdStan output stays readable -- see NEWS.md).
-  # phi_logn was retired to inst/stan/legacy/ in 0.3.2, and the pre-0.4.0
-  # stable/ou were retired there in 0.4.0 when alphanorm/alphanorm_ou
-  # were promoted; neither of those two is registered.
+  # `stable`/`ou`/`stable_gamma` (current, alpha[1] > 0 by construction)
+  # plus the retired `stable_soft_anchor`/`ou_soft_anchor` (pre-0.4.2,
+  # kept registered so their CmdStan output stays readable -- see
+  # NEWS.md). phi_logn was retired to inst/stan/legacy/ in 0.3.2, and the
+  # pre-0.4.0 stable/ou were retired there in 0.4.0 when alphanorm/
+  # alphanorm_ou were promoted; neither of those two is registered.
   expect_setequal(
     names(.bilatr_stan_models),
-    c("stable", "ou", "stable_soft_anchor", "ou_soft_anchor")
+    c("stable", "ou", "stable_gamma", "stable_soft_anchor", "ou_soft_anchor")
   )
 
   for (name in names(.bilatr_stan_models)) {

@@ -12,7 +12,7 @@ test_that("every non-legacy registered model's GENERATED partial_log_lik block m
   active_models <- names(Filter(
     function(m) !identical(m$status, "legacy"), .bilatr_stan_models
   ))
-  expect_setequal(active_models, c("stable", "ou"))
+  expect_setequal(active_models, c("stable", "ou", "stable_gamma"))
 
   for (name in active_models) {
     stan_path <- .resolve_stan_model(name)
