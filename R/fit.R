@@ -43,11 +43,10 @@
 
 #' Compile the bilatr Stan model
 #'
-#' Compiles the package's single collapsed Stan program
-#' (`inst/stan/bilatr_dirmult_irt.stan`), used by both [fit_dyad_ts()] and
-#' [fit_panel()]. Compiled executables are cached internally by
-#' `opt_level`, so repeated calls with the same `opt_level` are cheap
-#' after the first.
+#' Compiles the package's registered `stable` Stan program (see
+#' `R/model_registry.R`), used by both [fit_dyad_ts()] and [fit_panel()].
+#' Compiled executables are cached internally by `opt_level`, so repeated
+#' calls with the same `opt_level` are cheap after the first.
 #'
 #' @param opt_level C++ compiler optimization level passed to CmdStan's
 #'   `O` Makefile variable (0-3). The reduce_sum-based likelihood in this

@@ -20,20 +20,24 @@ assemble_stan_data(
   prior_only = 0,
   compute_theta_filtered = 0,
   filter_dyads = NULL,
-  anchor_scale = 0.1
+  anchor_scale = 0.1,
+  actor1 = "Actor1CountryCode",
+  actor2 = "Actor2CountryCode",
+  date = "SQLDATE"
 )
 }
 \arguments{
-\item{data}{A data frame of event-level records, as produced by
-\code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}} or \code{\link[=ingest_icews]{ingest_icews()}} and recoded via
-\code{\link[=recode_cameo]{recode_cameo()}}.}
+\item{data}{A data frame of event-level records; see
+\code{?bilatr_event_data}. Two helpers produce data in this format:
+\code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}} and \code{\link[=recode_cameo]{recode_cameo()}}.}
 
-\item{years}{Integer vector of years to cover. Also passed to
-\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}} (0.7.1) to window its \code{w_send}
-computation (consumed only by the experimental \code{stable_gamma}
-variant) to the same analysis window \code{Y}'s counts are restricted to
--- before 0.7.1, \code{w_send} pooled every year present in \code{data},
-including years outside \code{years} that the likelihood never sees.}
+\item{years}{Integer vector of years to cover. Rows outside \code{years} are
+dropped from \code{data} before anything else -- including before the
+class order is built (0.9.0; previously an action class seen only
+outside \code{years} still got an all-zero column of \code{Y}, identified only
+by its prior). A \code{message()} reports how many rows were dropped, and
+names any class present in \code{data} that has zero in-window events (and
+so is absent from \code{event_classes}/\code{A}/\code{Y}).}
 
 \item{resolution}{Either \code{"monthly"} or \code{"yearly"}.}
 
@@ -50,7 +54,10 @@ into the reported \code{alpha}/\code{theta} (see each \code{.stan} file's header
 \code{alpha} vector to 1, so positive \code{alpha[1]} means better relations at
 this reference/neutral class. Should typically be a
 low-conflict/cooperative class. Every other action class's
-discrimination (\code{alpha[2:A]}) is freely estimated.}
+discrimination (\code{alpha[2:A]}) is freely estimated. \code{NULL} (default)
+anchors on the first class in C-locale numeric sort instead; if
+supplied but absent from the (in-window) data, errors (0.9.0; see
+\code{\link[=validate_reference_class]{validate_reference_class()}}).}
 
 \item{min_n_events}{Minimum total events for a dyad to be retained.}
 
@@ -132,6 +139,11 @@ here (CmdStan ignores data a program doesn't declare), so this
 function doesn't need to branch on \code{stan_model}. \code{alpha[1]} is
 already the reference/neutral action class supplied via
 \code{reference_category} -- no separate index is needed. Default \code{0.1}.}
+
+\item{actor1, actor2}{Names of the sender/target actor columns; see
+\code{?bilatr_event_data}.}
+
+\item{date}{Name of the event-date column; see \code{?bilatr_event_data}.}
 }
 \value{
 A named list suitable as the \code{data} argument to
@@ -156,14 +168,22 @@ max), so a country identified from only one or two dyads (whose
 is visible before fitting, not after. Also carries a \code{dyad_ids}
 attribute (the output of \code{\link[=make_dyad_ids]{make_dyad_ids()}}) for reattaching
 identifiers to posterior draws (see \code{\link[=extract_theta]{extract_theta()}}), an
-\code{event_classes} attribute, and (0.7.0) a \code{country_codes} attribute
-(character, in \code{ctry_a}/\code{ctry_b} index order) for labelling \code{gamma}
-(see \code{\link[=extract_gamma]{extract_gamma()}}).
+\code{event_classes} attribute, a \code{grouping_var} attribute (0.9.0; the
+\code{grouping_var} argument itself, for downstream class-label
+derivation), and (0.7.0) a \code{country_codes} attribute (character, in
+\code{ctry_a}/\code{ctry_b} index order) for labelling \code{gamma} (see
+\code{\link[=extract_gamma]{extract_gamma()}}).
 }
 \description{
-Aggregates CAMEO-coded event data to dyad-period action-class counts
-and packages it as the data list expected by the package's Stan model
-(\code{inst/stan/bilatr_dirmult_irt.stan}).
+Aggregates event data to dyad-period action-class counts and packages
+it as the data list expected by the package's Stan model (the
+registered \code{stable} program; see \code{R/model_registry.R}).
+}
+\details{
+Validates \code{data} against \code{?bilatr_event_data} first, drops rows outside
+\code{years} before the set of observed event classes is determined (see
+\verb{@param years}), then delegates the aggregation itself to
+\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}.
 }
 \examples{
 \dontrun{

@@ -11,11 +11,13 @@ validate_reference_class(value, classes, arg_name)
 
 \item{classes}{Vector of observed event-class values.}
 
-\item{arg_name}{Name of the argument, used in the warning message.}
+\item{arg_name}{Name of the argument, used in the error message.}
 }
 \value{
-\code{value} (coerced to character) if it is present in \code{classes},
-otherwise \code{NULL} with a warning.
+\code{value} (coerced to character) if it is present in \code{classes}.
+\code{NULL} is returned as-is: the only way to say "no preference", which
+then anchors on the first class in \code{\link[=order_event_classes]{order_event_classes()}}'s
+C-locale numeric sort.
 }
 \description{
 Validate a reference-category argument against the observed classes

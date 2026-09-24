@@ -1,3 +1,76 @@
+# bilatr 0.9.0
+
+Retires ICEWS and replaces the implicit event-data format with an explicit,
+validated contract (`?bilatr_event_data`); fixes D1-D4 from
+`dev/audit_2026-09-23.md` (see `dev/claude_code_prompt_0.9.0_data_contract.md`).
+Verified against the production `gdelt_bilatr.rds` extract: every `stan_data`
+field, `event_classes`, and `country_codes` are `identical()` to 0.8.1's for
+both `directed = TRUE` and `FALSE` (the only difference is `dyad_ids$year`'s
+storage type, `double` -> `integer`, with numerically identical values).
+
+## Breaking changes
+
+* `ingest_icews()`, `relevant_actors_icews()`, and `normalize_cameo_code()`
+  removed; users supply their own event table (`?bilatr_event_data`).
+* An `NA` class, an `NA` actor or date, a self-dyad, or an actor code
+  containing `"_"` is now an error (`validate_bilatr_events()`), not a
+  silent extra category, drop-with-warning, or downstream crash.
+* A missing `reference_category` is now an error (`validate_reference_class()`),
+  not a warning that silently anchors on whichever class sorts first.
+* `grouped_events_to_dyad_period(years =)` now filters all rows, not just
+  the `w_send` computation.
+* `assemble_stan_data()` drops out-of-window rows before the class order is
+  built (the class order was previously built first, so an out-of-window-only
+  class got an all-zero `Y` column identified only by its prior). `A`/
+  `event_classes` can shrink for inputs containing classes seen only outside
+  `years`; production data is unaffected (see Part 5 above).
+* `recode_cameo()` now `stop()`s on a non-character/factor code column,
+  instead of failing inside `left_join()` with an opaque type-mismatch error.
+
+## New
+
+* `?bilatr_event_data`: the documented event-table contract every ingesting
+  function now validates against.
+* `validate_bilatr_events()`, exported, and the `actor1`/`actor2`/`date`
+  arguments on `grouped_events_to_dyad_period()`/`assemble_stan_data()`
+  (defaults match GDELT's own column names, so existing calls are
+  unaffected).
+* `dyad_ids` (the `assemble_stan_data()`/`make_dyad_ids()` attribute) gains
+  `actor_a`/`actor_b`; `stan_data` gains a `grouping_var` attribute.
+
+## Bug fixes
+
+* D1: actor codes of any length/alphabet (COW numeric, ISO2, free-text
+  labels, not just 3-letter ISO3) now work for both directed and undirected
+  data. Side A/B and the undirected dyad key are carried as columns from the
+  start and ordered deterministically (C-locale radix), instead of being
+  parsed back out of the `dyad` string with `str_sub()`.
+* D2: an `NA` event class is now a validator error instead of becoming an
+  extra `"NA"` action category in `Y` (closes the 0.8.0 known issue).
+* D3: an action class seen only outside `years` no longer gets an all-zero,
+  prior-only-identified column of `Y`.
+* D4: a missing `reference_category` is now an error instead of a silent
+  fallback anchor.
+* The column-clobbering bug: a user's own `dyad`/`date`/`year`/`month`/
+  `event_type` columns are no longer overwritten by the internal aggregate.
+* `make_dyad_ids()`'s duplicate skeleton-fill (it re-filled and re-filtered
+  the already-filled, already-filtered table `assemble_stan_data()` passed
+  it) is gone; it is now a pure function of the assembled table.
+* `recode_cameo()` reports how many rows failed to match `cameo_lookup` and
+  how many matched a bare top-level root with no `ModifiedRootCode`.
+
+## Internal
+
+* `lubridate` dropped (its only uses -- date/year/month parsing -- are
+  replaced by `.parse_event_date()`); `furrr` moved from Imports to
+  Suggests (only used in `\dontrun{}` roxygen examples since ICEWS's
+  removal).
+* README's Quick start and Model overview rewritten around the new contract
+  and the actual `stable` Stan program (likelihood weights, the orientation
+  fold, and `theta0`'s construction were stale since 0.4.2-0.4.6); same
+  stale-model-text fixes in `R/stan_data.R`, `R/fit.R`, and
+  `vignettes/diagnostics.Rmd`.
+
 # bilatr 0.8.1
 
 Housekeeping only: no model, data pipeline, or exported function behaviour
@@ -58,8 +131,8 @@ columns; committed as found ahead of the 2026-09-23 audit
 * **Known issue**: an event whose code is a bare `"01"`/`"04"` therefore
   gets `NA` from `recode_cameo()`, and `assemble_stan_data()` currently
   turns `NA` classes into an extra `"NA"` action category (to be fixed in
-  0.9.0). The production GDELT extract contains no two-digit codes, so no
-  existing fit is affected.
+  0.9.0) (fixed in 0.9.0). The production GDELT extract contains no
+  two-digit codes, so no existing fit is affected.
 
 # bilatr 0.7.1
 

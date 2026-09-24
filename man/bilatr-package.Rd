@@ -6,7 +6,7 @@
 \alias{bilatr-package}
 \title{bilatr: Hierarchical Dynamic IRT Models for Dyadic Conflict Trajectories}
 \description{
-Fits a hierarchical Bayesian dynamic item-response-theory-style model to dyadic event data (GDELT/ICEWS, CAMEO-coded) in order to estimate latent conflict trajectories. Action types discriminate between high- and low-conflict states through a Dirichlet-multinomial likelihood, and dyad-specific latent states follow a random-walk process, with support for both single-dyad time-series and multi-dyad panel estimation. Includes GDELT/ICEWS ingestion and CAMEO recoding helpers, 'cmdstanr'-based fitting wrappers, and tidy posterior extraction utilities.
+Fits a hierarchical Bayesian dynamic item-response-theory-style model to dyadic event data in order to estimate latent conflict trajectories. Users supply CAMEO-coded (or any categorically coded) dyadic event data in a documented, validated format; action types discriminate between high- and low-conflict states through a Dirichlet-multinomial likelihood, and dyad-specific latent states follow a random-walk process, with support for both single-dyad time-series and multi-dyad panel estimation. Includes GDELT download/ingest helpers and a CAMEO recoding table, 'cmdstanr'-based fitting wrappers, and tidy posterior extraction utilities.
 }
 \seealso{
 Useful links:

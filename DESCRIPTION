@@ -1,20 +1,21 @@
 Package: bilatr
 Title: Hierarchical Dynamic IRT Models for Dyadic Conflict Trajectories
-Version: 0.8.1
+Version: 0.9.0
 Authors@R: c(
     person("David", "Randahl", , "david.randahl@fhs.se", role = c("aut", "cre")),
     person("Magnus", "Lundgren", role = "aut"),
     person("Carl", "Vikberg", role = "aut")
   )
 Description: Fits a hierarchical Bayesian dynamic item-response-theory-style
-    model to dyadic event data (GDELT/ICEWS, CAMEO-coded) in order to
-    estimate latent conflict trajectories. Action types discriminate
-    between high- and low-conflict states through a Dirichlet-multinomial
-    likelihood, and dyad-specific latent states follow a random-walk
-    process, with support for both single-dyad time-series and
-    multi-dyad panel estimation. Includes GDELT/ICEWS ingestion and
-    CAMEO recoding helpers, 'cmdstanr'-based fitting wrappers, and tidy
-    posterior extraction utilities.
+    model to dyadic event data in order to estimate latent conflict
+    trajectories. Users supply CAMEO-coded (or any categorically coded)
+    dyadic event data in a documented, validated format; action types
+    discriminate between high- and low-conflict states through a
+    Dirichlet-multinomial likelihood, and dyad-specific latent states
+    follow a random-walk process, with support for both single-dyad
+    time-series and multi-dyad panel estimation. Includes GDELT
+    download/ingest helpers and a CAMEO recoding table, 'cmdstanr'-based
+    fitting wrappers, and tidy posterior extraction utilities.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -33,8 +34,6 @@ Imports:
     httr,
     readr,
     data.table,
-    lubridate,
-    furrr,
     parallelly,
     stats,
     utils
@@ -46,7 +45,8 @@ Suggests:
     ggplot2,
     callr,
     ps,
-    devtools
+    devtools,
+    furrr
 Additional_repositories: https://mc-stan.org/r-packages/
 VignetteBuilder: knitr
 Config/testthat/edition: 3

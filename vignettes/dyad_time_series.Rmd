@@ -23,7 +23,8 @@ dyads at once with hierarchical pooling, see `vignette("panel_model")`.
 
 ## 1. Data prep
 
-In a real workflow you'd start from raw GDELT or ICEWS event data:
+In a real workflow you'd start from raw GDELT event data, or any other
+event table in the format documented at `?bilatr_event_data`:
 
 ```{r, eval = FALSE}
 library(bilatr)

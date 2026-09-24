@@ -1,13 +1,14 @@
 # bilatr
 
 `bilatr` fits a hierarchical Bayesian dynamic IRT-style model to dyadic
-event data (GDELT/ICEWS, CAMEO-coded) to estimate latent conflict
-trajectories (`theta`) between country pairs over time. Action types
-discriminate between high- and low-conflict states through a
-Dirichlet-multinomial likelihood, with dyad-specific latent states
-following a random-walk process. The package supports both single-dyad
-time-series estimation and multi-dyad panel estimation with
-hierarchical pooling.
+event data (CAMEO-coded, or any categorically coded event type) to
+estimate latent conflict trajectories (`theta`) between country pairs
+over time. Action types discriminate between high- and low-conflict
+states through a Dirichlet-multinomial likelihood, with dyad-specific
+latent states following a random-walk process. The package supports
+both single-dyad time-series estimation and multi-dyad panel estimation
+with hierarchical pooling. You supply the event data (see `?bilatr_event_data`);
+GDELT download/ingest helpers and a CAMEO recoding table are included.
 
 ## Installation
 
@@ -54,7 +55,10 @@ library(bilatr)
 library(dplyr)
 
 # --- 1. Data prep -----------------------------------------------------
-# Start from a raw GDELT export (or ingest_icews() for ICEWS data):
+# Bring an event table in the format documented at ?bilatr_event_data:
+# an actor1/actor2 pair (any code alphabet -- ISO3, ISO2, COW numeric,
+# free-text labels), an event date, and an event-class column. GDELT
+# helpers are included but optional:
 events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
 
 # Recode CAMEO event codes to QuadClass/PentaClass using the package's
@@ -62,15 +66,21 @@ events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
 events <- recode_cameo(events)
 
 # --- 2. Assemble Stan data ---------------------------------------------
-# reference_category anchors the model's scale/sign reference (alpha[1] = 1);
-# every other action class's discrimination (alpha[2:A]) is freely estimated.
+# actor1/actor2/date name your event table's columns (defaults shown
+# here match GDELT's own column names, so they can be omitted for GDELT
+# data). reference_category anchors the model's scale/sign reference;
+# every other action class's discrimination (alpha[2:A]) is freely
+# estimated.
 stan_data <- assemble_stan_data(
   events,
   years = 2015:2020,
   resolution = "yearly",
   grouping_var = "PentaClass",
   reference_category = 0, # verbal cooperation
-  min_n_events = 10
+  min_n_events = 10,
+  actor1 = "Actor1CountryCode",
+  actor2 = "Actor2CountryCode",
+  date = "SQLDATE"
 )
 
 # --- 3. Fit --------------------------------------------------------------
@@ -90,30 +100,42 @@ fit$summary(variables = c("alpha", "mu_intercept", "phi"))  # includes rhat, ess
 fit$diagnostic_summary()                                     # divergences, tree-depth saturation
 ```
 
-See `vignette("dyad-time-series")` and `vignette("panel-model")` for
+See `vignette("dyad_time_series")` and `vignette("panel_model")` for
 walkthroughs covering both estimation modes end to end, including how
 to read the convergence diagnostics.
 
 ## Model overview
 
-- **Likelihood**: dyad-period event-type counts follow a
-  Dirichlet-multinomial, with concentration `phi[d] * softmax(alpha .* theta[d,t] - mu_intercept)` (optionally rescaled by
-  `dyad_weight`/`period_weight`/`action_weight`, all default to 1s).
-- **Identification**: `alpha[1] = 1` and `mu_intercept[1] = 0` are the
-  fixed reference points (discrimination scale/sign, and location); every
-  other `alpha[2:A]` is freely estimated. There is no dyad-specific
-  intercept — cross-dyad level differences are absorbed into the global
-  `mu_intercept`, which is what keeps `theta` comparable across dyads.
-- **Dynamics**: `theta` follows a random walk per dyad, starting from a
-  fully hierarchical `theta0` (`mu_theta0`, `sigma_theta0`), not a
-  fixed or data-supplied prior.
-- **Pooling** (panel mode only): process noise, `phi`, and `theta0` are
-  partially pooled across dyads via lognormal/normal hyperpriors; the
-  `process_noise` hierarchy is sampled non-centered.
+This describes the registered `stable` Stan program
+(`inst/stan/bilatr_alphanorm.stan`), fit by `fit_dyad_ts()`/`fit_panel()`
+by default.
 
-One Stan program (`inst/stan/bilatr_dirmult_irt.stan`) covers both
-estimation modes and all reweighting configurations — see
-[`assemble_stan_data()`] for how the weight vectors are constructed.
+- **Likelihood**: dyad-period event-type counts follow a
+  Dirichlet-multinomial, with concentration
+  `phi[d] * softmax(alpha .* theta[d,t] - mu_intercept)`.
+- **Identification**: `alpha` has RMS (population SD) exactly 1 and sums
+  to zero, by construction; `mu_intercept` is likewise a
+  `sum_to_zero_vector`, with no fixed-first-to-0 element. An orientation
+  fold (see the `.stan` file's header, "IDENTIFICATION: ORIENTATION
+  FOLD") reports every fit with `alpha[1] >= 0`, so positive `alpha[1]`
+  always means higher `theta` corresponds to better (less hostile)
+  relations at the reference/neutral action class -- without truncating
+  or excluding any part of the sampled parameter space. There is no
+  dyad-specific intercept — cross-dyad level differences are absorbed
+  into the global `mu_intercept`, which is what keeps `theta` comparable
+  across dyads.
+- **Dynamics**: `theta` follows a random walk per dyad, starting from
+  `theta0 = sigma_theta0 * z_theta0` (population mean pinned at 0, no
+  separate `mu_theta0` location parameter).
+- **Pooling** (panel mode only): process noise and `phi` are partially
+  pooled across dyads via lognormal hyperpriors; the `process_noise`
+  hierarchy is sampled non-centered.
+
+Two other Stan programs are registered as experimental variants: `ou`
+(an Ornstein-Uhlenbeck `theta` with mean reversion instead of a pure
+random walk) and `stable_gamma` (adds a country-level category-offset
+`gamma` on top of `stable`'s likelihood). See `R/model_registry.R` and
+[`assemble_stan_data()`] for details.
 
 ## Performance notes
 

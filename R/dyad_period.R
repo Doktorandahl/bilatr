@@ -2,22 +2,27 @@
 #'
 #' @param value The candidate reference value, or `NULL`.
 #' @param classes Vector of observed event-class values.
-#' @param arg_name Name of the argument, used in the warning message.
-#' @return `value` (coerced to character) if it is present in `classes`,
-#'   otherwise `NULL` with a warning.
+#' @param arg_name Name of the argument, used in the error message.
+#' @return `value` (coerced to character) if it is present in `classes`.
+#'   `NULL` is returned as-is: the only way to say "no preference", which
+#'   then anchors on the first class in [order_event_classes()]'s
+#'   C-locale numeric sort.
 #' @keywords internal
 validate_reference_class <- function(value, classes, arg_name) {
   if (is.null(value)) {
     return(NULL)
   }
   value <- as.character(value)
-  if (!(value %in% unique(classes))) {
-    warning(
-      arg_name, " '", value, "' not found in the data; ",
-      "proceeding without it.",
+  observed <- unique(as.character(classes))
+  if (!(value %in% observed)) {
+    stop(
+      arg_name, " = '", value, "' was requested, but is not present in the ",
+      "(in-window) data. Classes present: ",
+      paste(sort(observed), collapse = ", "),
+      ". `", arg_name, " = NULL` anchors on the first class instead ",
+      "(C-locale numeric sort).",
       call. = FALSE
     )
-    return(NULL)
   }
   value
 }
@@ -50,62 +55,60 @@ order_event_classes <- function(classes, reference_category = NULL) {
   c(reference_category, middle)
 }
 
-#' Aggregate CAMEO-coded events to dyad-period class counts
+#' Aggregate event data to dyad-period class counts
 #'
-#' Collapses event-level data (as produced by [extract_all_relevant_gdelt()]
-#' or [ingest_icews()]) to dyad-by-time-period counts of a chosen
-#' event-class column (e.g. `QuadClass`, `PentaClass`), one column per
-#' class plus a `total_events` column. This is the shared aggregation step
-#' feeding [assemble_stan_data()].
+#' Collapses event-level data (in the format documented at
+#' `?bilatr_event_data`; as produced by e.g. [extract_all_relevant_gdelt()]
+#' and [recode_cameo()]) to dyad-by-time-period counts of a chosen
+#' event-class column, one column per class plus a `total_events` column.
+#' This is the shared aggregation step feeding [assemble_stan_data()].
 #'
-#' @param data A data frame of event-level records with
-#'   `Actor1CountryCode`, `Actor2CountryCode`, `SQLDATE`, and the column
-#'   named by `grouping_var`.
+#' Validates `data` with [validate_bilatr_events()] first, then builds a
+#' slim internal table (`actor1`/`actor2`/`date`/`grouping_var`, renamed
+#' and re-typed, plus a derived `year`/`month`) that every later step in
+#' this function works from -- a user's own `dyad`/`date`/`year`/`month`/
+#' `event_type` columns, if present in `data`, are never read or
+#' overwritten.
+#'
+#' @param data A data frame of event-level records; see
+#'   `?bilatr_event_data`.
 #' @param resolution Either `"monthly"` or `"yearly"`.
 #' @param grouping_var Name of the event-class column to aggregate on
 #'   (e.g. `"QuadClass"`, `"PentaClass"`).
 #' @param directed If `TRUE` (default), dyads are directed
 #'   (actor1 -> actor2); if `FALSE`, actor order is ignored and dyads are
-#'   collapsed to an unordered pair.
+#'   collapsed to an unordered pair, with side A/B assigned by
+#'   [.order_pair_c_locale()] (deterministic, locale-independent).
 #' @param reference_category Value of `grouping_var` to place first in
 #'   the class ordering (the model's scale/sign-reference, neutral
 #'   action: `stable`/`ou` build `alpha[1]` positive by construction --
-#'   see [order_event_classes()]). If `NULL` or not present in the data,
-#'   ignored with a warning. All other action classes' discrimination is
-#'   freely estimated.
-#' @param years Integer vector of years, or `NULL` (default). Used
-#'   **only** for the `w_send` computation described below -- restricts
-#'   the event rows pooled into `w_send` to `year %in% years`, matching
-#'   the analysis window [assemble_stan_data()] restricts `Y`'s counts to
-#'   (via [fill_dyad_period_skeleton()]'s right join, downstream). The
-#'   main dyad-period aggregation returned by this function is
-#'   unaffected -- it is still built from every row of `data`, exactly as
-#'   before; only `w_send` narrows. `NULL` pools every year in `data`,
-#'   preserving this function's behaviour for a direct caller that isn't
-#'   going through [assemble_stan_data()] (0.7.0's original behaviour).
+#'   see [order_event_classes()]). `NULL` (default) anchors on the first
+#'   class in C-locale numeric sort instead. If supplied but not present
+#'   among the (in-window) classes, errors -- see
+#'   [validate_reference_class()]. All other action classes'
+#'   discrimination is freely estimated.
+#' @param years Integer vector of years, or `NULL` (default, meaning
+#'   "use every row"). When supplied, rows outside `years` are dropped
+#'   before any aggregation -- for every computation this function does,
+#'   including `w_send` below, not only (as before 0.9.0) the `w_send`
+#'   computation.
+#' @param actor1,actor2 Names of the sender/target actor columns; see
+#'   `?bilatr_event_data`.
+#' @param date Name of the event-date column; see `?bilatr_event_data`.
 #' @return A data frame with columns `dyad`, `year` (and `month` if
-#'   `resolution = "monthly"`), one `EventClass_<value>` column per
-#'   observed class (ordered per `reference_category`), and `total_events`.
-#'   Also carries a `w_send` attribute (0.7.0; consumed by
-#'   [assemble_stan_data()] for the experimental `stable_gamma` Stan
-#'   variant -- see `R/model_registry.R`): a tibble with one row per
-#'   dyad, `ctry_a_code`/`ctry_b_code` (side A/B's 3-letter country code,
-#'   `str_sub(dyad, 1, 3)`/`str_sub(dyad, 5, 7)`, the same convention
-#'   [make_dyad_ids()] uses for its own `dyad2`) and `w_send` (the share
-#'   of that pair's events, POOLED over `years` if supplied (else every
-#'   period in `data`) -- not per dyad-period, since the country offset
-#'   this feeds is dyad-constant and reused across `t`; a per-period
-#'   weight would cost an `A x D x T` object in [assemble_stan_data()]'s
-#'   output for nothing -- with side A as `Actor1CountryCode`). For
-#'   directed data this is exactly `1` by construction (side A IS
-#'   `Actor1CountryCode` in the directed dyad key), asserted internally
-#'   below as a free check on the dyad-key convention (it would silently
-#'   invert if a future change swapped the `paste()` argument order
-#'   building `dyad` above). A row with `NA` `Actor1CountryCode` is
-#'   dropped from this computation (with a `warning()` naming how many)
-#'   rather than propagating `NA` into `w_send` -- an `NA` reaching
-#'   `stan_data$w_send` would otherwise surface as an opaque CmdStan data
-#'   error much later.
+#'   `resolution = "monthly"`), `actor_a`/`actor_b` (the directed dyad's
+#'   sender/target, or the undirected pair in
+#'   [.order_pair_c_locale()]'s deterministic order), one
+#'   `EventClass_<value>` column per observed class (ordered per
+#'   `reference_category`), and `total_events`. Also carries a `w_send`
+#'   attribute (0.7.0; consumed by [assemble_stan_data()] for the
+#'   experimental `stable_gamma` Stan variant -- see
+#'   `R/model_registry.R`): a tibble with one row per dyad, `actor_a`/
+#'   `actor_b`, and `w_send` (the share of that pair's events with side A
+#'   as sender, over the same rows the main aggregation uses). For
+#'   directed data this is exactly `1` by construction (side A IS the
+#'   sender in a directed dyad key), asserted internally below as a free
+#'   check on the dyad-key convention.
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -124,34 +127,50 @@ grouped_events_to_dyad_period <- function(
   grouping_var,
   directed = TRUE,
   reference_category = NULL,
-  years = NULL
+  years = NULL,
+  actor1 = "Actor1CountryCode",
+  actor2 = "Actor2CountryCode",
+  date = "SQLDATE"
 ) {
   resolution <- match.arg(resolution)
 
-  data <- data %>%
-    dplyr::mutate(
-      dyad = if (directed) {
-        paste(Actor1CountryCode, Actor2CountryCode, sep = "_")
-      } else {
-        paste(
-          pmin(Actor1CountryCode, Actor2CountryCode),
-          pmax(Actor1CountryCode, Actor2CountryCode),
-          sep = "_"
-        )
-      },
-      date = lubridate::ymd(SQLDATE),
-      year = lubridate::year(date),
-      month = lubridate::month(date),
-      event_type = as.character(.data[[grouping_var]])
-    )
+  validate_bilatr_events(data, grouping_var, actor1, actor2, date)
 
-  reference_category <- validate_reference_class(reference_category, data$event_type, "reference_category")
+  slim <- tibble::tibble(
+    .actor1 = as.character(data[[actor1]]),
+    .actor2 = as.character(data[[actor2]]),
+    .date = .parse_event_date(data[[date]]),
+    .class = as.character(data[[grouping_var]])
+  )
+  slim$.year <- as.integer(format(slim$.date, "%Y"))
+  slim$.month <- as.integer(format(slim$.date, "%m"))
 
-  class_order <- order_event_classes(data$event_type, reference_category)
+  if (!is.null(years)) {
+    slim <- dplyr::filter(slim, .year %in% years)
+  }
+
+  if (directed) {
+    slim$actor_a <- slim$.actor1
+    slim$actor_b <- slim$.actor2
+  } else {
+    pair <- .order_pair_c_locale(slim$.actor1, slim$.actor2)
+    slim$actor_a <- pair$actor_a
+    slim$actor_b <- pair$actor_b
+  }
+  slim$dyad <- paste(slim$actor_a, slim$actor_b, sep = "_")
+  slim$year <- slim$.year
+  slim$month <- slim$.month
+  slim$event_type <- slim$.class
+
+  reference_category <- validate_reference_class(reference_category, slim$event_type, "reference_category")
+
+  class_order <- order_event_classes(slim$event_type, reference_category)
   group_cols <- c("dyad", "year", if (resolution == "monthly") "month")
-  column_order <- c(group_cols, paste0("EventClass_", class_order), "total_events")
+  column_order <- c(group_cols, "actor_a", "actor_b", paste0("EventClass_", class_order), "total_events")
 
-  counts <- data %>%
+  dyad_actors <- dplyr::distinct(slim, dyad, actor_a, actor_b)
+
+  counts <- slim %>%
     dplyr::count(dplyr::across(dplyr::all_of(group_cols)), event_type) %>%
     tidyr::pivot_wider(
       names_from = event_type,
@@ -160,72 +179,33 @@ grouped_events_to_dyad_period <- function(
       names_prefix = "EventClass_"
     )
 
-  totals <- data %>%
+  totals <- slim %>%
     dplyr::count(dplyr::across(dplyr::all_of(group_cols)), name = "total_events")
 
   result <- counts %>%
     dplyr::left_join(totals, by = group_cols) %>%
+    dplyr::left_join(dyad_actors, by = "dyad") %>%
     dplyr::select(dplyr::any_of(column_order))
 
-  # w_send (0.7.0; see @return): per-dyad sender share, pooled over
-  # `years` (0.7.1 -- previously every period in `data` regardless of the
-  # analysis window; see @param years) not per dyad-period, computed from
-  # the raw event rows rather than from `result`'s per-period counts,
-  # since it needs Actor1CountryCode per event, not per action class.
-  # Side A is str_sub(dyad, 1, 3), matching make_dyad_ids()'s own
-  # convention for dyad2 -- both assume 3-letter country codes joined by
-  # a single "_", the same assumption `dyad` itself already relies on
-  # above.
-  w_send_data <- if (is.null(years)) data else dplyr::filter(data, year %in% years)
-
-  w_send_data <- dplyr::mutate(
-    w_send_data,
-    ctry_a_code = stringr::str_sub(dyad, 1, 3),
-    ctry_b_code = stringr::str_sub(dyad, 5, 7),
-    is_side_a_sender = Actor1CountryCode == ctry_a_code
-  )
-
-  # NA Actor1CountryCode -> NA is_side_a_sender (comparing NA to anything
-  # is NA in R, regardless of what paste() upstream turned a missing
-  # actor into inside `dyad` itself) -> mean() would silently return NA
-  # for that whole dyad, surfacing as an opaque CmdStan data error only
-  # once `w_send` reaches stan_data (see @return). Dropped here instead,
-  # with a warning naming how many rows/dyads were affected. If an
-  # affected dyad has EVERY row dropped this way, it disappears from the
-  # w_send tibble entirely -- assemble_stan_data()'s own guard (see
-  # R/stan_data.R, 0.7.1's country_info NA check) then stop()s naming
-  # that dyad, rather than silently shipping an NA into ctry_a/w_send.
-  na_rows <- is.na(w_send_data$is_side_a_sender)
-  if (any(na_rows)) {
-    n_dyads_affected <- length(unique(w_send_data$dyad[na_rows]))
-    warning(
-      sum(na_rows), " event row(s) (across ", n_dyads_affected,
-      " dyad(s)) had NA Actor1CountryCode and were dropped from the ",
-      "w_send computation.",
-      call. = FALSE
-    )
-    w_send_data <- w_send_data[!na_rows, , drop = FALSE]
-  }
-
-  w_send <- w_send_data %>%
+  # w_send (0.7.0; see @return): per-dyad sender share, over the same
+  # (already year-windowed) rows the main aggregation uses -- computed
+  # from the raw event rows rather than from `result`'s per-period
+  # counts, since it needs the sender per event, not per action class.
+  # For directed data this is exactly 1 by construction (actor_a IS
+  # .actor1 above), so no invariant check is needed -- unlike before
+  # 0.9.0, there is also no NA-actor case to guard against:
+  # validate_bilatr_events() above already guarantees neither actor
+  # column has NA, so every row contributes and no dyad can be dropped
+  # from this computation.
+  w_send <- slim %>%
+    dplyr::mutate(is_side_a_sender = .actor1 == actor_a) %>%
     dplyr::group_by(dyad) %>%
     dplyr::summarise(
-      ctry_a_code = dplyr::first(ctry_a_code),
-      ctry_b_code = dplyr::first(ctry_b_code),
+      actor_a = dplyr::first(actor_a),
+      actor_b = dplyr::first(actor_b),
       w_send = mean(is_side_a_sender),
       .groups = "drop"
     )
-
-  if (directed && !all(w_send$w_send == 1)) {
-    stop(
-      "Internal invariant violated: computed w_send != 1 for directed ",
-      "data. Side A (str_sub(dyad, 1, 3)) should always equal ",
-      "Actor1CountryCode for a directed dyad key -- this points to a bug ",
-      "in how `dyad` is built above (e.g. the paste() argument order), ",
-      "not a data issue.",
-      call. = FALSE
-    )
-  }
 
   attr(result, "w_send") <- w_send
   result
@@ -247,13 +227,14 @@ grouped_events_to_dyad_period <- function(
 fill_dyad_period_skeleton <- function(data, years, resolution = c("monthly", "yearly")) {
   resolution <- match.arg(resolution)
 
+  dyad_actors <- dplyr::distinct(data, dyad, actor_a, actor_b)
   skeleton <- if (resolution == "yearly") {
-    tidyr::expand_grid(dyad = unique(data$dyad), year = years)
+    tidyr::expand_grid(dyad_actors, year = years)
   } else {
-    tidyr::expand_grid(dyad = unique(data$dyad), year = years, month = 1:12)
+    tidyr::expand_grid(dyad_actors, year = years, month = 1:12)
   }
 
-  join_cols <- c("dyad", "year", if (resolution == "monthly") "month")
+  join_cols <- c("dyad", "actor_a", "actor_b", "year", if (resolution == "monthly") "month")
   count_cols <- c(grep("^EventClass_", names(data), value = TRUE), "total_events")
 
   data %>%
@@ -267,50 +248,33 @@ fill_dyad_period_skeleton <- function(data, years, resolution = c("monthly", "ye
 #' Reattach dyad string identifiers to a fitted model's integer dyad index
 #'
 #' [assemble_stan_data()] indexes dyads by an integer `dyad_id` (1..D) in
-#' row order. This reconstructs the same dyad x period skeleton and
-#' recovers the `dyad_id` <-> `dyad` (and undirected `dyad2`) mapping, so
-#' posterior draws indexed by `dyad_id` can be joined back to
-#' human-readable identifiers. See [extract_theta()].
+#' row order. This recovers the `dyad_id` <-> `dyad` (and undirected
+#' `dyad2`) mapping, so posterior draws indexed by `dyad_id` can be joined
+#' back to human-readable identifiers. See [extract_theta()].
 #'
-#' @inheritParams grouped_events_to_dyad_period
-#' @param years Integer vector of years covered by the fitted model.
-#' @param min_n_events Minimum total events for a dyad to have been
-#'   retained by [assemble_stan_data()]; must match the value used there.
+#' A pure function of the already-assembled table: `data` must already be
+#' skeleton-filled ([fill_dyad_period_skeleton()]) and `min_n_events`-
+#' filtered, exactly as [assemble_stan_data()] passes it -- this function
+#' does not re-fill or re-filter (0.9.0; previously it duplicated
+#' [assemble_stan_data()]'s own fill/filter on top of the "agg" table it
+#' was already given, one of which was redundant).
+#'
+#' @param data Output of [fill_dyad_period_skeleton()] after
+#'   `min_n_events` filtering (carrying `dyad`, `actor_a`, `actor_b`,
+#'   `year`, and `month` if monthly).
 #' @return A data frame with `dyad_id`, `time_index`, `dyad`, `dyad2`
-#'   (undirected dyad key), `year`, and (if monthly) `month`.
+#'   (undirected dyad key), `actor_a`, `actor_b`, `year`, and (if
+#'   monthly) `month`.
 #' @keywords internal
-make_dyad_ids <- function(
-  data,
-  years,
-  resolution = c("monthly", "yearly"),
-  min_n_events = 1
-) {
-  resolution <- match.arg(resolution)
-
-  dyad_secondid <- data %>%
-    dplyr::group_by(dyad) %>%
-    dplyr::slice(1) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(
-      a1 = stringr::str_sub(dyad, 1, 3),
-      a2 = stringr::str_sub(dyad, 5, 7),
-      dyad2 = dplyr::if_else(a1 < a2, paste(a1, a2, sep = "_"), paste(a2, a1, sep = "_"))
-    ) %>%
-    dplyr::select(dyad, dyad2)
-
-  data <- fill_dyad_period_skeleton(data, years, resolution)
-
-  drop_dyads <- data %>%
-    dplyr::group_by(dyad) %>%
-    dplyr::summarise(total_events = sum(total_events), .groups = "drop") %>%
-    dplyr::filter(total_events < min_n_events) %>%
-    dplyr::pull(dyad)
+make_dyad_ids <- function(data) {
+  pair <- .order_pair_c_locale(data$actor_a, data$actor_b)
+  data$dyad2 <- paste(pair$actor_a, pair$actor_b, sep = "_")
 
   data %>%
-    dplyr::filter(!(dyad %in% drop_dyads)) %>%
-    dplyr::left_join(dyad_secondid, by = "dyad") %>%
     dplyr::group_by(dyad) %>%
     dplyr::mutate(dyad_id = dplyr::cur_group_id(), time_index = dplyr::row_number()) %>%
     dplyr::ungroup() %>%
-    dplyr::select(dplyr::any_of(c("dyad_id", "time_index", "dyad", "dyad2", "year", "month")))
+    dplyr::select(dplyr::any_of(c(
+      "dyad_id", "time_index", "dyad", "dyad2", "actor_a", "actor_b", "year", "month"
+    )))
 }

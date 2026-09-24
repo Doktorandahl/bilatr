@@ -784,10 +784,20 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' Any of these columns that already exist in `data` are left as they are
 #' (not overwritten, no `.x`/`.y` suffixing), with a warning naming them.
 #'
+#' `code_col` must be character or factor. A numeric `EventCode` has
+#' already lost any leading zero (`"010"` -> `10`) by the time it reaches
+#' this function, and that loss is not recoverable here -- `stop()`s with
+#' a message to that effect rather than failing inside `left_join()` with
+#' an opaque type-mismatch error. After the join, `message()`s the number
+#' of rows whose code did not match [cameo_lookup] at all, and separately
+#' the number that matched but got `NA` `ModifiedRootCode` because they
+#' are a bare top-level root (e.g. `"01"`, `"04"`; see [cameo_lookup]'s
+#' docs) -- one line each, nothing when both are zero.
+#'
 #' @param data A data frame containing a CAMEO event code column.
 #' @param code_col Name of the column in `data` holding CAMEO event codes
 #'   (as a string). Defaults to `"EventCode"`, matching the raw GDELT
-#'   column name.
+#'   column name. Must be character or factor (see Details).
 #' @return `data` with the recode columns above attached (minus any that
 #'   were already present).
 #' @examples
@@ -797,6 +807,20 @@ assign_bilatr_class <- function(code, eventrootcode2 = assign_eventrootcode2(cod
 #' }
 #' @export
 recode_cameo <- function(data, code_col = "EventCode") {
+  code <- data[[code_col]]
+  if (is.factor(code)) {
+    data[[code_col]] <- as.character(code)
+  } else if (!is.character(code)) {
+    stop(
+      "recode_cameo(): `", code_col, "` must be character (or factor), ",
+      "not ", class(code)[1], ". A numeric CAMEO code has already lost ",
+      "any leading zero (e.g. \"010\" -> 10) by the time it reaches this ",
+      "function, and that is not recoverable here -- convert the raw code ",
+      "to a zero-padded character string first.",
+      call. = FALSE
+    )
+  }
+
   lookup <- bilatr::cameo_lookup
 
   already_present <- intersect(
@@ -813,9 +837,31 @@ recode_cameo <- function(data, code_col = "EventCode") {
     lookup <- dplyr::select(lookup, -dplyr::all_of(already_present))
   }
 
-  dplyr::left_join(
+  out <- dplyr::left_join(
     data,
     lookup,
     by = rlang::set_names("CAMEOEVENTCODE", code_col)
   )
+
+  if ("QuadClass" %in% names(out)) {
+    n_unmatched <- sum(is.na(out$QuadClass))
+    if (n_unmatched > 0) {
+      message(
+        "recode_cameo(): ", n_unmatched,
+        " row(s) did not match any code in cameo_lookup."
+      )
+    }
+  }
+  if ("ModifiedRootCode" %in% names(out) && "QuadClass" %in% names(out)) {
+    n_bare_root <- sum(!is.na(out$QuadClass) & is.na(out$ModifiedRootCode))
+    if (n_bare_root > 0) {
+      message(
+        "recode_cameo(): ", n_bare_root,
+        " row(s) matched a bare top-level CAMEO root code with no ",
+        "ModifiedRootCode (its sub-codes span several classes)."
+      )
+    }
+  }
+
+  out
 }

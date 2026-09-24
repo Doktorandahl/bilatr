@@ -7,9 +7,11 @@ test_that("order_event_classes places reference_category first, rest sorted afte
   expect_equal(order_event_classes(c("b", "a", "c")), c("a", "b", "c"))
 })
 
-test_that("validate_reference_class warns and drops values absent from the data", {
-  expect_warning(out <- validate_reference_class("z", c("a", "b"), "reference_category"))
-  expect_null(out)
+test_that("validate_reference_class errors on a value absent from the data (0.9.0; was a warning + NULL)", {
+  expect_error(
+    validate_reference_class("z", c("a", "b"), "reference_category"),
+    "not present"
+  )
   expect_equal(validate_reference_class("a", c("a", "b"), "reference_category"), "a")
   expect_null(validate_reference_class(NULL, c("a", "b"), "reference_category"))
 })
@@ -53,6 +55,8 @@ test_that("fill_dyad_period_skeleton fills gaps with zero counts and flags is_ob
   agg <- tibble::tibble(
     dyad = "USA_CHN",
     year = 2016,
+    actor_a = "USA",
+    actor_b = "CHN",
     EventClass_0 = 3L,
     total_events = 3L
   )
@@ -61,4 +65,6 @@ test_that("fill_dyad_period_skeleton fills gaps with zero counts and flags is_ob
   expect_equal(nrow(filled), 3L)
   expect_equal(filled$is_obs, c(0L, 1L, 0L))
   expect_equal(filled$total_events, c(0L, 3L, 0L))
+  expect_equal(filled$actor_a, rep("USA", 3L))
+  expect_equal(filled$actor_b, rep("CHN", 3L))
 })

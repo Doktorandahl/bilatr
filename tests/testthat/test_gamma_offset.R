@@ -215,20 +215,21 @@ test_that("w_send is exactly 1 for directed dyads, and the observed sender share
     events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
   )
   w_send_undirected <- attr(undirected, "w_send")
-  # USA/RUS pair (rows 1-3): pmin("USA","RUS") = "RUS" is side A. 2 of the
-  # 3 events have USA (side B) as Actor1, 1 has RUS (side A) as Actor1 --
-  # an asymmetric pair, share strictly between 0 and 1.
+  # USA/RUS pair (rows 1-3): C-locale radix order puts "RUS" before "USA",
+  # so RUS is side A. 2 of the 3 events have USA (side B) as Actor1, 1 has
+  # RUS (side A) as Actor1 -- an asymmetric pair, share strictly between
+  # 0 and 1.
   usa_rus <- dplyr::filter(w_send_undirected, dyad == "RUS_USA")
-  expect_equal(usa_rus$ctry_a_code, "RUS")
-  expect_equal(usa_rus$ctry_b_code, "USA")
+  expect_equal(usa_rus$actor_a, "RUS")
+  expect_equal(usa_rus$actor_b, "USA")
   expect_equal(usa_rus$w_send, 1 / 3)
 
-  # CHN/USA pair (rows 4-5): pmin("CHN","USA") = "CHN" is side A. BOTH
-  # events have CHN as Actor1 -- a one-direction-only pair, giving
+  # CHN/USA pair (rows 4-5): "CHN" sorts before "USA", so CHN is side A.
+  # BOTH events have CHN as Actor1 -- a one-direction-only pair, giving
   # exactly 1 (not 0 or 1 by coincidence: every event in this pair goes
   # the same way).
   chn_usa <- dplyr::filter(w_send_undirected, dyad == "CHN_USA")
-  expect_equal(chn_usa$ctry_a_code, "CHN")
+  expect_equal(chn_usa$actor_a, "CHN")
   expect_equal(chn_usa$w_send, 1)
 })
 
@@ -523,7 +524,7 @@ test_that("assemble_stan_data() passes `years` through to window w_send", {
   expect_true(sd_full$D > 0 && sd_window$D > 0)
 })
 
-test_that("a row with NA Actor1CountryCode is dropped from w_send with a warning, not propagated as NA", {
+test_that("a row with NA Actor1CountryCode is a validate_bilatr_events() error (0.9.0; was a warning + drop)", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", NA, "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -531,17 +532,12 @@ test_that("a row with NA Actor1CountryCode is dropped from w_send with a warning
     PentaClass = c(0, 1, 0)
   )
 
-  expect_warning(
-    result <- grouped_events_to_dyad_period(
+  expect_error(
+    grouped_events_to_dyad_period(
       events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
     ),
-    "NA Actor1CountryCode"
+    "missing \\(NA\\)"
   )
-  w_send <- attr(result, "w_send")
-  expect_false(anyNA(w_send$w_send))
-  # side A is pmin("USA","RUS") = "RUS"; both surviving (non-NA) rows have
-  # USA (side B) as Actor1, so w_send = 0, not NA
-  expect_equal(w_send$w_send, 0)
 })
 
 test_that(".compute_gamma_tier()/has_gamma keeps gamma out of Tier 1 (and sigma_gamma in it)", {
@@ -642,38 +638,6 @@ test_that("diagnose_and_extract_bilatr()'s gamma table has country_code for stab
     stan_model = "stable", tiers = 1
   )
   expect_null(res_stable$diagnostics$gamma)
-})
-
-test_that("assemble_stan_data() stop()s naming a retained dyad with no matching w_send entry (0.7.1 guard)", {
-  events <- make_fake_events(n = 400)
-  events <- recode_cameo(events, code_col = "EventCode")
-
-  # Precompute the REAL result, then sabotage its w_send attribute
-  # (drop one dyad's row) and have the mock return that fixed, captured
-  # value regardless of how assemble_stan_data() calls it below -- NOT a
-  # mock that calls back into grouped_events_to_dyad_period() itself,
-  # which would recurse into the mock. Exercises assemble_stan_data()'s
-  # own defensive match()-then-check, independent of how such a mismatch
-  # could arise in practice.
-  real_result <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass",
-    directed = TRUE, reference_category = 0, years = 2015:2019
-  )
-  w_send <- attr(real_result, "w_send")
-  attr(real_result, "w_send") <- w_send[-1, , drop = FALSE]
-
-  testthat::local_mocked_bindings(
-    grouped_events_to_dyad_period = function(...) real_result,
-    .package = "bilatr"
-  )
-
-  expect_error(
-    assemble_stan_data(
-      events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
-      reference_category = 0, min_n_events = 1
-    ),
-    "no matching entry"
-  )
 })
 
 test_that("order_event_classes() is unaffected by the system locale (0.7.1, locale = \"C\")", {

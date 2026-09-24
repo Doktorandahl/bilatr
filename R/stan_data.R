@@ -1,23 +1,32 @@
 #' Assemble Stan-ready data for the bilatr dyadic IRT model
 #'
-#' Aggregates CAMEO-coded event data to dyad-period action-class counts
-#' and packages it as the data list expected by the package's Stan model
-#' (`inst/stan/bilatr_dirmult_irt.stan`).
+#' Aggregates event data to dyad-period action-class counts and packages
+#' it as the data list expected by the package's Stan model (the
+#' registered `stable` program; see `R/model_registry.R`).
 #'
-#' @param data A data frame of event-level records, as produced by
-#'   [extract_all_relevant_gdelt()] or [ingest_icews()] and recoded via
-#'   [recode_cameo()].
-#' @param years Integer vector of years to cover. Also passed to
-#'   [grouped_events_to_dyad_period()] (0.7.1) to window its `w_send`
-#'   computation (consumed only by the experimental `stable_gamma`
-#'   variant) to the same analysis window `Y`'s counts are restricted to
-#'   -- before 0.7.1, `w_send` pooled every year present in `data`,
-#'   including years outside `years` that the likelihood never sees.
+#' Validates `data` against `?bilatr_event_data` first, drops rows outside
+#' `years` before the set of observed event classes is determined (see
+#' `@param years`), then delegates the aggregation itself to
+#' [grouped_events_to_dyad_period()].
+#'
+#' @param data A data frame of event-level records; see
+#'   `?bilatr_event_data`. Two helpers produce data in this format:
+#'   [extract_all_relevant_gdelt()] and [recode_cameo()].
+#' @param years Integer vector of years to cover. Rows outside `years` are
+#'   dropped from `data` before anything else -- including before the
+#'   class order is built (0.9.0; previously an action class seen only
+#'   outside `years` still got an all-zero column of `Y`, identified only
+#'   by its prior). A `message()` reports how many rows were dropped, and
+#'   names any class present in `data` that has zero in-window events (and
+#'   so is absent from `event_classes`/`A`/`Y`).
 #' @param resolution Either `"monthly"` or `"yearly"`.
 #' @param grouping_var Name of the event-class column to aggregate on
 #'   (e.g. `"QuadClass"`, `"PentaClass"`).
 #' @param directed If `TRUE` (default), dyads are directed; if `FALSE`,
 #'   actor order is ignored.
+#' @param actor1,actor2 Names of the sender/target actor columns; see
+#'   `?bilatr_event_data`.
+#' @param date Name of the event-date column; see `?bilatr_event_data`.
 #' @param reference_category Value of `grouping_var` to anchor as the
 #'   model's scale/sign reference: `stable`/`ou` fold `alpha[1]`'s sign
 #'   into the reported `alpha`/`theta` (see each `.stan` file's header,
@@ -25,7 +34,10 @@
 #'   `alpha` vector to 1, so positive `alpha[1]` means better relations at
 #'   this reference/neutral class. Should typically be a
 #'   low-conflict/cooperative class. Every other action class's
-#'   discrimination (`alpha[2:A]`) is freely estimated.
+#'   discrimination (`alpha[2:A]`) is freely estimated. `NULL` (default)
+#'   anchors on the first class in C-locale numeric sort instead; if
+#'   supplied but absent from the (in-window) data, errors (0.9.0; see
+#'   [validate_reference_class()]).
 #' @param min_n_events Minimum total events for a dyad to be retained.
 #' @param weighted Defunct. The `dyad_weight`/`period_weight`/
 #'   `action_weight` likelihood-weighting scheme was removed in 0.4.6 (see
@@ -121,9 +133,11 @@
 #'   is visible before fitting, not after. Also carries a `dyad_ids`
 #'   attribute (the output of [make_dyad_ids()]) for reattaching
 #'   identifiers to posterior draws (see [extract_theta()]), an
-#'   `event_classes` attribute, and (0.7.0) a `country_codes` attribute
-#'   (character, in `ctry_a`/`ctry_b` index order) for labelling `gamma`
-#'   (see [extract_gamma()]).
+#'   `event_classes` attribute, a `grouping_var` attribute (0.9.0; the
+#'   `grouping_var` argument itself, for downstream class-label
+#'   derivation), and (0.7.0) a `country_codes` attribute (character, in
+#'   `ctry_a`/`ctry_b` index order) for labelling `gamma` (see
+#'   [extract_gamma()]).
 #' @examples
 #' \dontrun{
 #' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
@@ -159,7 +173,10 @@ assemble_stan_data <- function(
   prior_only = 0,
   compute_theta_filtered = 0,
   filter_dyads = NULL,
-  anchor_scale = 0.1
+  anchor_scale = 0.1,
+  actor1 = "Actor1CountryCode",
+  actor2 = "Actor2CountryCode",
+  date = "SQLDATE"
 ) {
   resolution <- match.arg(resolution)
 
@@ -171,13 +188,45 @@ assemble_stan_data <- function(
     )
   }
 
+  validate_bilatr_events(data, grouping_var, actor1, actor2, date)
+
+  # Window-first (0.9.0, audit D3): drop rows outside `years` before the
+  # class order is built, so a class seen only outside the window never
+  # gets an all-zero column of `Y` identified only by its prior. Done
+  # here (on the raw `data`) rather than inside
+  # grouped_events_to_dyad_period() so the dropped-class message below
+  # can compare against the FULL set of classes in `data`, not just the
+  # in-window survivors grouped_events_to_dyad_period() ever sees.
+  event_year <- as.integer(format(.parse_event_date(data[[date]]), "%Y"))
+  all_classes <- unique(as.character(data[[grouping_var]]))
+  in_window <- event_year %in% years
+  n_dropped <- sum(!in_window)
+  if (n_dropped > 0) {
+    message(sprintf(
+      "assemble_stan_data(): dropping %d row(s) outside `years`.", n_dropped
+    ))
+  }
+  data <- data[in_window, , drop = FALSE]
+
+  zero_window_classes <- setdiff(all_classes, unique(as.character(data[[grouping_var]])))
+  if (length(zero_window_classes) > 0) {
+    message(
+      "assemble_stan_data(): the following class(es) of `", grouping_var,
+      "` have zero in-window events and will not appear in `event_classes`/`Y`: ",
+      paste(sort(zero_window_classes), collapse = ", ")
+    )
+  }
+
   agg <- grouped_events_to_dyad_period(
     data,
     resolution = resolution,
     grouping_var = grouping_var,
     directed = directed,
     reference_category = reference_category,
-    years = years
+    years = NULL,
+    actor1 = actor1,
+    actor2 = actor2,
+    date = date
   )
   # Captured here, immediately, rather than relied on to survive the
   # dplyr pipeline below (fill_dyad_period_skeleton()'s right_join/
@@ -211,30 +260,22 @@ assemble_stan_data <- function(
   # Country index and per-dyad ctry_a/ctry_b/w_send (0.7.0; consumed only
   # by the experimental stable_gamma Stan variant, but built and attached
   # UNCONDITIONALLY for every model -- see @param n_countries below for
-  # why). Row i of `country_info` corresponds to `dyads[i]` (matched
-  # explicitly via `match()`, not assumed pre-sorted the same way) --
-  # `dyads`' own D-indexing is exactly the `dyad_id` order
-  # [make_dyad_ids()] assigns below, so ctry_a/ctry_b/w_send end up
-  # indexed 1:D the same way Y/is_obs/dyad_ids already are.
-  country_info <- w_send_tbl[match(dyads, w_send_tbl$dyad), ]
-
-  # 0.7.1 guard: match() above yields an NA row for any retained dyad
-  # missing from w_send_tbl (e.g. every one of its w_send-window rows
-  # dropped -- see grouped_events_to_dyad_period()'s NA-Actor1CountryCode
-  # handling, R/dyad_period.R). Not expected given the current call
-  # order, but the failure mode otherwise is a silent NA in ctry_a/
-  # w_send that only surfaces as an opaque CmdStan data error.
-  missing_dyads <- dyads[is.na(country_info$dyad)]
-  if (length(missing_dyads) > 0) {
-    stop(
-      "assemble_stan_data(): ", length(missing_dyads), " retained dyad(s) ",
-      "have no matching entry in grouped_events_to_dyad_period()'s w_send ",
-      "attribute, so their ctry_a/ctry_b/w_send would be NA: ",
-      paste(utils::head(missing_dyads, 10), collapse = ", "),
-      if (length(missing_dyads) > 10) ", ..." else "",
-      call. = FALSE
-    )
-  }
+  # why). Row i of `country_info` corresponds to `dyads[i]` (the left
+  # side of the join below, so join order -- not `w_send_tbl`'s own row
+  # order -- determines it): `dyads`' own D-indexing is exactly the
+  # `dyad_id` order [make_dyad_ids()] assigns below, so
+  # ctry_a/ctry_b/w_send end up indexed 1:D the same way Y/is_obs/
+  # dyad_ids already are. Built from the assembled table's own carried
+  # actor_a/actor_b (0.9.0; no more parsing 3-letter codes out of `dyad`)
+  # -- every retained dyad has both an actor pair (present since it
+  # survived to `agg`) and a `w_send` entry (guaranteed since
+  # validate_bilatr_events() bans the NA actors that used to cause
+  # misses here), so the 0.7.1 "no matching entry" guard is no longer
+  # reachable and has been removed.
+  dyad_actors <- dplyr::distinct(agg, dyad, actor_a, actor_b)
+  country_info <- tibble::tibble(dyad = dyads) %>%
+    dplyr::left_join(dyad_actors, by = "dyad") %>%
+    dplyr::left_join(dplyr::select(w_send_tbl, dyad, w_send), by = "dyad")
 
   # method = "radix" (0.7.1): base sort()'s default method is locale-
   # collation-dependent for character input, and this ordering *defines*
@@ -244,13 +285,13 @@ assemble_stan_data <- function(
   # order_event_classes()'s locale = "C" str_sort() for the same
   # treatment of the action-class index).
   countries_present <- sort(
-    unique(c(country_info$ctry_a_code, country_info$ctry_b_code)),
+    unique(c(country_info$actor_a, country_info$actor_b)),
     method = "radix"
   )
   n_countries <- length(countries_present)
   country_index <- stats::setNames(seq_len(n_countries), countries_present)
-  ctry_a <- unname(country_index[country_info$ctry_a_code])
-  ctry_b <- unname(country_index[country_info$ctry_b_code])
+  ctry_a <- unname(country_index[country_info$actor_a])
+  ctry_b <- unname(country_index[country_info$actor_b])
   w_send <- country_info$w_send
 
   dyads_per_country <- table(c(ctry_a, ctry_b))
@@ -274,12 +315,7 @@ assemble_stan_data <- function(
     purrr::map(~ unname(as.matrix(dplyr::select(.x, dplyr::starts_with("EventClass_")))))
   events_array <- aperm(simplify2array(events_list), c(3, 1, 2))
 
-  dyad_ids <- make_dyad_ids(
-    agg,
-    years = years,
-    resolution = resolution,
-    min_n_events = min_n_events
-  )
+  dyad_ids <- make_dyad_ids(agg)
 
   if (compute_theta_filtered == 1) {
     dyad_lookup <- dplyr::distinct(dyad_ids, dyad_id, dyad)
@@ -351,6 +387,7 @@ assemble_stan_data <- function(
   attr(stan_data, "dyad_ids") <- dyad_ids
   attr(stan_data, "event_classes") <- event_classes
   attr(stan_data, "country_codes") <- countries_present
+  attr(stan_data, "grouping_var") <- grouping_var
 
   stan_data
 }

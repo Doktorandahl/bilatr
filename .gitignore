@@ -10,6 +10,15 @@ original_code/
 # Compiled Stan model binaries and build artifacts: keep only the .stan
 # sources under inst/stan/, exclude everything else (extensionless
 # executables, *.o, *.hpp, *.d, etc.), regardless of which model it's for.
+#
+# NOTE (0.8.1): .Rbuildignore's matching rule,
+# `^inst/stan/(?!include$|legacy$)[^/.]+$`, excludes every extensionless
+# entry directly under inst/stan/ from the built tarball EXCEPT `include`
+# and `legacy` -- a new subdirectory added here (e.g. for a future model)
+# must be added to that lookahead too, or R CMD build will silently drop
+# it. `tests/testthat/test_stan_includes.R` already resolves `include/`
+# via `system.file()`, so an excluded `include/` would fail `R CMD check`
+# on its own; that's why no extra guard test exists for this rule.
 inst/stan/*
 !inst/stan/*.stan
 !inst/stan/include/

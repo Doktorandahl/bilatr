@@ -24,11 +24,10 @@ changing \code{opt_level}), bypassing the internal cache.}
 A \code{CmdStanModel} object.
 }
 \description{
-Compiles the package's single collapsed Stan program
-(\code{inst/stan/bilatr_dirmult_irt.stan}), used by both \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} and
-\code{\link[=fit_panel]{fit_panel()}}. Compiled executables are cached internally by
-\code{opt_level}, so repeated calls with the same \code{opt_level} are cheap
-after the first.
+Compiles the package's registered \code{stable} Stan program (see
+\code{R/model_registry.R}), used by both \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} and \code{\link[=fit_panel]{fit_panel()}}.
+Compiled executables are cached internally by \code{opt_level}, so repeated
+calls with the same \code{opt_level} are cheap after the first.
 }
 \examples{
 \dontrun{

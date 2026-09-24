@@ -26,19 +26,6 @@ get_gdelt_column_names <- function() {
   )
 }
 
-#' Actor-sector name fragments treated as "relevant" state/security
-#' actors in ICEWS
-#'
-#' @return A character vector of ICEWS sector-name substrings.
-#' @keywords internal
-relevant_actors_icews <- function() {
-  c(
-    "Air Force", "Army", "Cabinet", "Coast Guard", "Ministry",
-    "Security Mi", "Execut", "Gov", "Legisl", "Lower House", "Milit",
-    "Supreme Court", "Navy", "Police", "Unicameral", "Upper House"
-  )
-}
-
 #' Download a raw GDELT export zip
 #'
 #' Downloads a single daily, monthly, or yearly GDELT events export to
@@ -173,74 +160,3 @@ get_actor_combos <- function(file) {
     dplyr::mutate(date = stringr::str_remove_all(basename(file), ".zip"))
 }
 
-#' Normalize a possibly leading-zero-stripped CAMEO code
-#'
-#' ICEWS event exports frequently store `CAMEO Code` as a numeric type,
-#' which silently drops leading zeros (e.g. `"044"` becomes `44`). Pads
-#' codes shorter than 3 characters back out with a leading zero.
-#'
-#' @param code Character or numeric vector of CAMEO codes.
-#' @return Character vector, left-padded to at least 3 characters.
-#' @keywords internal
-normalize_cameo_code <- function(code) {
-  code <- as.character(code)
-  dplyr::if_else(stringr::str_length(code) < 3, paste0("0", code), code)
-}
-
-#' Read and filter ICEWS event export zips to relevant dyadic events
-#'
-#' Reads one or more ICEWS event export zips, filters to cross-country
-#' dyadic events where both actors are state/security sectors (per
-#' [relevant_actors_icews()]), and recodes CAMEO codes to QuadClass/
-#' PentaClass via the package's own [cameo_lookup] (matching a code that
-#' initially fails to match after a first round of leading-zero
-#' normalization is retried with a second round, since ICEWS's numeric
-#' CAMEO code field can drop more than one leading zero for some codes).
-#' Output columns are renamed to match [extract_all_relevant_gdelt()]'s
-#' schema (`Actor1CountryCode`, `Actor2CountryCode`, `SQLDATE`), so both
-#' data sources can be aggregated with the same
-#' [grouped_events_to_dyad_period()] / [assemble_stan_data()] pipeline.
-#'
-#' @param files Character vector of paths to ICEWS event export zip
-#'   files.
-#' @param relevant_sectors Character vector of sector-name substrings
-#'   identifying relevant actors. Defaults to [relevant_actors_icews()].
-#' @return A data frame of event-level records with `Actor1CountryCode`,
-#'   `Actor2CountryCode`, `SQLDATE`, `QuadClass`, `PentaClass`,
-#'   `PentaClass_modified`, and the original ICEWS columns.
-#' @examples
-#' \dontrun{
-#' future::plan(future::multisession, workers = 8)
-#' events <- ingest_icews(list.files("data/icews", pattern = "zip$", full.names = TRUE))
-#' }
-#' @export
-ingest_icews <- function(files, relevant_sectors = relevant_actors_icews()) {
-  raw <- furrr::future_map_dfr(files, function(f) {
-    readr::read_delim(
-      unz(f, utils::unzip(f, list = TRUE)$Name[1]),
-      num_threads = 1,
-      progress = FALSE,
-      show_col_types = FALSE
-    )
-  })
-
-  sector_pattern <- paste(relevant_sectors, collapse = "|")
-  filtered <- raw %>%
-    dplyr::filter(`Source Country` != `Target Country`) %>%
-    dplyr::filter(
-      stringr::str_detect(`Source Sectors`, sector_pattern) &
-        stringr::str_detect(`Target Sectors`, sector_pattern)
-    ) %>%
-    dplyr::mutate(cameo = normalize_cameo_code(`CAMEO Code`))
-
-  matched <- recode_cameo(filtered, code_col = "cameo")
-  still_unmatched <- matched %>% dplyr::filter(is.na(QuadClass))
-  rematched <- still_unmatched %>%
-    dplyr::select(-QuadClass, -PentaClass, -PentaClass_modified, -CAMEOLabel, -GoldsteinScore) %>%
-    dplyr::mutate(cameo = normalize_cameo_code(cameo)) %>%
-    recode_cameo(code_col = "cameo")
-
-  dplyr::bind_rows(dplyr::filter(matched, !is.na(QuadClass)), rematched) %>%
-    dplyr::rename(Actor1CountryCode = `Source Country`, Actor2CountryCode = `Target Country`) %>%
-    dplyr::mutate(SQLDATE = as.integer(format(`Event Date`, "%Y%m%d")))
-}

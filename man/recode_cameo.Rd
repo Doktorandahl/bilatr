@@ -12,7 +12,7 @@ recode_cameo(data, code_col = "EventCode")
 
 \item{code_col}{Name of the column in \code{data} holding CAMEO event codes
 (as a string). Defaults to \code{"EventCode"}, matching the raw GDELT
-column name.}
+column name. Must be character or factor (see Details).}
 }
 \value{
 \code{data} with the recode columns above attached (minus any that
@@ -43,6 +43,16 @@ function.
 
 Any of these columns that already exist in \code{data} are left as they are
 (not overwritten, no \code{.x}/\code{.y} suffixing), with a warning naming them.
+
+\code{code_col} must be character or factor. A numeric \code{EventCode} has
+already lost any leading zero (\code{"010"} -> \code{10}) by the time it reaches
+this function, and that loss is not recoverable here -- \code{stop()}s with
+a message to that effect rather than failing inside \code{left_join()} with
+an opaque type-mismatch error. After the join, \code{message()}s the number
+of rows whose code did not match \link{cameo_lookup} at all, and separately
+the number that matched but got \code{NA} \code{ModifiedRootCode} because they
+are a bare top-level root (e.g. \code{"01"}, \code{"04"}; see \link{cameo_lookup}'s
+docs) -- one line each, nothing when both are zero.
 }
 \examples{
 \dontrun{

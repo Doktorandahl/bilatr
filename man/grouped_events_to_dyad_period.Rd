@@ -2,7 +2,7 @@
 % Please edit documentation in R/dyad_period.R
 \name{grouped_events_to_dyad_period}
 \alias{grouped_events_to_dyad_period}
-\title{Aggregate CAMEO-coded events to dyad-period class counts}
+\title{Aggregate event data to dyad-period class counts}
 \usage{
 grouped_events_to_dyad_period(
   data,
@@ -10,13 +10,15 @@ grouped_events_to_dyad_period(
   grouping_var,
   directed = TRUE,
   reference_category = NULL,
-  years = NULL
+  years = NULL,
+  actor1 = "Actor1CountryCode",
+  actor2 = "Actor2CountryCode",
+  date = "SQLDATE"
 )
 }
 \arguments{
-\item{data}{A data frame of event-level records with
-\code{Actor1CountryCode}, \code{Actor2CountryCode}, \code{SQLDATE}, and the column
-named by \code{grouping_var}.}
+\item{data}{A data frame of event-level records; see
+\code{?bilatr_event_data}.}
 
 \item{resolution}{Either \code{"monthly"} or \code{"yearly"}.}
 
@@ -25,57 +27,59 @@ named by \code{grouping_var}.}
 
 \item{directed}{If \code{TRUE} (default), dyads are directed
 (actor1 -> actor2); if \code{FALSE}, actor order is ignored and dyads are
-collapsed to an unordered pair.}
+collapsed to an unordered pair, with side A/B assigned by
+\code{\link[=.order_pair_c_locale]{.order_pair_c_locale()}} (deterministic, locale-independent).}
 
 \item{reference_category}{Value of \code{grouping_var} to place first in
 the class ordering (the model's scale/sign-reference, neutral
 action: \code{stable}/\code{ou} build \code{alpha[1]} positive by construction --
-see \code{\link[=order_event_classes]{order_event_classes()}}). If \code{NULL} or not present in the data,
-ignored with a warning. All other action classes' discrimination is
-freely estimated.}
+see \code{\link[=order_event_classes]{order_event_classes()}}). \code{NULL} (default) anchors on the first
+class in C-locale numeric sort instead. If supplied but not present
+among the (in-window) classes, errors -- see
+\code{\link[=validate_reference_class]{validate_reference_class()}}. All other action classes'
+discrimination is freely estimated.}
 
-\item{years}{Integer vector of years, or \code{NULL} (default). Used
-\strong{only} for the \code{w_send} computation described below -- restricts
-the event rows pooled into \code{w_send} to \code{year \%in\% years}, matching
-the analysis window \code{\link[=assemble_stan_data]{assemble_stan_data()}} restricts \code{Y}'s counts to
-(via \code{\link[=fill_dyad_period_skeleton]{fill_dyad_period_skeleton()}}'s right join, downstream). The
-main dyad-period aggregation returned by this function is
-unaffected -- it is still built from every row of \code{data}, exactly as
-before; only \code{w_send} narrows. \code{NULL} pools every year in \code{data},
-preserving this function's behaviour for a direct caller that isn't
-going through \code{\link[=assemble_stan_data]{assemble_stan_data()}} (0.7.0's original behaviour).}
+\item{years}{Integer vector of years, or \code{NULL} (default, meaning
+"use every row"). When supplied, rows outside \code{years} are dropped
+before any aggregation -- for every computation this function does,
+including \code{w_send} below, not only (as before 0.9.0) the \code{w_send}
+computation.}
+
+\item{actor1, actor2}{Names of the sender/target actor columns; see
+\code{?bilatr_event_data}.}
+
+\item{date}{Name of the event-date column; see \code{?bilatr_event_data}.}
 }
 \value{
 A data frame with columns \code{dyad}, \code{year} (and \code{month} if
-\code{resolution = "monthly"}), one \verb{EventClass_<value>} column per
-observed class (ordered per \code{reference_category}), and \code{total_events}.
-Also carries a \code{w_send} attribute (0.7.0; consumed by
-\code{\link[=assemble_stan_data]{assemble_stan_data()}} for the experimental \code{stable_gamma} Stan
-variant -- see \code{R/model_registry.R}): a tibble with one row per
-dyad, \code{ctry_a_code}/\code{ctry_b_code} (side A/B's 3-letter country code,
-\code{str_sub(dyad, 1, 3)}/\code{str_sub(dyad, 5, 7)}, the same convention
-\code{\link[=make_dyad_ids]{make_dyad_ids()}} uses for its own \code{dyad2}) and \code{w_send} (the share
-of that pair's events, POOLED over \code{years} if supplied (else every
-period in \code{data}) -- not per dyad-period, since the country offset
-this feeds is dyad-constant and reused across \code{t}; a per-period
-weight would cost an \verb{A x D x T} object in \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s
-output for nothing -- with side A as \code{Actor1CountryCode}). For
-directed data this is exactly \code{1} by construction (side A IS
-\code{Actor1CountryCode} in the directed dyad key), asserted internally
-below as a free check on the dyad-key convention (it would silently
-invert if a future change swapped the \code{paste()} argument order
-building \code{dyad} above). A row with \code{NA} \code{Actor1CountryCode} is
-dropped from this computation (with a \code{warning()} naming how many)
-rather than propagating \code{NA} into \code{w_send} -- an \code{NA} reaching
-\code{stan_data$w_send} would otherwise surface as an opaque CmdStan data
-error much later.
+\code{resolution = "monthly"}), \code{actor_a}/\code{actor_b} (the directed dyad's
+sender/target, or the undirected pair in
+\code{\link[=.order_pair_c_locale]{.order_pair_c_locale()}}'s deterministic order), one
+\verb{EventClass_<value>} column per observed class (ordered per
+\code{reference_category}), and \code{total_events}. Also carries a \code{w_send}
+attribute (0.7.0; consumed by \code{\link[=assemble_stan_data]{assemble_stan_data()}} for the
+experimental \code{stable_gamma} Stan variant -- see
+\code{R/model_registry.R}): a tibble with one row per dyad, \code{actor_a}/
+\code{actor_b}, and \code{w_send} (the share of that pair's events with side A
+as sender, over the same rows the main aggregation uses). For
+directed data this is exactly \code{1} by construction (side A IS the
+sender in a directed dyad key), asserted internally below as a free
+check on the dyad-key convention.
 }
 \description{
-Collapses event-level data (as produced by \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}
-or \code{\link[=ingest_icews]{ingest_icews()}}) to dyad-by-time-period counts of a chosen
-event-class column (e.g. \code{QuadClass}, \code{PentaClass}), one column per
-class plus a \code{total_events} column. This is the shared aggregation step
-feeding \code{\link[=assemble_stan_data]{assemble_stan_data()}}.
+Collapses event-level data (in the format documented at
+\code{?bilatr_event_data}; as produced by e.g. \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}
+and \code{\link[=recode_cameo]{recode_cameo()}}) to dyad-by-time-period counts of a chosen
+event-class column, one column per class plus a \code{total_events} column.
+This is the shared aggregation step feeding \code{\link[=assemble_stan_data]{assemble_stan_data()}}.
+}
+\details{
+Validates \code{data} with \code{\link[=validate_bilatr_events]{validate_bilatr_events()}} first, then builds a
+slim internal table (\code{actor1}/\code{actor2}/\code{date}/\code{grouping_var}, renamed
+and re-typed, plus a derived \code{year}/\code{month}) that every later step in
+this function works from -- a user's own \code{dyad}/\code{date}/\code{year}/\code{month}/
+\code{event_type} columns, if present in \code{data}, are never read or
+overwritten.
 }
 \examples{
 \dontrun{

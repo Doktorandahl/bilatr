@@ -32,10 +32,10 @@ rows.
 quantity into one of three tiers before applying Rhat/ESS thresholds:
 
 * **Tier 1 -- global/shared parameters** (`alpha`, `mu_intercept`,
-  `mu_theta0`, `sigma_theta0`, `mu_log_phi`, `sigma_log_phi`,
-  `mu_log_noise`, `sigma_log_noise`, and `lp__`). These affect the whole
-  model, so any issue here is always reported in full, never summarized
-  away.
+  `sigma_theta0`, `mu_log_phi`, `sigma_log_phi`, `mu_log_noise`,
+  `sigma_log_noise`, and `lp__`; `gamma`/`sigma_gamma` too, for the
+  experimental `stable_gamma` variant). These affect the whole model, so
+  any issue here is always reported in full, never summarized away.
 * **Tier 2 -- per-dyad hierarchical parameters** (`phi`, `process_noise`,
   `theta0`, and their non-centered/raw counterparts). These are screened
   against how much data (`n_dt`) each dyad has, flagging dyads whose
