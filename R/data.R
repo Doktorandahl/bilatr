@@ -60,9 +60,9 @@
 #' backward compatibility (see e.g. [assign_eventrootcode2()],
 #' [assign_bilatr_class()]), but are no longer attached by
 #' [recode_cameo()].
-#' @source GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
-#'   (1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
-#'   retired `EventRootCode2` / `BilatrClass` / `BilatrClass2` regrouping
-#'   followed this project's established GDELT pipeline
-#'   (`original_code/cameo_df.csv`).
+#' @source Built by `data-raw/build_cameo_lookup.R` in the source
+#'   repository. CAMEO event codes and labels from Schrodt (2012), *CAMEO
+#'   Conflict and Mediation Event Observations Event and Actor Codebook*,
+#'   version 1.1b3. Goldstein scale from Goldstein (1992), "A
+#'   Conflict-Cooperation Scale for WEIS Events Data".
 "cameo_lookup"

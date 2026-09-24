@@ -1,3 +1,66 @@
+# bilatr 0.8.1
+
+Housekeeping only: no model, data pipeline, or exported function behaviour
+changes (see `dev/claude_code_prompt_0.8.1_unbreak.md`).
+
+## Bug fixes
+
+* The three cluster runscripts (`runscripts/submit_bilatr_erc16nz_runs.R`,
+  `submit_bilatr_gamma_erc16nz_runs.R`,
+  `submit_bilatr_diag_crosschain_erc16nz.R`) still called the internal
+  functions 0.8.0 renamed (`assign_erc16nz()`/`erc16nz_name()`, deleted in
+  favour of `assign_modified_root_code()`/`modified_root_code_name()`);
+  updated the three `:::` call sites. `runscripts/` is outside the package
+  (gitignored, not built or checked), so this is a cluster-side fix only.
+
+## Internal
+
+* `.Rbuildignore` now excludes every extensionless file directly under
+  `inst/stan/` and `inst/stan/legacy/` generically, instead of naming each
+  compiled Stan binary, so a future model's binary is covered automatically.
+* `cameo_lookup`'s `@source` no longer points at the gitignored
+  `original_code/cameo_df.csv`; it now cites `data-raw/build_cameo_lookup.R`
+  and the CAMEO codebook (Schrodt 2012).
+
+# bilatr 0.8.0
+
+Renames the `ERC16NZ` CAMEO recoding scheme and slims `cameo_lookup`'s
+columns; committed as found ahead of the 2026-09-23 audit
+(`dev/audit_2026-09-23.md`).
+
+## Breaking changes
+
+* `cameo_lookup`/`recode_cameo()` no longer carry `EventRootCode2`,
+  `EventRootCode3`, `EventRootCode4`, `ERC16NZ`, `BilatrClass`,
+  `BilatrClass2`, or their `*Name`/`*RootCodes` columns. Code that selects
+  those columns from `recode_cameo()`'s output will break. The
+  `assign_*()`/`*_name()` helpers for these schemes remain available
+  internally (`R/cameo_recode.R`), marked deprecated in their roxygen docs,
+  pending removal in a later release.
+* `ERC16NZ` is renamed `ModifiedRootCode` (`assign_modified_root_code()`,
+  `modified_root_code_name()`, `modified_root_code_eventcodes()`), and
+  `ERC16NZRootCodes` is renamed `ModifiedRootCodeEventCodes`. The mapping
+  itself is unchanged: `assign_modified_root_code()`/
+  `modified_root_code_name()` are code-for-code identical to 0.7.1's
+  `assign_erc16nz()`/`erc16nz_name()`, verified against every code in
+  `cameo_lookup$CAMEOEVENTCODE` and every distinct `EventCode` in the
+  production GDELT extract (310 codes checked, no differences).
+
+## New
+
+* `QuadClassName`/`QuadClassEventCodes` and
+  `PentaClassName`/`PentaClassEventCodes` columns.
+
+## Behaviour change
+
+* The top-level two-digit root rows `"01"` and `"04"` now have `NA`
+  `ModifiedRootCode*`, because their sub-codes span several classes.
+* **Known issue**: an event whose code is a bare `"01"`/`"04"` therefore
+  gets `NA` from `recode_cameo()`, and `assemble_stan_data()` currently
+  turns `NA` classes into an extra `"NA"` action category (to be fixed in
+  0.9.0). The production GDELT extract contains no two-digit codes, so no
+  existing fit is affected.
+
 # bilatr 0.7.1
 
 Six fixes from a review pass on 0.7.0's `stable_gamma` (see

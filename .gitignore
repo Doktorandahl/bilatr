@@ -35,3 +35,9 @@ runscripts/
 
 # Local audit notes / scratch, not part of the package.
 dev/
+
+# Local machine/tooling artifacts, not part of the package.
+.DS_Store
+.claude/
+Claude outputs/
+logs/

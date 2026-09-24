@@ -7,8 +7,11 @@
 ^inst/stan/legacy/bilatr_ou_pre_0\.4\.0\.stan$
 ^inst/stan/legacy/bilatr_phi_logn_pre_0\.3\.0\.stan$
 ^inst/stan/legacy/bilatr_phi_logn\.stan$
-^inst/stan/legacy/bilatr_stable_soft_anchor$
-^inst/stan/legacy/bilatr_ou_soft_anchor$
+^inst/stan/(?!include$|legacy$)[^/.]+$
+^inst/stan/legacy/[^/.]+$
 ^\.Rproj\.user$
 ^.*\.Rproj$
 ^dev$
+^Claude outputs$
+^logs$
+^\.claude$

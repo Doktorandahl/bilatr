@@ -61,11 +61,11 @@ backward compatibility (see e.g. \code{\link[=assign_eventrootcode2]{assign_even
 \code{\link[=recode_cameo]{recode_cameo()}}.
 }
 \source{
-GDELT/CAMEO event taxonomy; Goldstein scale from Goldstein
-(1992), "A Conflict-Cooperation Scale for WEIS Events Data". The
-retired \code{EventRootCode2} / \code{BilatrClass} / \code{BilatrClass2} regrouping
-followed this project's established GDELT pipeline
-(\code{original_code/cameo_df.csv}).
+Built by \code{data-raw/build_cameo_lookup.R} in the source
+repository. CAMEO event codes and labels from Schrodt (2012), \emph{CAMEO
+Conflict and Mediation Event Observations Event and Actor Codebook},
+version 1.1b3. Goldstein scale from Goldstein (1992), "A
+Conflict-Cooperation Scale for WEIS Events Data".
 }
 \usage{
 cameo_lookup
