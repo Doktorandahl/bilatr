@@ -63,8 +63,8 @@ e.g. the median, is always included). Default \code{c(0.05, 0.95)}.}
 \code{"information"} for the per-category Fisher information
 contribution (see Details).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
-recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
+\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
 
 \item{country}{Only meaningful for \code{stan_model = "stable_gamma"} (see
 \code{R/model_registry.R}'s \code{.bilatr_model_has_gamma()}) -- ignored, with
@@ -77,8 +77,8 @@ valid). A single country code (character, matched against
 \code{stan_data}'s \code{"country_codes"} attribute) or a raw integer country
 index gives that country's curves instead, subtracting its \code{gamma_c}
 from \code{eta} (\code{gamma}, read once, Tier 1/cheap, alongside \code{alpha}/
-\code{mu_intercept} above -- \code{gamma} needs no \code{\link[=bilatr_orient]{bilatr_orient()}} call,
-since it is orientation-free by construction; see
+\code{mu_intercept} above -- \code{gamma} is orientation-free by construction,
+so no relabeling applies to it; see
 \code{inst/stan/bilatr_alphanorm_gamma.stan}'s header).}
 
 \item{n_dyads_fallback}{Number of dyads to subsample for the

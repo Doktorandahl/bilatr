@@ -10,37 +10,23 @@
 #' `stable`/`ou` fold `alpha[1]`'s sign into the reported `alpha`/`theta`
 #' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
 #' so `theta` is already in its canonical orientation (higher theta =
-#' better relations) and this function skips
-#' [bilatr_orient()] entirely for them -- no draws-through-orientation
-#' round trip, since `.bilatr_flip_variables(stan_model)` is
-#' `character(0)`. Only the retired `stable_soft_anchor`/`ou_soft_anchor`
-#' `stan_model`s (their free `sum_to_zero_vector` alpha with a soft sign
-#' anchor leaves a real reflection symmetry a chain's init can land on
-#' either side of) still get routed through [bilatr_orient()] here.
+#' better relations) with no post-hoc relabeling needed.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
 #' reads and summarises `theta` directly from the raw CSVs in
-#' memory-bounded chunks via [.chunked_summarise_csv_with_orientation]
-#' rather than materializing the full draws array, for the same
-#' production-scale-panel reason `diagnose_convergence()` needed it.
-#' **This trades memory for wall-time, and the exchange rate can be
-#' steep**: reading is single-threaded, and each chunk's cost is roughly
-#' a full parse of the largest chain file regardless of how many columns
-#' are requested (see `max_memory_mb` below and in
-#' [diagnose_convergence()]'s documentation), so total sweep time scales
-#' with chunk COUNT, not memory saved. Prefer the in-memory path when
-#' you already have `fit` in memory (no benefit to re-reading), and the
-#' CSV path's default `max_memory_mb` as large as your job's memory
-#' allocation can afford, not as small as "safely" possible. Sign
-#' orientation in this mode is decided from the first chunk itself
-#' (`alpha[1]` prepended, read once, dropped before summarising --
-#' see [.chunked_summarise_csv_with_orientation]) rather than a separate
-#' pass, applied per chunk before summarising, matching the in-memory
-#' path's raw-draws flip rather than a post-hoc adjustment of
-#' already-computed quantiles; the flip only happens for `stan_model`s
-#' with a reflection symmetry, same as the in-memory path. This mode
-#' only supports the default `probs`, since it reuses
+#' memory-bounded chunks via [.chunked_summarise_csv] rather than
+#' materializing the full draws array, for the same production-scale-panel
+#' reason `diagnose_convergence()` needed it. **This trades memory for
+#' wall-time, and the exchange rate can be steep**: reading is
+#' single-threaded, and each chunk's cost is roughly a full parse of the
+#' largest chain file regardless of how many columns are requested (see
+#' `max_memory_mb` below and in [diagnose_convergence()]'s documentation),
+#' so total sweep time scales with chunk COUNT, not memory saved. Prefer
+#' the in-memory path when you already have `fit` in memory (no benefit
+#' to re-reading), and the CSV path's default `max_memory_mb` as large as
+#' your job's memory allocation can afford, not as small as "safely"
+#' possible. This mode only supports the default `probs`, since it reuses
 #' [diagnose_convergence()]'s chunked-read helper (which always computes
 #' a fixed `q5`/`median`/`q95` summary, not user-configurable quantiles)
 #' rather than re-reading data already summarised once; pass an
@@ -54,13 +40,6 @@
 #'   attribute).
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
-#' @param stan_model Name registered in `.bilatr_stan_models` identifying
-#'   which model produced `fit`, or a recognized pre-0.4.0 alias
-#'   (`"alphanorm"`/`"alphanorm_ou"`, mapped to `"stable"`/`"ou"` with a
-#'   message; see [.canonical_stan_model()]) -- an unrecognized name
-#'   errors immediately rather than silently skipping sign orientation.
-#'   See [bilatr_orient()]. Defaults to `.BILATR_DEFAULT_MODEL`
-#'   (`"stable"`), matching what [fit_dyad_ts()]/[fit_panel()] always fit.
 #' @param max_memory_mb,chunk_size,parallel,n_workers Only used when
 #'   `fit` is CSV file paths; identical in meaning to
 #'   [diagnose_convergence()]'s arguments of the same name (including
@@ -79,16 +58,15 @@
 #'
 #' # a completed SLURM run, never read into this R session
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' theta <- extract_theta(csv_files, stan_data, stan_model = "ou", max_memory_mb = 16384)
+#' theta <- extract_theta(csv_files, stan_data, max_memory_mb = 16384)
 #' }
 #' @export
 extract_theta <- function(
-  fit, stan_data, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL,
+  fit, stan_data, probs = c(0.05, 0.5, 0.95),
   max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
   n_workers = parallelly::availableCores(), scratch_dir = NULL,
   read_seconds = NULL
 ) {
-  stan_model <- .canonical_stan_model(stan_model)
   max_memory_mb_missing <- missing(max_memory_mb)
   if (!is.null(scratch_dir)) {
     warning(
@@ -131,27 +109,10 @@ extract_theta <- function(
       length(theta_vars), prepared, max_memory_mb, chunk_size, n_cores,
       max_memory_mb_missing, read_seconds = read_seconds
     )
-    # No standalone alpha[1] pass: orientation is decided from the first
-    # Tier 3 chunk itself (alpha[1] prepended, read once, dropped before
-    # summarising) -- see .chunked_summarise_csv_with_orientation().
-    theta_summ <- .chunked_summarise_csv_with_orientation(
-      prepared, theta_vars, chunk_size_used, n_cores,
-      .bilatr_flip_variables(stan_model)
-    )$summ %>%
+    theta_summ <- .chunked_summarise_csv(prepared, theta_vars, chunk_size_used, n_cores) %>%
       dplyr::select(variable, mean, `5%` = q5, `50%` = median, `95%` = q95)
-  } else if (length(.bilatr_flip_variables(stan_model)) == 0) {
-    # stable/ou (0.4.2+): alpha[1] > 0 by construction, so theta is
-    # already in its canonical orientation -- no alpha[1] read, no
-    # bilatr_orient() round trip.
-    draws <- fit$draws(variables = "theta")
-    theta_summ <- posterior::summarise_draws(
-      draws,
-      mean = mean,
-      ~ stats::quantile(.x, probs = probs)
-    )
   } else {
-    draws <- fit$draws(variables = c("alpha[1]", "theta"))
-    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "theta")
+    draws <- fit$draws(variables = "theta")
     theta_summ <- posterior::summarise_draws(
       draws,
       mean = mean,
@@ -201,15 +162,8 @@ extract_theta <- function(
 #' supplied via `reference_category`, is always reported positive via the
 #' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
 #' ORIENTATION FOLD"). See the package's identification notes in
-#' `vignette("dyad_time_series")`.
-#'
-#' Since 0.4.2, this skips [bilatr_orient()] entirely for `stable`/`ou`
-#' (`.bilatr_flip_variables(stan_model)` is `character(0)`): `alpha`'s
-#' sign is already canonical by construction, with no reflection
-#' symmetry to correct. Only the retired `stable_soft_anchor`/
-#' `ou_soft_anchor` `stan_model`s still get routed through
-#' [bilatr_orient()], since their free `sum_to_zero_vector` alpha with a
-#' soft sign anchor doesn't guarantee canonical orientation on its own.
+#' `vignette("dyad_time_series")`. `alpha`'s sign is already canonical by
+#' construction, so no post-hoc relabeling is needed here.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), for the case where there is no in-memory fit at all
@@ -236,11 +190,10 @@ extract_theta <- function(
 #'
 #' # cross-chain roll-up from saved CSVs, no in-memory fit
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "ou")
+#' alpha <- extract_alpha(csv_files, event_classes = event_classes)
 #' }
 #' @export
-extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL, scratch_dir = NULL) {
-  stan_model <- .canonical_stan_model(stan_model)
+extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), scratch_dir = NULL) {
   if (!is.null(scratch_dir)) {
     warning(
       "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
@@ -249,9 +202,6 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
     )
   }
   draws <- .get_draws(fit, "alpha")
-  if (length(.bilatr_flip_variables(stan_model)) > 0) {
-    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "alpha")
-  }
 
   out <- posterior::summarise_draws(
     draws,
@@ -278,12 +228,9 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' softmax level-shift.
 #'
 #' `mu_intercept` never flips under the alpha/theta reflection symmetry
-#' (`alpha .* theta` is invariant under the joint negation; see
-#' [bilatr_orient()]), so `"alpha[1]"` is only read alongside it when
-#' `stan_model` still has that symmetry to check (the retired
-#' `stable_soft_anchor`/`ou_soft_anchor`) -- for `stable`/`ou`, since
-#' 0.4.2, [bilatr_orient()] is skipped entirely and `mu_intercept` is
-#' read alone.
+#' (`alpha .* theta` is invariant under the joint negation), and `stable`/
+#' `ou`'s orientation fold leaves nothing else to correct here, so
+#' `mu_intercept` is read alone.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths,
 #' for the same post-hoc/no-in-memory-fit case described in
@@ -299,8 +246,7 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' mu_intercept <- extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
 #' }
 #' @export
-extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), stan_model = .BILATR_DEFAULT_MODEL, scratch_dir = NULL) {
-  stan_model <- .canonical_stan_model(stan_model)
+extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), scratch_dir = NULL) {
   if (!is.null(scratch_dir)) {
     warning(
       "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
@@ -308,11 +254,7 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
       call. = FALSE
     )
   }
-  needs_orientation <- length(.bilatr_flip_variables(stan_model)) > 0
-  draws <- .get_draws(fit, if (needs_orientation) c("alpha[1]", "mu_intercept") else "mu_intercept")
-  if (needs_orientation) {
-    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "mu_intercept")
-  }
+  draws <- .get_draws(fit, "mu_intercept")
 
   out <- posterior::summarise_draws(
     draws,
@@ -339,8 +281,7 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #' `transformed parameters`; see `inst/stan/bilatr_alphanorm_gamma.stan`'s
 #' header) and orientation-FREE (the alpha/theta reflection symmetry's
 #' fold does not touch it -- see that header, "gamma is NOT multiplied by
-#' orientation_sign"), so this needs no [bilatr_orient()] call at all,
-#' unlike [extract_alpha()]/[extract_mu_intercept()].
+#' orientation_sign"), so no post-hoc relabeling applies to it either.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths,
 #' the same forms [extract_alpha()]/[.get_draws()] accept. `gamma` is

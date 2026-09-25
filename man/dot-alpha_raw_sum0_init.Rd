@@ -23,20 +23,17 @@ random vector instead, centered to sum to exactly 0 (required by
 \code{dot_self(alpha_raw) == 0} degeneracy.
 }
 \details{
-\code{stable}/\code{ou} also fold \code{alpha_raw[1]}'s sign into the REPORTED
-\code{alpha}/\code{theta} (\code{orientation_sign()}, each \code{.stan} file's header,
-"IDENTIFICATION: ORIENTATION FOLD"), which makes the reported
+Every registered model also folds \code{alpha_raw[1]}'s sign into the
+REPORTED \code{alpha}/\code{theta} (\code{orientation_sign()}, each \code{.stan} file's
+header, "IDENTIFICATION: ORIENTATION FOLD"), which makes the reported
 quantities correct regardless of which raw-space basin a chain
-occupies -- so, for those two models, this function's sign bias below
-is a nicety, not a correctness requirement: it just means a chain's
-RAW parameters (\code{alpha_raw} itself, and the theta-side raws that share
-its sign) usually won't label-switch either, keeping their own
-diagnostics interpretable more often (though never guaranteed; see
+occupies -- so this function's sign bias is a nicety, not a
+correctness requirement: it just means a chain's RAW parameters
+(\code{alpha_raw} itself, and the theta-side raws that share its sign)
+usually won't label-switch either, keeping their own diagnostics
+interpretable more often (though never guaranteed; see
 \code{R/diagnose_convergence.R}'s exclusion of those raw names from the
 tiered diagnostics, which is what actually protects a caller when this
-bias doesn't hold). The retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
-programs have no fold, so for THEM this bias is what
-\code{.warn_if_wrong_basin()} below and \code{bilatr_orient()} (\code{R/orient.R})
-exist to catch/repair when it fails.
+bias doesn't hold).
 }
 \keyword{internal}

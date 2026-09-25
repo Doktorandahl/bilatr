@@ -97,17 +97,4 @@ test_that("bilatr_init_fn() builds correctly-shaped inits for every registered m
   expect_gt(ou_init$alpha_raw[1], 0)
   expect_length(ou_init$mu_dyad_raw, stan_data$D)
   expect_gt(stats::sd(ou_init$mu_dyad_raw), 0) # real initial spread, not rep(0, D)
-
-  # stable_soft_anchor/ou_soft_anchor share the exact same shape (they
-  # differ from stable/ou only in what the .stan program does with
-  # alpha_raw's sign, not in shape -- see bilatr_init_fn()'s docs)
-  legacy_stable_init <- bilatr_init_fn(stan_data, stan_model = "stable_soft_anchor")()
-  expect_identical(names(legacy_stable_init), names(stable_init))
-  expect_equal(sum(legacy_stable_init$alpha_raw), 0)
-  expect_gt(legacy_stable_init$alpha_raw[1], 0)
-
-  legacy_ou_init <- bilatr_init_fn(stan_data, stan_model = "ou_soft_anchor")()
-  expect_identical(names(legacy_ou_init), names(ou_init))
-  expect_equal(sum(legacy_ou_init$alpha_raw), 0)
-  expect_gt(legacy_ou_init$alpha_raw[1], 0)
 })

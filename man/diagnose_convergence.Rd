@@ -151,8 +151,8 @@ give both lower estimated wall time and lower estimated
 core-seconds than your current \code{n_workers}, if the small grid
 checked (\code{n_workers} itself, \code{1}, half, and double) finds one.}
 
-\item{stan_model}{(0.7.1) Name registered in \code{.bilatr_stan_models}, or
-a recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used
+\item{stan_model}{(0.7.1) Name registered in \code{.bilatr_stan_models}; see
+\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used
 only to decide whether \code{gamma} (the experimental \code{stable_gamma}
 variant's country-level offset) gets its own report element instead
 of flooding Tier 1 -- see \verb{@return}'s \code{gamma} element. Rhat/ESS

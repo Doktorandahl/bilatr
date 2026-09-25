@@ -210,6 +210,13 @@ gdelt_columns <- function(set = c("core", "actors", "geo", "all")) {
 #' the full vocabulary itself. Verified 2026-09-25 against
 #' `http://gdeltproject.org/data/documentation/CAMEO.Manual.1.1b3.pdf`.
 #'
+#' `SET` ("Settler", Table 3.1 secondary role codes) was added 2026-09-25
+#' (0.10.0) after a live check against real GDELT data (0d): it is the only
+#' code observed in `count_gdelt_actor_types()` on the 2020-01-01 daily and
+#' 1979 yearly files (`cross_border = FALSE`) that wasn't already in this
+#' vocabulary -- a genuine CAMEO role code (used e.g. for Israeli
+#' settlers), just missing from the original transcription of Table 3.1.
+#'
 #' @return A character vector of 3-character codes.
 #' @keywords internal
 .gdelt_actor_type_codes <- function() {
@@ -218,7 +225,7 @@ gdelt_columns <- function(set = c("core", "actors", "geo", "all")) {
     "COP", "GOV", "INS", "JUD", "MIL", "OPP", "REB", "SEP", "SPY", "UAF",
     # Table 3.1, secondary role codes
     "AGR", "BUS", "CRM", "CVL", "DEV", "EDU", "ELI", "ENV", "HLH", "HRI",
-    "LAB", "LEG", "MED", "REF",
+    "LAB", "LEG", "MED", "REF", "SET",
     # Table 3.1, tertiary role codes
     "MOD", "RAD",
     # Table 3.2, international/transnational generic codes
@@ -299,16 +306,38 @@ gdelt_files <- function(start, end = start) {
 }
 
 #' Read the first line of a (possibly zipped) GDELT file
+#'
+#' `unz()` connections opened with `open = "rt"` up front fail with "seek
+#' not enabled for this connection" on older R (confirmed: R 4.3.3, though
+#' not on more recent R) once `readLines()` tries to read from them.
+#' Constructing the connection lazily (no `open` argument) and letting
+#' `readLines()` open it avoids this across R versions.
 #' @keywords internal
 .gdelt_peek_first_line <- function(path) {
   if (grepl("\\.zip$", path, ignore.case = TRUE)) {
     inner <- utils::unzip(path, list = TRUE)$Name[1]
-    con <- unz(path, inner, open = "rt")
+    con <- unz(path, inner)
   } else {
     con <- file(path, open = "rt")
   }
   on.exit(close(con), add = TRUE)
-  readLines(con, n = 1, warn = FALSE)
+  readLines(con, n = 1L, warn = FALSE)
+}
+
+#' Count tab-separated fields on a line, without losing trailing empties
+#'
+#' `length(strsplit(line, "\t", fixed = TRUE)[[1]])` undercounts a line
+#' whose last field is empty (`strsplit("a\tb\t", "\t")` returns 2 fields,
+#' not 3), which matters here: a daily file whose first row has an empty
+#' `SOURCEURL` would otherwise be miscounted as 57 columns instead of 58.
+#' Counting separators instead is exact regardless of trailing empties.
+#'
+#' @param first_line A single tab-separated line (e.g. from
+#'   [.gdelt_peek_first_line()]).
+#' @return Integer field count.
+#' @keywords internal
+.gdelt_count_fields <- function(first_line) {
+  lengths(gregexpr("\t", first_line, fixed = TRUE)) + 1L
 }
 
 #' Resolve and validate a `date_range` argument
@@ -451,6 +480,14 @@ gdelt_files <- function(start, end = start) {
 #'   this keeps events *dated* in the range among the files actually read
 #'   -- it does not recover events dated in the range but added (and so
 #'   filed) outside those files.
+#' @param chunk_size Rows per `readr::read_tsv_chunked()` chunk. Each
+#'   chunk's kept rows are appended to a list and row-bound once after the
+#'   read completes, so this does not change memory scaling with `chunk_size`
+#'   the way re-`bind_rows()`-ing into an accumulator on every chunk would
+#'   (quadratic in kept rows -- confirmed 10.1s vs. 1.7s on a synthetic
+#'   400k-row, 58-column file at the default `chunk_size`, a third of rows
+#'   kept). Larger than readr's own default (10,000) since GDELT backfiles
+#'   run to millions of rows.
 #' @return A tibble of event-level rows, `columns` plus `source_file` (the
 #'   file's basename), row-bound across `files`.
 #' @examples
@@ -468,7 +505,8 @@ read_gdelt <- function(
   cross_border = TRUE,
   root_events_only = FALSE,
   event_codes = NULL,
-  date_range = NULL
+  date_range = NULL,
+  chunk_size = 100000L
 ) {
   actor_type_match <- match.arg(actor_type_match)
   country_match <- match.arg(country_match)
@@ -493,9 +531,12 @@ read_gdelt <- function(
   if (!is.null(actor_types)) {
     unknown_types <- setdiff(actor_types, .gdelt_actor_type_codes())
     if (length(unknown_types) > 0) {
-      stop(
-        "read_gdelt(): unknown `actor_types`: ", paste(unknown_types, collapse = ", "),
-        ". Valid CAMEO actor/role codes: ", paste(.gdelt_actor_type_codes(), collapse = ", "),
+      warning(
+        "read_gdelt(): `actor_types` outside the known CAMEO 1.1b3 vocabulary: ",
+        paste(unknown_types, collapse = ", "),
+        ". Known codes: ", paste(.gdelt_actor_type_codes(), collapse = ", "),
+        ". GDELT's coder can emit codes outside this vocabulary; the filter ",
+        "still applies, but will simply match fewer rows for an unrecognized code.",
         call. = FALSE
       )
     }
@@ -517,7 +558,8 @@ read_gdelt <- function(
       actor_types = actor_types, actor_type_match = actor_type_match,
       countries = countries, country_match = country_match,
       cross_border = cross_border, root_events_only = root_events_only,
-      event_codes = event_codes, date_bounds = date_bounds
+      event_codes = event_codes, date_bounds = date_bounds,
+      chunk_size = chunk_size
     )
   })
 
@@ -525,15 +567,23 @@ read_gdelt <- function(
 }
 
 #' Read and filter one GDELT file (the per-file worker for [read_gdelt()])
+#'
+#' Appends each chunk's kept rows to a plain list and row-binds once after
+#' the read completes, rather than `bind_rows()`-ing into an accumulator on
+#' every chunk (quadratic in kept rows: each call recopies everything kept
+#' so far). Confirmed 10.1s -> 1.7s on a synthetic 400,000-row, 58-column
+#' file with a third of rows kept, combined with the larger `chunk_size`
+#' default (readr's own default is 10,000; monthly/yearly backfiles run to
+#' millions of rows, where the quadratic term dominates).
 #' @keywords internal
 .read_gdelt_one <- function(file, schema, columns, filter_cols,
                              actor_types, actor_type_match,
                              countries, country_match,
                              cross_border, root_events_only,
-                             event_codes, date_bounds) {
+                             event_codes, date_bounds, chunk_size = 100000L) {
   expected_n <- .gdelt_filename_ncols(file)
   first_line <- .gdelt_peek_first_line(file)
-  actual_n <- length(strsplit(first_line, "\t", fixed = TRUE)[[1]])
+  actual_n <- .gdelt_count_fields(first_line)
   n_cols <- expected_n
   if (actual_n != expected_n && actual_n > 0) {
     warning(sprintf(
@@ -550,28 +600,27 @@ read_gdelt <- function(
 
   read_cols <- intersect(union(columns, filter_cols), file_names)
 
-  out <- NULL
+  chunks <- list()
   readr::read_tsv_chunked(
     file,
-    callback = readr::DataFrameCallback$new(function(chunk, pos) {
+    callback = readr::SideEffectChunkCallback$new(function(chunk, pos) {
       filtered <- .gdelt_apply_filters(
         chunk, actor_types, actor_type_match, countries, country_match,
         cross_border, root_events_only, event_codes, date_bounds
       )
       if (nrow(filtered) > 0) {
-        out <<- dplyr::bind_rows(out, filtered[read_cols])
+        chunks[[length(chunks) + 1]] <<- filtered[read_cols]
       }
     }),
     col_names = file_names,
     col_types = col_types_str,
     quote = "",
     na = "",
+    chunk_size = chunk_size,
     progress = FALSE
   )
 
-  if (is.null(out)) {
-    out <- .gdelt_empty_tibble(schema, read_cols)
-  }
+  out <- if (length(chunks) > 0) dplyr::bind_rows(chunks) else .gdelt_empty_tibble(schema, read_cols)
 
   # Every requested column present, even one absent from this particular
   # file (e.g. SOURCEURL for a 57-column backfile) -- filled NA, so output
@@ -662,7 +711,9 @@ read_gdelt <- function(
     }
   }
 
-  file.rename(part, destfile)
+  if (!file.rename(part, destfile)) {
+    return(list(status = "failed", path = NA_character_))
+  }
   list(status = "downloaded", path = destfile)
 }
 
@@ -695,6 +746,13 @@ read_gdelt <- function(
 }
 
 #' `download_gdelt()`, temp mode: download, read, discard, per file
+#'
+#' When every file in `plan` is missing/failed/corrupt, `all_events` is a
+#' list of `NULL`s and `dplyr::bind_rows()` of that gives a zero-column
+#' tibble with no hint of what was expected. Falls back to
+#' [.gdelt_empty_tibble()] (using `...`'s `columns`, or [read_gdelt()]'s own
+#' default if `columns` wasn't passed) plus an empty `source_file` column,
+#' so downstream code gets the same shape either way.
 #' @keywords internal
 .download_gdelt_temp <- function(plan, md5_lookup, verify, ...) {
   statuses <- character(nrow(plan))
@@ -717,7 +775,14 @@ read_gdelt <- function(
 
   .gdelt_warn_failures(plan, statuses)
 
-  result <- dplyr::bind_rows(all_events)
+  if (any(statuses == "downloaded")) {
+    result <- dplyr::bind_rows(all_events)
+  } else {
+    dots <- list(...)
+    columns <- dots$columns %||% gdelt_columns("core")
+    result <- .gdelt_empty_tibble(.gdelt_schema(), columns)
+    result$source_file <- character(0)
+  }
   attr(result, "files") <- dplyr::mutate(plan, status = statuses)
   result
 }
@@ -875,10 +940,10 @@ download_gdelt <- function(
 .count_gdelt_actor_types_one <- function(file, schema,
                                           countries, country_match,
                                           cross_border, root_events_only,
-                                          date_bounds) {
+                                          date_bounds, chunk_size = 100000L) {
   expected_n <- .gdelt_filename_ncols(file)
   first_line <- .gdelt_peek_first_line(file)
-  actual_n <- length(strsplit(first_line, "\t", fixed = TRUE)[[1]])
+  actual_n <- .gdelt_count_fields(first_line)
   n_cols <- if (actual_n != expected_n && actual_n > 0) actual_n else expected_n
   n_cols <- min(n_cols, nrow(schema))
 
@@ -886,10 +951,10 @@ download_gdelt <- function(
   type_letter <- c(character = "c", integer = "i", double = "d")
   col_types_str <- paste(type_letter[schema$type[seq_len(n_cols)]], collapse = "")
 
-  out <- NULL
+  chunks <- list()
   readr::read_tsv_chunked(
     file,
-    callback = readr::DataFrameCallback$new(function(chunk, pos) {
+    callback = readr::SideEffectChunkCallback$new(function(chunk, pos) {
       filtered <- .gdelt_apply_filters(
         chunk,
         actor_types = NULL, actor_type_match = "both",
@@ -898,17 +963,20 @@ download_gdelt <- function(
         event_codes = NULL, date_bounds = date_bounds
       )
       if (nrow(filtered) > 0) {
-        out <<- dplyr::bind_rows(out, .gdelt_count_actor_types_chunk(filtered))
+        chunks[[length(chunks) + 1]] <<- .gdelt_count_actor_types_chunk(filtered)
       }
     }),
     col_names = file_names,
     col_types = col_types_str,
     quote = "",
     na = "",
+    chunk_size = chunk_size,
     progress = FALSE
   )
 
-  if (is.null(out)) {
+  if (length(chunks) > 0) {
+    out <- dplyr::bind_rows(chunks)
+  } else {
     out <- tibble::tibble(actor1_type = character(0), actor2_type = character(0), n = integer(0))
   }
   out
@@ -939,7 +1007,8 @@ count_gdelt_actor_types <- function(
   country_match = c("either", "both"),
   cross_border = TRUE,
   root_events_only = FALSE,
-  date_range = NULL
+  date_range = NULL,
+  chunk_size = 100000L
 ) {
   country_match <- match.arg(country_match)
   if (length(files) == 0) {
@@ -955,7 +1024,7 @@ count_gdelt_actor_types <- function(
       schema = schema,
       countries = countries, country_match = country_match,
       cross_border = cross_border, root_events_only = root_events_only,
-      date_bounds = date_bounds
+      date_bounds = date_bounds, chunk_size = chunk_size
     )
   })
 

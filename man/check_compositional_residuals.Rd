@@ -29,8 +29,8 @@ CmdStan CSV file paths (one per chain) -- the same forms
 by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (must still carry its \code{dyad_ids}
 attribute). Supplies \code{Y}, \code{is_obs}, \code{D}, \code{T}, \code{A}.}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
-recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
+\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
 
 \item{n_dyads}{Target size of the stratified dyad subsample (capped at
 the number of eligible -- i.e. \code{n_d > 0} -- dyads). Default \code{1500}.}

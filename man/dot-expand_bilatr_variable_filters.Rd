@@ -15,7 +15,10 @@ in the CSV header (\code{prepared$variables}).}
 \value{
 Character vector of concrete, available variable names, in
 the order their filters were given (a base-name filter expands to
-its matches in \code{available}'s order).
+its matches in \code{available}'s order), with duplicates dropped (B5): a
+request like \code{c("alpha", "alpha[1]")} would otherwise return
+\code{"alpha[1]"} twice, and \code{data.table::fread(select = )} errors opaquely
+("Column number ... has been selected twice") on a duplicated column.
 }
 \description{
 Replicates \code{cmdstanr:::matching_variables()}'s two-step lookup so

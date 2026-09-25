@@ -2,26 +2,26 @@
 % Please edit documentation in R/fast_csv_read.R
 \name{.scan_stan_csv_header_and_skip}
 \alias{.scan_stan_csv_header_and_skip}
-\title{Scan a raw CmdStan CSV for its header and the offset of its first
-post-warmup data row}
+\title{Scan a raw CmdStan CSV for its header, config, and the offset of its
+first post-warmup data row -- replaces \code{cmdstanr:::read_csv_metadata()}}
 \usage{
-.scan_stan_csv_header_and_skip(csv_file, num_warmup_rows)
+.scan_stan_csv_header_and_skip(csv_file)
 }
 \arguments{
 \item{csv_file}{A single raw CmdStan CSV file path.}
-
-\item{num_warmup_rows}{Number of warmup data rows to pass over (0 if
-\code{save_warmup = FALSE}), from metadata.}
 }
 \value{
 A list with \code{skip} (integer: number of lines to pass so the
-next line is the first post-warmup draw -- i.e. \code{fread(skip = this)}'s first row) and \code{header_line} (the raw, unparsed header
-line).
+next line is the first post-warmup draw -- i.e. \code{fread(skip = this)}'s first row), \code{header_line} (the raw, unparsed header line),
+\code{num_samples}/\code{num_warmup}/\code{thin} (integers) and \code{save_warmup}
+(logical), parsed from the config block, and \code{num_post_warmup_draws}
+(\code{ceiling(num_samples / thin)}, the same arithmetic
+\code{cmdstanr:::read_csv_metadata()} used).
 }
 \description{
 A CmdStan \code{sample} CSV is laid out, in order: a \verb{#}-prefixed config
 comment block; the header line (not a comment); \code{num_warmup_rows} data
-rows if \code{save_warmup = 1} (0 otherwise); an "Adaptation terminated"
+rows if \code{save_warmup} (0 otherwise); an "Adaptation terminated"
 comment block (\verb{# Adaptation terminated}, \verb{# Step size = ...}, \verb{# Diagonal elements of inverse mass matrix:}, and one more \verb{#} line with
 the values themselves -- 4 lines for the default \code{diag_e} metric
 confirmed empirically to stay 4 lines even at 500 parameters, since
@@ -35,12 +35,24 @@ the un-adapted defaults); post-warmup data rows; a \verb{#}-prefixed timing
 footer.
 }
 \details{
+Parses \code{method}/\code{num_samples}/\code{num_warmup}/\code{save_warmup}/\code{thin} out of
+the config block in the same single pass that finds the header and the
+post-warmup data offset (0.10.0; previously a separate
+\code{cmdstanr:::read_csv_metadata()} call, which does a full-file \code{grep}
+pass and is a \code{:::} call into cmdstanr's private API). Each key's
+FIRST match wins, since keys are indented by nesting level and could in
+principle repeat at a different level. \code{save_warmup} is normalized to
+logical, accepting both \code{0}/\code{1} (older CmdStan) and \code{false}/\code{true}
+(CmdStan >= 2.33, confirmed against a real 2.38 CSV). \code{method} must be
+\code{"sample"}; anything else errors, naming the file -- this package only
+ever reads \code{sample} output.
+
 Reads one line at a time via a text connection and discards each as
 it's read (never keeps a warmup row), so peak memory here is one
 line's text, not the file. In this package's own usage \code{save_warmup}
 is always left at its \code{FALSE} default (grep confirms no caller sets
-it), so \code{num_warmup_rows} is 0 and this scan touches only the config
-block, the header, and the (typically ~4-line) adaptation block --
-tens of lines regardless of the file's total size or column count.
+it), so this scan touches only the config block, the header, and the
+(typically ~4-line) adaptation block -- tens of lines regardless of the
+file's total size or column count.
 }
 \keyword{internal}

@@ -204,7 +204,7 @@
 #' correlated, so `sd(alpha_j - alpha_k)` is emphatically not
 #' `sqrt(sd_j^2 + sd_k^2)`).
 #'
-#' **`stan_model = "stable_gamma"` (0.7.0):** every measure here (`alpha`,
+#' **On a `stable_gamma` fit (0.7.0):** every measure here (`alpha`,
 #' its correlation structure, the reference `shares`) is evaluated
 #' exactly as for any other model -- `gamma`/`g_d` never enter this
 #' function's computation at all. For `stable_gamma`, that means the
@@ -221,8 +221,6 @@
 #' @param stan_data The Stan data list used to produce `fit`, as returned
 #'   by [assemble_stan_data()] (used for the default empirical `shares`
 #'   and the `effective_info` figure's mean event count).
-#' @param stan_model Name registered in `.bilatr_stan_models`, or a
-#'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
 #' @param event_classes Character vector of event-class labels, length
 #'   `A`, in the same order as `stan_data`'s `"event_classes"` attribute.
 #'   Defaults to that attribute if present, else `"1", "2", ...`.
@@ -267,23 +265,17 @@
 diagnose_category_merges <- function(
   fit,
   stan_data,
-  stan_model = .BILATR_DEFAULT_MODEL,
   event_classes = NULL,
   class_label_fn = NULL,
   shares = NULL,
   phi = NULL,
   probs = c(0.05, 0.5, 0.95)
 ) {
-  stan_model <- .canonical_stan_model(stan_model)
-
   need_theta0 <- identical(shares, "theta0")
   need_phi_draws <- is.null(phi)
   vars <- c("alpha", if (need_theta0) "mu_intercept", if (need_phi_draws) "phi")
 
   draws <- .get_draws(fit, vars)
-  if (length(.bilatr_flip_variables(stan_model)) > 0) {
-    draws <- bilatr_orient(draws, stan_model = stan_model, variables = vars)
-  }
 
   alpha_mat <- .as_ordered_matrix(draws, "alpha")
   A <- ncol(alpha_mat)

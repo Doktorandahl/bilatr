@@ -11,7 +11,8 @@
   country_match,
   cross_border,
   root_events_only,
-  date_bounds
+  date_bounds,
+  chunk_size = 100000L
 )
 }
 \description{

@@ -41,8 +41,8 @@
 #' dev/claude_code_prompt_0.7.0_country_offsets.md, "Part 4"). `gamma` is
 #' fully identified (unlike `gamma_z`, which is prior-only pinned in its
 #' projected-out directions -- see [.bilatr_sign_tied_names()] in
-#' `R/orient.R` for where THAT is excluded instead, via the `tier = NA`
-#' path below, for a different reason than sign ambiguity).
+#' `R/sign_ambiguity.R` for where THAT is excluded instead, via the
+#' `tier = NA` path below, for a different reason than sign ambiguity).
 #' @keywords internal
 .bilatr_tier1_names <- c(
   "alpha", "mu_intercept", "sigma_theta0",
@@ -54,26 +54,25 @@
 #' Names of raw, sampled parameters that are sign-ambiguous under the
 #' alpha/theta reflection symmetry, across every registered model
 #'
-#' Unlike [.bilatr_flip_variables()] (legacy models only, and including
-#' the REPORTED quantities those models still need `bilatr_orient()`
-#' for), this is unconditional across every model: `stable`/`ou`'s
-#' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
-#' ORIENTATION FOLD") corrects the reported `alpha`/`theta`/etc., but the
-#' RAW parameters it's built from (`alpha_raw` itself, plus whichever of
-#' `z_theta0`/`mu_dyad_raw` and `theta_raw` a given model has) remain
-#' genuinely sign-ambiguous: if two chains land in opposite raw-space
-#' basins, those variables' own cross-chain Rhat is meaningless even
-#' though everything reported is fine. [.classify_bilatr_tier()] uses
-#' this to keep them out of the tiered diagnostics tables entirely
-#' (`tier = NA`), rather than let a meaningless Rhat surface as a false
-#' Tier 1 alarm.
+#' `stable`/`ou`'s orientation fold (see each `.stan` file's header,
+#' "IDENTIFICATION: ORIENTATION FOLD") corrects the reported
+#' `alpha`/`theta`/etc., but the RAW parameters it's built from
+#' (`alpha_raw` itself, plus whichever of `z_theta0`/`mu_dyad_raw` and
+#' `theta_raw` a given model has) remain genuinely sign-ambiguous: if two
+#' chains land in opposite raw-space basins, those variables' own
+#' cross-chain Rhat is meaningless even though everything reported is
+#' fine. [.classify_bilatr_tier()] uses this to keep them out of the
+#' tiered diagnostics tables entirely (`tier = NA`), rather than let a
+#' meaningless Rhat surface as a false Tier 1 alarm.
 #'
-#' Derived from [.bilatr_sign_tied_names()] (`R/orient.R`) -- the single
-#' source of truth this and [.bilatr_flip_variables()] both draw from, so
-#' the two cannot drift apart -- unioning the `raw` component across
-#' every currently-registered model. Computed inside the function body,
-#' not as a top-level constant, so it doesn't depend on `R/model_registry.R`
-#' having been sourced first.
+#' Derived from [.bilatr_sign_tied_names()] (`R/sign_ambiguity.R`), the
+#' single source of truth for which raw names are sign-tied per model --
+#' unioning its `raw` component across every currently-registered model.
+#' Computed inside the function body, not as a top-level constant, so it
+#' doesn't depend on `R/model_registry.R` having been sourced first.
+#'
+#' This function's name and output must not change across versions: the
+#' runscripts call `bilatr:::.bilatr_sign_ambiguous_raw_names()` directly.
 #'
 #' @return Character vector of variable base names.
 #' @keywords internal
@@ -602,29 +601,6 @@
 #' @keywords internal
 .BILATR_CHUNK_PER_CHAIN_FACTOR <- 2
 
-#' Memory-model constant: the post-Step-1 array-native sign flip's
-#' residual cost
-#'
-#' Applied unconditionally (not just when a flip actually happens):
-#' whether `alpha[1]`'s posterior median is negative isn't known until
-#' after the first chunk is read, so [.compute_chunk_size()] must budget
-#' for the possibility on every call, not just the calls that end up
-#' needing it. Since [.fast_read_post_warmup_draws()]'s `flip_vars`
-#' negates `flip_pos` columns of `m` in place before it's assigned into
-#' `arr` (no extra copy there), and [.chunked_summarise_csv_with_orientation()]/
-#' [.read_and_orient_draws_summary()]'s array-native
-#' `draws[, , flip_cols] <- -draws[, , flip_cols, drop = FALSE]` negates
-#' only the matched subset of an already-materialized array, the
-#' remaining cost is R's own copy-on-modify for that replacement.
-#' Measured (2026-09, `dev/bench_memory.R`): flip added ~91-142 MB over
-#' otherwise-identical no-flip runs (~0.6-1.0x `raw_mb`) -- far below
-#' the ~3.9x `raw_mb` the pre-Step-1 `as_draws_df()` round-trip cost
-#' (see `dev/refactor_verification_2026-09-10.md` section 1), but not
-#' zero, so (per that document's own instruction) a term stays here
-#' rather than assuming it away.
-#' @keywords internal
-.BILATR_CHUNK_FLIP_FACTOR <- 1
-
 #' Memory-model constant: the one-time cost of `posterior::
 #' summarise_draws()` forking at all (`.cores > 1`)
 #'
@@ -703,16 +679,19 @@
 #' `n_chains` array (`.BILATR_CHUNK_ARRAY_FACTOR`, ~3x `raw_mb`);
 #' `fread()`'s parse buffer and one chain's resulting matrix, each sized
 #' for ONE chain (`raw_mb / n_chains`, i.e.
-#' `.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains`); the array-native sign
-#' flip's residual cost, budgeted unconditionally
-#' (`.BILATR_CHUNK_FLIP_FACTOR`, see its own docs for why); and, only
-#' when `n_cores > 1`, `posterior::summarise_draws()`'s forked-worker
-#' cost -- a one-time step
-#' (`.BILATR_CHUNK_CORES_STEP_FACTOR`) plus a per-additional-worker term
-#' (`.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)`), NOT a flat
-#' penalty regardless of the exact core count (see that constant's docs
-#' -- this replaced an assumption that was never measured and was
+#' `.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains`); and, only when `n_cores >
+#' 1`, `posterior::summarise_draws()`'s forked-worker cost -- a one-time
+#' step (`.BILATR_CHUNK_CORES_STEP_FACTOR`) plus a per-additional-worker
+#' term (`.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)`), NOT a
+#' flat penalty regardless of the exact core count (see that constant's
+#' docs -- this replaced an assumption that was never measured and was
 #' wrong).
+#'
+#' 0.10.0 dropped the `.BILATR_CHUNK_FLIP_FACTOR` term that used to sit
+#' here: the post-hoc sign-flip machinery it budgeted for
+#' (`bilatr_orient()` and its array-native equivalents) was retired along
+#' with the soft-anchor stack that needed it (see NEWS.md), so `k` is
+#' exactly 1 lower than before for every `(n_chains, n_cores)` pair.
 #'
 #' @param n_chains From [.prepare_fast_csv_read].
 #' @param n_cores See [diagnose_convergence()]'s `parallel`/`n_workers`.
@@ -721,7 +700,6 @@
 .bilatr_chunk_overhead_multiplier <- function(n_chains, n_cores) {
   .BILATR_CHUNK_ARRAY_FACTOR +
     .BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains +
-    .BILATR_CHUNK_FLIP_FACTOR +
     (if (n_cores > 1) {
       .BILATR_CHUNK_CORES_STEP_FACTOR + .BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)
     } else {
@@ -846,109 +824,18 @@
 #' @param n_cores Cores for [.summarise_bilatr_draws()]'s `.cores`; `1L`
 #'   for a fully sequential run. See [diagnose_convergence()]'s
 #'   `parallel`/`n_workers` for how a caller arrives at this number.
-#' @param flip_vars Character vector of variable base names to negate
-#'   before summarising (used by [extract_theta()]'s CSV path to apply
-#'   [bilatr_orient()]'s sign correction; `character(0)`, the default,
-#'   for [diagnose_convergence()], since Rhat/ESS are invariant to a
-#'   deterministic sign flip and it would be pointless work there).
-#'   Passed straight through to [.fast_read_post_warmup_draws()], which
-#'   negates matching columns of each chain's temporary matrix before it
-#'   is ever assigned into the read's result array -- not a post-hoc
-#'   transformation of the summary columns (which would need to swap the
-#'   quantile columns, `quantile(-X, p) == -quantile(X, 1 - p)`, not just
-#'   negate them), and not a `draws_df` round-trip (which would force
-#'   `summarise_draws()` to rebuild a `draws_array` internally at the
-#'   cost of a second full copy of the chunk -- see
-#'   [.fast_read_post_warmup_draws()]'s own docs). Column-selective by
-#'   construction (B5): `chunk_vars` can legitimately mix a flip-needing
-#'   variable (`theta`/`theta_raw`) with one that must NOT flip
-#'   (`log_lik[d,t]`, also Tier 3, when `compute_log_lik = 1`), and only
-#'   the columns `flip_vars` actually lists are ever negated.
 #' @return A tibble, the row-bound [.summarise_bilatr_draws()] output
 #'   across all chunks.
 #' @keywords internal
-.chunked_summarise_csv <- function(prepared, variables, chunk_size, n_cores = 1L, flip_vars = character(0)) {
+.chunked_summarise_csv <- function(prepared, variables, chunk_size, n_cores = 1L) {
   chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
 
   summarise_one_chunk <- function(chunk_vars) {
-    draws <- .fast_read_post_warmup_draws(prepared, chunk_vars, flip_vars = flip_vars)
+    draws <- .fast_read_post_warmup_draws(prepared, chunk_vars)
     .summarise_bilatr_draws(draws, n_cores = n_cores)
   }
 
   purrr::map_dfr(chunks, summarise_one_chunk)
-}
-
-#' Chunked-summarise a Tier 3 (or theta-only) variable set, determining
-#' sign orientation from the first chunk instead of a separate `alpha[1]`
-#' read
-#'
-#' Shared by [diagnose_and_extract_bilatr()] and [extract_theta()]'s CSV
-#' branches for the case where no Tier 1/2 read is already happening to
-#' piggyback `alpha[1]` onto (i.e. `tiers` excludes both 1 and 2, or
-#' `extract_theta()`, which never reads anything but `theta`). If
-#' `flip_vars` is empty (the model has no reflection symmetry) or
-#' `variables` is empty, this is exactly [.chunked_summarise_csv()] with
-#' `flip = FALSE` -- no `alpha[1]` read at all. Otherwise, `"alpha[1]"`
-#' is prepended to the FIRST chunk only (unless it's already in it),
-#' read once unflipped; its posterior median decides `flip`; that
-#' chunk's `flip_vars`-matching columns (see
-#' [.bilatr_match_draws_columns()]) are negated directly on the
-#' `draws_array` (mirroring [.read_and_orient_draws_summary()]'s
-#' array-native flip -- no `draws_df` round-trip, which would force
-#' `summarise_draws()` to rebuild a `draws_array` internally at the cost
-#' of a second full copy) and, if `"alpha[1]"` was only added for this
-#' orientation check, its row is dropped from the first chunk's summary
-#' afterward, the same way [.read_and_orient_draws_summary()] does it;
-#' every remaining chunk is then read via [.chunked_summarise_csv()]
-#' with `flip` already known. A full sweep still costs exactly one read
-#' per chunk, with no extra pass just to check `alpha[1]`'s sign.
-#'
-#' @param prepared Output of [.prepare_fast_csv_read].
-#' @param variables Character vector of Tier 3 (or theta-only) variable
-#'   names to summarise.
-#' @param chunk_size Variables per chunk.
-#' @param n_cores See [.chunked_summarise_csv()].
-#' @param flip_vars Output of [.bilatr_flip_variables()] for the model
-#'   being read.
-#' @return A list with `summ` (the row-bound summary tibble, same shape
-#'   [.chunked_summarise_csv()] returns) and `flip` (logical, the
-#'   orientation decision -- for a caller that also needs to flip a
-#'   Tier 1/2 read using the same decision).
-#' @keywords internal
-.chunked_summarise_csv_with_orientation <- function(prepared, variables, chunk_size, n_cores, flip_vars) {
-  if (length(flip_vars) == 0 || length(variables) == 0) {
-    return(list(
-      summ = .chunked_summarise_csv(prepared, variables, chunk_size, n_cores),
-      flip = FALSE
-    ))
-  }
-
-  first_chunk_vars <- utils::head(variables, chunk_size)
-  rest_vars <- utils::tail(variables, -length(first_chunk_vars))
-
-  alpha1_injected <- !("alpha[1]" %in% first_chunk_vars)
-  read_vars <- if (alpha1_injected) c("alpha[1]", first_chunk_vars) else first_chunk_vars
-  first_draws <- .fast_read_post_warmup_draws(prepared, read_vars)
-  flip <- stats::median(posterior::extract_variable(first_draws, "alpha[1]")) < 0
-
-  if (flip) {
-    flip_cols <- .bilatr_match_draws_columns(posterior::variables(first_draws), flip_vars)
-    if (length(flip_cols) > 0) {
-      first_draws[, , flip_cols] <- -first_draws[, , flip_cols, drop = FALSE]
-    }
-  }
-  first_summ <- .summarise_bilatr_draws(first_draws, n_cores = n_cores)
-  if (alpha1_injected) {
-    first_summ <- dplyr::filter(first_summ, variable != "alpha[1]")
-  }
-
-  rest_summ <- if (length(rest_vars) > 0) {
-    .chunked_summarise_csv(prepared, rest_vars, chunk_size, n_cores, flip_vars = if (flip) flip_vars else character(0))
-  } else {
-    NULL
-  }
-
-  list(summ = dplyr::bind_rows(first_summ, rest_summ), flip = flip)
 }
 
 #' Report the wall-time/core-hour trade-off across candidate `n_workers`
@@ -1385,8 +1272,8 @@
 #'   give both lower estimated wall time and lower estimated
 #'   core-seconds than your current `n_workers`, if the small grid
 #'   checked (`n_workers` itself, `1`, half, and double) finds one.
-#' @param stan_model (0.7.1) Name registered in `.bilatr_stan_models`, or
-#'   a recognized pre-0.4.0 alias; see [.canonical_stan_model()]. Used
+#' @param stan_model (0.7.1) Name registered in `.bilatr_stan_models`; see
+#'   [.canonical_stan_model()]. Used
 #'   only to decide whether `gamma` (the experimental `stable_gamma`
 #'   variant's country-level offset) gets its own report element instead
 #'   of flooding Tier 1 -- see `@return`'s `gamma` element. Rhat/ESS

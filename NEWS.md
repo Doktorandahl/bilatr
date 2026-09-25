@@ -1,3 +1,115 @@
+# bilatr 0.10.0
+
+Retires the pre-0.4.2 soft-anchor stack fully (`stable_soft_anchor`/
+`ou_soft_anchor` and the post-hoc orientation machinery they needed --
+the current `stable`/`ou`/`stable_gamma` programs fold the sign in Stan
+and never needed it) and replaces `cmdstanr:::read_csv_metadata()` with a
+single-pass parser, plus six follow-up fixes from the 0.9.1 GDELT review
+(see `dev/claude_code_prompt_0.10.0_retire_soft_anchor.md`; summary and
+verification detail at `dev/summary_0.10.0_retire_soft_anchor.md`).
+Behavioural parity for the current models was verified against 0.9.1
+(`b1f3f39`) via a temporary `git worktree`: every value `diagnose_and_extract_bilatr()`,
+`diagnose_convergence()` (CSV and in-memory), `extract_theta()`/
+`extract_alpha()`/`extract_mu_intercept()`/`extract_gamma()`,
+`diagnose_category_merges()`, `icc_curves()`, and
+`check_compositional_residuals()` return is `identical()` between the two
+versions, for both `stable` and `stable_gamma`.
+
+## Breaking changes
+
+* `stable_soft_anchor`/`ou_soft_anchor` (the pre-0.4.2 soft-sign-anchor
+  programs) and the pre-0.4.0 `alphanorm`/`alphanorm_ou` aliases are
+  retired: `.canonical_stan_model()` now stops on all four names with
+  "retired in bilatr 0.10.0 ... install bilatr <= 0.9.1 to read/re-derive
+  a fit made under this name." Every fit made under any of the four names
+  predates 0.4.2.
+* `bilatr_orient()`, `.bilatr_flip_variables()`, and `.warn_if_wrong_basin()`
+  are removed, along with the `flip_vars` argument on the internal
+  CSV-chunked readers. `stable`/`ou`/`stable_gamma` never needed them
+  (the orientation fold has identified `alpha[1]`'s sign in Stan since
+  0.4.2b); nothing else did either, confirmed by the parity check above.
+* `stan_model` is removed from `extract_theta()`, `extract_alpha()`,
+  `extract_mu_intercept()`, and `diagnose_category_merges()` -- it did
+  nothing in any of the four once the orientation branches were gone.
+  Kept on `diagnose_convergence()`, `diagnose_and_extract_bilatr()`,
+  `icc_curves()`, and `check_compositional_residuals()`, which still use
+  it to detect `stable_gamma`.
+* `anchor_scale` is removed from `assemble_stan_data()`. No registered
+  program declares it any more; confirmed no runscript passed it.
+* `read_gdelt()`'s `actor_types` argument now warns, rather than errors,
+  on a code outside the CAMEO 1.1b3 vocabulary -- GDELT's coder can
+  legitimately emit codes outside it, and a hard `stop()` blocked
+  otherwise-legitimate work. Live-checked against the 2020-01-01 daily
+  and 1979 yearly files (`cross_border = FALSE`): the one code observed
+  outside the vocabulary in both, `SET` ("Settler", CAMEO 1.1b3 Table
+  3.1), is genuine and has been added to `.gdelt_actor_type_codes()`.
+
+## Bug fixes
+
+* 0a: `.gdelt_peek_first_line()`'s `unz()` connection is no longer opened
+  with `open = "rt"` up front, which failed with "seek not enabled for
+  this connection" on older R (confirmed R 4.3.3); all 28 `test_gdelt.R`
+  tests now pass there. `readLines()` opens the connection lazily
+  instead.
+* 0b: the GDELT column-count sniff (`.read_gdelt_one()`/
+  `.count_gdelt_actor_types_one()`) now counts tab separators instead of
+  `strsplit()`-ing on them, so a first row ending in an empty field (e.g.
+  a blank `SOURCEURL`) is no longer miscounted as one column short --
+  that miscount used to trigger the "trust the file" branch and silently
+  drop `SOURCEURL` for the whole file.
+* 0e: `download_gdelt()` now checks `file.rename()`'s return value
+  (reports `"failed"`, not `"downloaded"`, if the final rename fails) and
+  returns a correctly-shaped, correctly-typed empty tibble (`columns` +
+  `source_file`) from temp mode when every requested file is missing/
+  failed/corrupt, instead of a hint-free zero-column one.
+* B5: `.expand_bilatr_variable_filters()` now wraps its result in
+  `unique()`, so a request like `c("alpha", "alpha[1]")` no longer makes
+  `data.table::fread(select =)` fail opaquely ("Column number ... has
+  been selected twice").
+
+## Performance
+
+* 0c: `read_gdelt()`'s chunk accumulation no longer re-copies everything
+  kept so far on every chunk (`SideEffectChunkCallback` appending to a
+  list, one `bind_rows()` at the end, instead of `bind_rows()`-ing into
+  an accumulator per chunk), and its default `chunk_size` is now 100,000
+  rows (readr's own default is 10,000). On a synthetic 400,000-row,
+  58-column file with a third of rows kept: 12.54s -> 2.25s, identical
+  rows kept.
+* `.prepare_fast_csv_read()` no longer does a full-file metadata scan per
+  CSV read (see Internal).
+
+## Internal
+
+* `cmdstanr:::read_csv_metadata()` is replaced by a single-pass header
+  parser (`.scan_stan_csv_header_and_skip()`, extended to also parse
+  `method`/`num_samples`/`num_warmup`/`save_warmup`/`thin` from the
+  config comment block it already scanned): removes the package's `:::`
+  NOTE from `R CMD check`, the full-file `grep` pass
+  `cmdstanr:::read_csv_metadata()` did, and the only reason the
+  synthetic-CSV tests needed cmdstanr installed at all. Also now checks
+  that every chain agrees on `num_samples`/`thin`/`save_warmup`/header
+  (the old path only ever looked at `csv_files[1]`), and correctly keeps
+  `lp__` in the monitored-variables list despite its trailing `__`
+  (confirmed against `cmdstanr:::read_csv_metadata()$variables` directly).
+  Verified against the real CmdStan fixture and two real production CSVs
+  (`runscripts/tmpdata/bilatr1_sample{,10}.csv`): config fields and all
+  1,256,280 variables match exactly.
+* `.bilatr_chunk_overhead_multiplier()` drops the `.BILATR_CHUNK_FLIP_FACTOR`
+  term (the post-hoc sign-flip's budgeted memory cost, no longer needed):
+  `k` falls by exactly 1 for every `(n_chains, n_cores)` pair -- 48 -> 47
+  at 1 chain/16 workers, 46.5 -> 45.5 at 4 chains/16 workers, the two
+  production shapes.
+* The synthetic-CSV tests in `test_fast_csv_read.R` no longer need
+  cmdstanr installed at all (confirmed by stubbing
+  `cmdstanr:::read_csv_metadata()` to error and re-running them).
+* `R/orient.R` is renamed `R/sign_ambiguity.R`: all that's left is
+  `.bilatr_sign_tied_names()`'s `raw` sets, which
+  `.bilatr_sign_ambiguous_raw_names()` (`R/diagnose_convergence.R`) still
+  needs to keep `alpha_raw`/`z_theta0`/`mu_dyad_raw`/`theta_raw`/`gamma_z`
+  out of the tiered diagnostics -- its name and output are unchanged
+  (pinned by a new test), since the runscripts call it directly.
+
 # bilatr 0.9.1
 
 Six follow-up fixes from the 0.9.0 review, plus a full rewrite of the

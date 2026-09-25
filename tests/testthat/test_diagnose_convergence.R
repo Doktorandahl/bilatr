@@ -444,16 +444,17 @@ test_that(".resolve_chunk_size_and_report() names a better n_workers level only 
 })
 
 test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation", {
-  # ARRAY(3) + PER_CHAIN/n_chains(2/n_chains) + FLIP(1, unconditional --
-  # whether a flip is needed isn't known until after the first chunk is
-  # read), no cores term at n_cores = 1
-  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 1, n_cores = 1), 3 + 2 + 1)
-  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 1), 3 + 2 / 4 + 1)
+  # ARRAY(3) + PER_CHAIN/n_chains(2/n_chains), no cores term at
+  # n_cores = 1. 0.10.0 dropped the FLIP(1) term the pre-0.10.0 formula
+  # had here: the post-hoc sign-flip machinery it budgeted for was
+  # retired along with the soft-anchor stack that needed it.
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 1, n_cores = 1), 3 + 2)
+  expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 1), 3 + 2 / 4)
 
   # n_cores > 1: a one-time STEP (4.5) plus a PER_CORE term (2.5) for
   # each additional forked worker beyond the first -- measured to scale
   # with n_cores, not a flat penalty regardless of the exact core count
-  base <- 3 + 2 / 4 + 1
+  base <- 3 + 2 / 4
   expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 2), base + 4.5 + 2.5 * 1)
   expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 4), base + 4.5 + 2.5 * 3)
   expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 24), base + 4.5 + 2.5 * 23)
@@ -580,67 +581,3 @@ test_that("diagnose_convergence() from CSV files messages about the max_memory_m
   )
 })
 
-test_that(".chunked_summarise_csv() with a flip stays within ~1.3x the peak RSS of an otherwise-identical no-flip run (regression guard, verification section 1)", {
-  skip_on_cran()
-  skip_on_ci()
-  skip_if_not_installed("callr")
-  skip_if_not_installed("ps")
-
-  # a moderate synthetic CSV. Checked empirically (dev-only, not part of
-  # this test): at this scale, a reintroduced as_draws_df()/
-  # as.data.frame() round-trip flip (the pre-fix mechanism, ~3.9x
-  # raw_mb) measures a ratio around 1.3-1.34 against this fixed
-  # implementation's ~0.9-1.13 -- separation exists but is not huge, a
-  # consequence of a fixed ~200 MB R/package-loading floor
-  # ([.BILATR_CHUNK_BASELINE_MB]) diluting the relative size of any
-  # raw_mb-proportional regression at any practical (fast-to-test)
-  # scale. This is a deliberately loose, cheap guard against a
-  # regression of that specific SHAPE (see verification section 1),
-  # not a precise measurement -- dev/bench_memory.R is that.
-  n_cols <- 20000L
-  n_draws <- 200L
-  f <- tempfile(fileext = ".csv")
-  on.exit(unlink(f), add = TRUE)
-  .make_synthetic_stan_csv(f, n_cols = n_cols, n_draws = n_draws)
-
-  pkg_root <- normalizePath(file.path(testthat::test_path(), "..", ".."))
-
-  # peak RSS is a per-process high-water mark (see dev/bench_memory.R's
-  # own rationale for the same choice): run each configuration in a
-  # fresh callr background process, polling its RSS via the `ps`
-  # package until it exits. n_cores = 1 here (no forking), so a single
-  # process's own RSS is enough -- no process-tree summation needed.
-  measure_peak_mb <- function(flip) {
-    p <- callr::r_bg(
-      function(pkg_root, csv_file, flip) {
-        devtools::load_all(pkg_root, quiet = TRUE)
-        prepared <- .prepare_fast_csv_read(csv_file)
-        variables <- grep("^x\\[", prepared$variables, value = TRUE)
-        flip_vars <- if (flip) "x" else character(0)
-        invisible(.chunked_summarise_csv(
-          prepared, variables,
-          chunk_size = length(variables), n_cores = 1L, flip_vars = flip_vars
-        ))
-      },
-      args = list(pkg_root = pkg_root, csv_file = f, flip = flip)
-    )
-    on.exit(p$kill(), add = TRUE)
-
-    peak_bytes <- 0
-    while (p$is_alive()) {
-      total <- tryCatch(ps::ps_memory_info(ps::ps_handle(p$get_pid()))[["rss"]], error = function(e) 0)
-      peak_bytes <- max(peak_bytes, total)
-      Sys.sleep(0.02)
-    }
-    p$wait()
-    if (!identical(p$get_exit_status(), 0L)) {
-      stop("callr worker (flip = ", flip, ") failed:\n", paste(p$read_all_error_lines(), collapse = "\n"))
-    }
-    peak_bytes / 1e6
-  }
-
-  no_flip_mb <- measure_peak_mb(FALSE)
-  flip_mb <- measure_peak_mb(TRUE)
-
-  expect_lt(flip_mb / no_flip_mb, 1.3)
-})

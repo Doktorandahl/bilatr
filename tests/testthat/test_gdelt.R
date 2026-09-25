@@ -73,6 +73,32 @@ test_that("read_gdelt() reads the 58-column daily layout with correct types", {
   expect_false(any(is.na(events$SOURCEURL))) # daily file: SOURCEURL present
 })
 
+test_that(".gdelt_count_fields() counts a trailing empty field correctly (0b)", {
+  expect_equal(bilatr:::.gdelt_count_fields("a\tb\tc"), 3L)
+  expect_equal(bilatr:::.gdelt_count_fields("a\tb\t"), 3L) # trailing empty SOURCEURL
+  expect_equal(bilatr:::.gdelt_count_fields("a\t\tc"), 3L) # empty middle field
+})
+
+test_that("a daily file whose first row ends in an empty field is still read as 58 columns (0b)", {
+  # strsplit()-based field counting drops a trailing empty string
+  # (strsplit("a\tb\t", "\t") has length 2, not 3), so a first row with an
+  # empty SOURCEURL used to be miscounted as 57 fields, triggering the
+  # "trust the file" branch and dropping SOURCEURL for the whole file.
+  fx <- .build_gdelt_fixtures()
+  rows <- fx$daily_rows
+  rows$SOURCEURL[1] <- NA_character_
+
+  zip_path <- file.path(fx$dir, "20200102.export.CSV.zip")
+  .write_gdelt_fixture_zip(rows, zip_path, n_cols = 58L)
+
+  expect_no_warning(
+    events <- read_gdelt(zip_path, columns = "all", actor_types = NULL, cross_border = FALSE)
+  )
+  expect_equal(nrow(events), 20L)
+  expect_true("SOURCEURL" %in% names(events))
+  expect_equal(events$SOURCEURL[2], "http://example.com/2")
+})
+
 test_that("read_gdelt() reads the 57-column monthly layout, SOURCEURL all NA", {
   fx <- .build_gdelt_fixtures()
   events <- read_gdelt(
@@ -92,6 +118,14 @@ test_that("read_gdelt() survives an embedded double-quote in a free-text field",
     columns = "all", actor_types = NULL, cross_border = FALSE
   )
   expect_equal(events$Actor1Name[10], 'John "Big Jim" Smith')
+})
+
+test_that("a small chunk_size gives identical results to the default (0c)", {
+  fx <- .build_gdelt_fixtures()
+  f <- file.path(fx$dir, fx$daily_file)
+  default_chunks <- read_gdelt(f, columns = "all", actor_types = NULL, cross_border = FALSE)
+  small_chunks <- read_gdelt(f, columns = "all", actor_types = NULL, cross_border = FALSE, chunk_size = 3L)
+  expect_equal(small_chunks, default_chunks)
 })
 
 test_that("read_gdelt() binds the 57- and 58-column layouts cleanly", {
@@ -217,12 +251,20 @@ test_that("filtering on a column not requested in `columns` still works", {
   expect_equal(nrow(out), 17L)
 })
 
-test_that("unknown `columns`/`actor_types`/empty `files` all error clearly", {
+test_that("unknown `columns`/empty `files` error clearly; unknown `actor_types` only warns (0d)", {
   fx <- .build_gdelt_fixtures()
   f <- file.path(fx$dir, fx$daily_file)
   expect_error(read_gdelt(f, columns = c("NotAColumn")), "unknown column")
-  expect_error(read_gdelt(f, actor_types = c("ZZZ")), "unknown `actor_types`")
   expect_error(read_gdelt(character(0)), "non-empty")
+
+  # An actor_types code outside the CAMEO 1.1b3 vocabulary warns (GDELT's
+  # coder can emit codes outside it) but does not block the read -- the
+  # filter still applies, just matching nothing for the unrecognized code.
+  expect_warning(
+    out <- read_gdelt(f, actor_types = c("ZZZ"), cross_border = FALSE),
+    "outside the known CAMEO"
+  )
+  expect_equal(nrow(out), 0L)
 })
 
 # ---------------------------------------------------------------------------
@@ -270,6 +312,47 @@ test_that("download_gdelt() temp mode returns events and leaves tempdir() untouc
   # exact path must not survive the call.
   expect_false(file.exists(file.path(tempdir(), "20200101.export.CSV.zip")))
   expect_false(file.exists(file.path(tempdir(), "20200101.export.CSV.zip.part")))
+})
+
+test_that(".gdelt_download_one() reports 'failed' when the final rename fails (0e.1)", {
+  fx <- .build_gdelt_fixtures()
+  withr_base_url <- getOption("bilatr.gdelt_base_url")
+  options(bilatr.gdelt_base_url = paste0("file://", fx$dir, "/"))
+  on.exit(options(bilatr.gdelt_base_url = withr_base_url), add = TRUE)
+
+  # `destfile` is an existing directory: the download itself succeeds (the
+  # .part file is written next to it), but file.rename(part, destfile)
+  # cannot rename a file over an existing directory and returns FALSE --
+  # before the 0e.1 fix, this was reported as "downloaded" with no file at
+  # `path`.
+  destfile <- tempfile("gdelt_dest_dir_")
+  dir.create(destfile)
+  url <- paste0(bilatr:::.gdelt_base_url(), fx$monthly_file)
+  # base file.rename() itself warns ("Is a directory") on this platform;
+  # that's not this package's concern, only its FALSE return value is.
+  res <- suppressWarnings(
+    bilatr:::.gdelt_download_one(url, destfile, md5_lookup = NULL, verify = FALSE)
+  )
+
+  expect_equal(res$status, "failed")
+  expect_true(is.na(res$path))
+})
+
+test_that("download_gdelt() temp mode returns a correctly-shaped empty tibble when every file fails (0e.2)", {
+  fx <- .build_gdelt_fixtures()
+  withr_base_url <- getOption("bilatr.gdelt_base_url")
+  options(bilatr.gdelt_base_url = paste0("file://", fx$dir, "/"))
+  on.exit(options(bilatr.gdelt_base_url = withr_base_url), add = TRUE)
+
+  events <- suppressWarnings(
+    download_gdelt("1985-06-15", columns = c("GLOBALEVENTID", "EventCode"))
+  )
+
+  expect_equal(nrow(events), 0L)
+  expect_equal(names(events), c("GLOBALEVENTID", "EventCode", "source_file"))
+  expect_type(events$GLOBALEVENTID, "double")
+  expect_type(events$EventCode, "character")
+  expect_equal(attr(events, "files")$status, "missing")
 })
 
 test_that("download_gdelt() cache mode writes zips, and a second call reports 'cached'", {

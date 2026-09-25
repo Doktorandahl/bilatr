@@ -8,8 +8,9 @@
 }
 \arguments{
 \item{name}{A \code{stan_model} value as given by the caller: a name
-currently in \code{.bilatr_stan_models}, a pre-0.4.0 alias in
-\code{.bilatr_stan_model_aliases}, or anything else (an error).}
+currently in \code{.bilatr_stan_models}, one of
+\code{.BILATR_RETIRED_MODEL_NAMES} (a dedicated "retired in 0.10.0" error),
+or anything else (a generic "unknown" error).}
 }
 \value{
 The canonical registered name.
@@ -17,9 +18,6 @@ The canonical registered name.
 \description{
 Every \code{stan_model}-accepting entry point should call this before doing
 anything else with the value: an unrecognized name must never be
-allowed to silently fall through to \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}'s
-\code{character(0)} default (which reads as "no reflection symmetry to
-correct" rather than "unrecognized name", and would leave a
-wrong-basin fit un-reoriented with no error or warning -- B1).
+allowed to silently fall through as though it were a no-op.
 }
 \keyword{internal}

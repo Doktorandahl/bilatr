@@ -18,7 +18,7 @@ test_that("assemble_stan_data()'s output at weighted = FALSE differs from before
     c(
       "D", "T", "A", "C", "is_obs", "Y", "rho_prior_a", "rho_prior_b",
       "compute_log_lik", "prior_only", "compute_theta_filtered",
-      "n_filter_dyads", "filter_dyads", "anchor_scale",
+      "n_filter_dyads", "filter_dyads",
       "n_countries", "ctry_a", "ctry_b", "w_send"
     )
   )

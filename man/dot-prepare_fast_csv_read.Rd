@@ -29,15 +29,15 @@ file-sized memory floor any single read pays regardless of
 The one-time setup shared by every CSV-file-path entry point
 (\code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}},
 \code{\link[=extract_theta]{extract_theta()}}, \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} via
-\link{.get_draws}). Calls \code{cmdstanr:::read_csv_metadata()} exactly once
-(on \code{csv_files[1]}; every chain of the same run shares the same
-variable/column layout, matching what
-\code{cmdstanr::read_cmdstan_csv()} itself assumes) and scans each file
-once (see \link{.scan_stan_csv_header_and_skip}) for the line offset of
-its first post-warmup draw. Everything downstream --
-\link{.fast_read_post_warmup_draws} for the Tier 1/2 read, the \code{alpha[1]}
-flip check, and every Tier 3 chunk -- reads \code{variables} directly out
-of the raw CSV at that offset via \code{data.table::fread(file = ..., skip = ..., nrows = ...)}, never a comment-stripped copy: no scratch
+\link{.get_draws}). Scans every one of \code{csv_files} (see
+\link{.scan_stan_csv_header_and_skip}, which replaces
+\code{cmdstanr:::read_csv_metadata()}, 0.10.0) for its config and the line
+offset of its first post-warmup draw, and checks the chains agree
+(unlike the \code{cmdstanr:::read_csv_metadata()}-based path this replaced,
+which only ever looked at \code{csv_files[1]} and silently assumed the rest
+matched). Everything downstream -- \link{.fast_read_post_warmup_draws} for
+the Tier 1/2 read and every Tier 3 chunk -- reads \code{variables} directly
+out of the raw CSV at that offset via \code{data.table::fread(file = ..., skip = ..., nrows = ...)}, never a comment-stripped copy: no scratch
 file is written anywhere, and no file is read more than once per
 variable subset requested (see individual entry points for exactly
 how many read passes each makes).

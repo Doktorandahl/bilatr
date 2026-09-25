@@ -4,7 +4,7 @@
 \alias{.fast_read_post_warmup_draws}
 \title{Read named variables' post-warmup draws directly from raw CmdStan CSVs}
 \usage{
-.fast_read_post_warmup_draws(prepared, variables, flip_vars = character(0))
+.fast_read_post_warmup_draws(prepared, variables)
 }
 \arguments{
 \item{prepared}{Output of \link{.prepare_fast_csv_read}.}
@@ -14,16 +14,6 @@ read -- either exact (e.g. \code{"theta[3,12]"}, \code{"alpha[1]"}) or a bare
 base name (e.g. \code{"alpha"}, \code{"mu_intercept"}), expanded to every
 indexed element of that name via \link{.expand_bilatr_variable_filters},
 matching \code{\link[cmdstanr:read_cmdstan_csv]{cmdstanr::read_cmdstan_csv()}}'s own \code{variables} matching.}
-
-\item{flip_vars}{Character vector of variable base names
-(\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}}'s output) to negate -- matched against
-\code{resolved_vars} via \code{\link[=.bilatr_match_draws_columns]{.bilatr_match_draws_columns()}} and negated on
-each chain's temporary matrix \code{m}, before it is ever assigned into
-\code{arr}. \code{m} is already about to be discarded at that point, so this
-costs nothing extra: no copy, no second pass, no data-frame
-round-trip. \code{character(0)} (the default) negates nothing. Column-
-selective by design (B5): a request mixing \code{theta}/\code{theta_raw} with
-\code{log_lik[d,t]} flips only the columns \code{flip_vars} actually lists.}
 }
 \value{
 A \code{posterior::draws_array}.

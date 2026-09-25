@@ -381,8 +381,8 @@
 #' @param stan_data The Stan data list used to produce `fit`, as returned
 #'   by [assemble_stan_data()] (must still carry its `dyad_ids`
 #'   attribute). Supplies `Y`, `is_obs`, `D`, `T`, `A`.
-#' @param stan_model Name registered in `.bilatr_stan_models`, or a
-#'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
+#' @param stan_model Name registered in `.bilatr_stan_models`; see
+#'   [.canonical_stan_model()].
 #' @param n_dyads Target size of the stratified dyad subsample (capped at
 #'   the number of eligible -- i.e. `n_d > 0` -- dyads). Default `1500`.
 #' @param n_strata Number of volume strata for [.stratified_dyad_sample()].
@@ -486,17 +486,11 @@ check_compositional_residuals <- function(
   sampled_rel <- .stratified_dyad_sample(n_d_all[eligible], n_target = n_dyads, n_strata = n_strata, seed = seed)
   sampled_dyad_ids <- sort(eligible[sampled_rel])
 
-  # --- 2. read alpha/mu_intercept (Tier 1, cheap), orient if needed,
-  # determine the draw subsample from their total draw count ---
-  flip_vars <- .bilatr_flip_variables(stan_model)
-  needs_orient <- length(flip_vars) > 0
-
+  # --- 2. read alpha/mu_intercept (Tier 1, cheap), determine the draw
+  # subsample from their total draw count ---
   alpha_vars <- paste0("alpha[", seq_len(A), "]")
   mu_vars <- paste0("mu_intercept[", seq_len(A), "]")
   am_draws <- .get_draws(fit, c(alpha_vars, mu_vars))
-  if (needs_orient) {
-    am_draws <- bilatr_orient(am_draws, stan_model = stan_model, variables = c("alpha", "mu_intercept"))
-  }
   am_mat <- posterior::as_draws_matrix(am_draws)
   total_draws <- nrow(am_mat)
   n_draws_used <- min(n_draws, total_draws)
@@ -508,9 +502,8 @@ check_compositional_residuals <- function(
 
   # --- 2b. read gamma too, for stable_gamma fits (Tier 1, cheap: A x
   # n_countries). gamma is orientation-FREE by construction (see
-  # inst/stan/bilatr_alphanorm_gamma.stan's header) -- unlike alpha/
-  # mu_intercept above, it is never passed through bilatr_orient(). Row i
-  # of `gamma_mat` corresponds to the SAME posterior draw as row i of
+  # inst/stan/bilatr_alphanorm_gamma.stan's header). Row i of `gamma_mat`
+  # corresponds to the SAME posterior draw as row i of
   # `alpha_mat`/`mu_mat` (draw_idx, already determined above, is reused
   # rather than re-derived -- same reasoning the module's existing
   # comment gives for phi/theta below).
@@ -542,12 +535,7 @@ check_compositional_residuals <- function(
   D_sample <- length(sampled_dyad_ids)
 
   theta_vars <- unlist(purrr::map2(sampled_dyad_ids, obs_list, function(d, ts) paste0("theta[", d, ",", ts, "]")))
-  if (needs_orient) {
-    theta_draws <- .get_draws(fit, c("alpha[1]", theta_vars))
-    theta_draws <- bilatr_orient(theta_draws, stan_model = stan_model, variables = "theta")
-  } else {
-    theta_draws <- .get_draws(fit, theta_vars)
-  }
+  theta_draws <- .get_draws(fit, theta_vars)
   # Row i of every matrix read above corresponds to the same posterior
   # draw: posterior::as_draws_matrix() flattens chains/iterations in a
   # fixed, deterministic order given the same underlying fit, whether

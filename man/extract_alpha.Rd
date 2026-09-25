@@ -8,7 +8,6 @@ extract_alpha(
   fit,
   event_classes = NULL,
   probs = c(0.05, 0.5, 0.95),
-  stan_model = .BILATR_DEFAULT_MODEL,
   scratch_dir = NULL
 )
 }
@@ -26,14 +25,6 @@ index.}
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
-which model produced \code{fit}, or a recognized pre-0.4.0 alias
-(\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to \code{"stable"}/\code{"ou"} with a
-message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) -- an unrecognized name
-errors immediately rather than silently skipping sign orientation.
-See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}
-(\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/\code{\link[=fit_panel]{fit_panel()}} always fit.}
-
 \item{scratch_dir}{Deprecated and ignored since 0.4.1; see
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
@@ -49,17 +40,10 @@ for \code{stable}/\code{ou}; \code{alpha[1]}, the reference/neutral action class
 supplied via \code{reference_category}, is always reported positive via the
 orientation fold (see each \code{.stan} file's header, "IDENTIFICATION:
 ORIENTATION FOLD"). See the package's identification notes in
-\code{vignette("dyad_time_series")}.
+\code{vignette("dyad_time_series")}. \code{alpha}'s sign is already canonical by
+construction, so no post-hoc relabeling is needed here.
 }
 \details{
-Since 0.4.2, this skips \code{\link[=bilatr_orient]{bilatr_orient()}} entirely for \code{stable}/\code{ou}
-(\code{.bilatr_flip_variables(stan_model)} is \code{character(0)}): \code{alpha}'s
-sign is already canonical by construction, with no reflection
-symmetry to correct. Only the retired \code{stable_soft_anchor}/
-\code{ou_soft_anchor} \code{stan_model}s still get routed through
-\code{\link[=bilatr_orient]{bilatr_orient()}}, since their free \code{sum_to_zero_vector} alpha with a
-soft sign anchor doesn't guarantee canonical orientation on its own.
-
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), for the case where there is no in-memory fit at all
 -- e.g. a post-hoc, cross-chain roll-up script run after several
@@ -76,6 +60,6 @@ alpha <- extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
 
 # cross-chain roll-up from saved CSVs, no in-memory fit
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-alpha <- extract_alpha(csv_files, event_classes = event_classes, stan_model = "ou")
+alpha <- extract_alpha(csv_files, event_classes = event_classes)
 }
 }

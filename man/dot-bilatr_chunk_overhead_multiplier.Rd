@@ -22,15 +22,18 @@ The post-\link{.fast_read_post_warmup_draws} pipeline holds, per chunk of
 \code{n_chains} array (\code{.BILATR_CHUNK_ARRAY_FACTOR}, ~3x \code{raw_mb});
 \code{fread()}'s parse buffer and one chain's resulting matrix, each sized
 for ONE chain (\code{raw_mb / n_chains}, i.e.
-\code{.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains}); the array-native sign
-flip's residual cost, budgeted unconditionally
-(\code{.BILATR_CHUNK_FLIP_FACTOR}, see its own docs for why); and, only
-when \code{n_cores > 1}, \code{posterior::summarise_draws()}'s forked-worker
-cost -- a one-time step
-(\code{.BILATR_CHUNK_CORES_STEP_FACTOR}) plus a per-additional-worker term
-(\code{.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)}), NOT a flat
-penalty regardless of the exact core count (see that constant's docs
--- this replaced an assumption that was never measured and was
+\code{.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains}); and, only when \code{n_cores > 1}, \code{posterior::summarise_draws()}'s forked-worker cost -- a one-time
+step (\code{.BILATR_CHUNK_CORES_STEP_FACTOR}) plus a per-additional-worker
+term (\code{.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)}), NOT a
+flat penalty regardless of the exact core count (see that constant's
+docs -- this replaced an assumption that was never measured and was
 wrong).
+}
+\details{
+0.10.0 dropped the \code{.BILATR_CHUNK_FLIP_FACTOR} term that used to sit
+here: the post-hoc sign-flip machinery it budgeted for
+(\code{bilatr_orient()} and its array-native equivalents) was retired along
+with the soft-anchor stack that needed it (see NEWS.md), so \code{k} is
+exactly 1 lower than before for every \verb{(n_chains, n_cores)} pair.
 }
 \keyword{internal}

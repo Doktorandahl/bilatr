@@ -7,7 +7,6 @@
 diagnose_category_merges(
   fit,
   stan_data,
-  stan_model = .BILATR_DEFAULT_MODEL,
   event_classes = NULL,
   class_label_fn = NULL,
   shares = NULL,
@@ -22,9 +21,6 @@ CmdStan CSV file paths (see \code{\link[=.get_draws]{.get_draws()}}).}
 \item{stan_data}{The Stan data list used to produce \code{fit}, as returned
 by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (used for the default empirical \code{shares}
 and the \code{effective_info} figure's mean event count).}
-
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
-recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
 
 \item{event_classes}{Character vector of event-class labels, length
 \code{A}, in the same order as \code{stan_data}'s \code{"event_classes"} attribute.
@@ -124,7 +120,7 @@ and RMS-1 constraints make the \code{alpha_k} strongly negatively
 correlated, so \code{sd(alpha_j - alpha_k)} is emphatically not
 \code{sqrt(sd_j^2 + sd_k^2)}).
 
-\strong{\code{stan_model = "stable_gamma"} (0.7.0):} every measure here (\code{alpha},
+\strong{On a \code{stable_gamma} fit (0.7.0):} every measure here (\code{alpha},
 its correlation structure, the reference \code{shares}) is evaluated
 exactly as for any other model -- \code{gamma}/\code{g_d} never enter this
 function's computation at all. For \code{stable_gamma}, that means the

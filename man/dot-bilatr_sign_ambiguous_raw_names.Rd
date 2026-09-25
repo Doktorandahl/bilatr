@@ -11,26 +11,25 @@ alpha/theta reflection symmetry, across every registered model}
 Character vector of variable base names.
 }
 \description{
-Unlike \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} (legacy models only, and including
-the REPORTED quantities those models still need \code{bilatr_orient()}
-for), this is unconditional across every model: \code{stable}/\code{ou}'s
-orientation fold (see each \code{.stan} file's header, "IDENTIFICATION:
-ORIENTATION FOLD") corrects the reported \code{alpha}/\code{theta}/etc., but the
-RAW parameters it's built from (\code{alpha_raw} itself, plus whichever of
-\code{z_theta0}/\code{mu_dyad_raw} and \code{theta_raw} a given model has) remain
-genuinely sign-ambiguous: if two chains land in opposite raw-space
-basins, those variables' own cross-chain Rhat is meaningless even
-though everything reported is fine. \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}} uses
-this to keep them out of the tiered diagnostics tables entirely
-(\code{tier = NA}), rather than let a meaningless Rhat surface as a false
-Tier 1 alarm.
+\code{stable}/\code{ou}'s orientation fold (see each \code{.stan} file's header,
+"IDENTIFICATION: ORIENTATION FOLD") corrects the reported
+\code{alpha}/\code{theta}/etc., but the RAW parameters it's built from
+(\code{alpha_raw} itself, plus whichever of \code{z_theta0}/\code{mu_dyad_raw} and
+\code{theta_raw} a given model has) remain genuinely sign-ambiguous: if two
+chains land in opposite raw-space basins, those variables' own
+cross-chain Rhat is meaningless even though everything reported is
+fine. \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}} uses this to keep them out of the
+tiered diagnostics tables entirely (\code{tier = NA}), rather than let a
+meaningless Rhat surface as a false Tier 1 alarm.
 }
 \details{
-Derived from \code{\link[=.bilatr_sign_tied_names]{.bilatr_sign_tied_names()}} (\code{R/orient.R}) -- the single
-source of truth this and \code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} both draw from, so
-the two cannot drift apart -- unioning the \code{raw} component across
-every currently-registered model. Computed inside the function body,
-not as a top-level constant, so it doesn't depend on \code{R/model_registry.R}
-having been sourced first.
+Derived from \code{\link[=.bilatr_sign_tied_names]{.bilatr_sign_tied_names()}} (\code{R/sign_ambiguity.R}), the
+single source of truth for which raw names are sign-tied per model --
+unioning its \code{raw} component across every currently-registered model.
+Computed inside the function body, not as a top-level constant, so it
+doesn't depend on \code{R/model_registry.R} having been sourced first.
+
+This function's name and output must not change across versions: the
+runscripts call \code{bilatr:::.bilatr_sign_ambiguous_raw_names()} directly.
 }
 \keyword{internal}

@@ -37,12 +37,11 @@ and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
 Only required when \code{tiers} includes \code{2} and/or \code{3} (Tier 1 has no
 per-dyad structure to join against \code{n_dt}).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
-recognized pre-0.4.0 alias (\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to
-\code{"stable"}/\code{"ou"} with a message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) --
-an unrecognized name errors immediately rather than silently
-skipping sign orientation. See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to
-\code{.BILATR_DEFAULT_MODEL}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
+\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used only to decide whether \code{gamma} (the
+experimental \code{stable_gamma} variant's country-level offset) gets its
+own report element -- see \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{stan_model}.
+Defaults to \code{.BILATR_DEFAULT_MODEL}.}
 
 \item{rhat_threshold}{Rhat values strictly above this are flagged.
 Defaults to \code{1.01} (Vehtari et al. 2021).}
@@ -166,36 +165,26 @@ touches each file's full byte range once per call regardless of how
 few columns are requested (see \link{.fast_read_post_warmup_draws}), so
 each of those extra calls pays close to a full-file touch for data
 already summarised once. This function reads Tier 1/2 once and Tier 3
-once (chunked, same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}), reorients whichever
-columns \code{\link[=bilatr_orient]{bilatr_orient()}} would flip for \code{stan_model} as part of that
-single read, and derives every output from those two summaries
-rather than re-reading anything.
+once (chunked, same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}) via
+\code{\link[=.read_diagnostics_summary_from_csv]{.read_diagnostics_summary_from_csv()}} -- the same helper
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s own CSV-path branch uses -- and derives
+every output from that one summary rather than re-reading anything.
+Sharing that helper (rather than a second, orientation-aware copy of
+its tier/chunk logic, as before 0.10.0) means the two paths cannot
+drift apart.
 }
 \details{
 Total file touches per chain file, at production scale (Tier 3 too
-large for one chunk): one \code{cmdstanr:::read_csv_metadata()} call and
-one row-count validation probe, both in \link{.prepare_fast_csv_read}; one
-read for Tier 1/2 (\code{alpha[1]} included at no extra cost whenever
-tier 1 itself is requested, which is the default); and one per Tier 3
-chunk. When Tier 3 fits in a single chunk (small panels, or a large
-\code{max_memory_mb}), Tier 1/2 is folded into that same read instead of
-being a separate one -- see \code{\link[=.read_and_orient_draws_summary]{.read_and_orient_draws_summary()}}.
+large for one chunk): one header/config scan and one row-count
+validation probe, both in \link{.prepare_fast_csv_read}; one read for Tier
+1/2; and one per Tier 3 chunk. When Tier 3 fits in a single chunk
+(small panels, or a large \code{max_memory_mb}), Tier 1/2 is folded into
+that same read instead of being a separate one -- see
+\code{\link[=.read_diagnostics_summary_from_csv]{.read_diagnostics_summary_from_csv()}}.
 
 Only meaningful for the CSV-file-paths case: an in-memory \code{fit} has no
 repeated-disk-read cost to avoid, so there is nothing to fuse there --
 call the four functions separately instead.
-
-Rhat/ESS are invariant to a deterministic sign flip, so reorienting
-before summarising never changes anything \code{\link[=diagnose_convergence]{diagnose_convergence()}}
-reports; it only affects the mean/quantile columns, which is exactly
-what \code{\link[=extract_theta]{extract_theta()}}/\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} need
-reoriented anyway. Tier 3 is NOT always exactly \verb{\{theta, theta_raw\}}:
-with \code{compute_log_lik = 1} it also includes \code{log_lik[d,t]} (also
-two-indexed), which must never flip even when \code{theta}/\code{theta_raw} in
-the same chunk do. Each Tier 3 chunk is therefore negated
-column-selectively, matching exactly the variables
-\code{\link[=.bilatr_flip_variables]{.bilatr_flip_variables()}} lists (see \code{\link[=.chunked_summarise_csv]{.chunked_summarise_csv()}}'s
-\code{flip_vars}), not flipped as a whole uniformly.
 
 Unlike \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}}'s standalone \code{probs}
 argument, the \code{alpha}/\code{mu_intercept} outputs here always carry the same

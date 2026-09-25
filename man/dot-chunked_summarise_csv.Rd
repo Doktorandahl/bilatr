@@ -4,13 +4,7 @@
 \alias{.chunked_summarise_csv}
 \title{Read and summarise CSV variables in memory-bounded chunks}
 \usage{
-.chunked_summarise_csv(
-  prepared,
-  variables,
-  chunk_size,
-  n_cores = 1L,
-  flip_vars = character(0)
-)
+.chunked_summarise_csv(prepared, variables, chunk_size, n_cores = 1L)
 }
 \arguments{
 \item{prepared}{Output of \link{.prepare_fast_csv_read}.}
@@ -22,25 +16,6 @@
 \item{n_cores}{Cores for \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}}'s \code{.cores}; \code{1L}
 for a fully sequential run. See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
 \code{parallel}/\code{n_workers} for how a caller arrives at this number.}
-
-\item{flip_vars}{Character vector of variable base names to negate
-before summarising (used by \code{\link[=extract_theta]{extract_theta()}}'s CSV path to apply
-\code{\link[=bilatr_orient]{bilatr_orient()}}'s sign correction; \code{character(0)}, the default,
-for \code{\link[=diagnose_convergence]{diagnose_convergence()}}, since Rhat/ESS are invariant to a
-deterministic sign flip and it would be pointless work there).
-Passed straight through to \code{\link[=.fast_read_post_warmup_draws]{.fast_read_post_warmup_draws()}}, which
-negates matching columns of each chain's temporary matrix before it
-is ever assigned into the read's result array -- not a post-hoc
-transformation of the summary columns (which would need to swap the
-quantile columns, \code{quantile(-X, p) == -quantile(X, 1 - p)}, not just
-negate them), and not a \code{draws_df} round-trip (which would force
-\code{summarise_draws()} to rebuild a \code{draws_array} internally at the
-cost of a second full copy of the chunk -- see
-\code{\link[=.fast_read_post_warmup_draws]{.fast_read_post_warmup_draws()}}'s own docs). Column-selective by
-construction (B5): \code{chunk_vars} can legitimately mix a flip-needing
-variable (\code{theta}/\code{theta_raw}) with one that must NOT flip
-(\code{log_lik[d,t]}, also Tier 3, when \code{compute_log_lik = 1}), and only
-the columns \code{flip_vars} actually lists are ever negated.}
 }
 \value{
 A tibble, the row-bound \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}} output

@@ -19,4 +19,12 @@ of the \verb{*Type1-3Code} fields, since the codebook lists examples but not
 the full vocabulary itself. Verified 2026-09-25 against
 \verb{http://gdeltproject.org/data/documentation/CAMEO.Manual.1.1b3.pdf}.
 }
+\details{
+\code{SET} ("Settler", Table 3.1 secondary role codes) was added 2026-09-25
+(0.10.0) after a live check against real GDELT data (0d): it is the only
+code observed in \code{count_gdelt_actor_types()} on the 2020-01-01 daily and
+1979 yearly files (\code{cross_border = FALSE}) that wasn't already in this
+vocabulary -- a genuine CAMEO role code (used e.g. for Israeli
+settlers), just missing from the original transcription of Table 3.1.
+}
 \keyword{internal}

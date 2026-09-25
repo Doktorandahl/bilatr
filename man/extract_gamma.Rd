@@ -48,8 +48,7 @@ identified by construction (three constraints enforced in
 \verb{transformed parameters}; see \code{inst/stan/bilatr_alphanorm_gamma.stan}'s
 header) and orientation-FREE (the alpha/theta reflection symmetry's
 fold does not touch it -- see that header, "gamma is NOT multiplied by
-orientation_sign"), so this needs no \code{\link[=bilatr_orient]{bilatr_orient()}} call at all,
-unlike \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}}.
+orientation_sign"), so no post-hoc relabeling applies to it either.
 }
 \details{
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths,

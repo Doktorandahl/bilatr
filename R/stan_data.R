@@ -99,29 +99,11 @@
 #'   fifty dyads) to compute the filter cheaply for just those. Errors,
 #'   listing the offending names, if any requested dyad was dropped by
 #'   `min_n_events` or never existed.
-#' @param anchor_scale Scale of the soft sign anchor
-#'   `target += log_inv_logit(alpha[1] * inv(anchor_scale))`. Since 0.4.2
-#'   (see NEWS.md), this is consumed only by the LEGACY
-#'   `stable_soft_anchor`/`ou_soft_anchor` Stan programs (see
-#'   `R/model_registry.R`), which normalize `alpha` via a free
-#'   `sum_to_zero_vector` with no fixed element -- leaving an exact
-#'   reflection symmetry (`alpha`, `theta` -> `-alpha`, `-theta` is
-#'   likelihood-invariant) the anchor only softly penalizes (`alpha[1] <
-#'   0`), not reliably breaks across independently-initialized chains;
-#'   see `bilatr_orient()` for the post-hoc fix those two programs still
-#'   need. The current `stable`/`ou` programs fold `alpha[1]`'s sign into
-#'   the reported `alpha`/`theta` instead (see each `.stan` file's
-#'   header, "IDENTIFICATION: ORIENTATION FOLD") and don't declare
-#'   `anchor_scale` at all; it is still supplied unconditionally
-#'   here (CmdStan ignores data a program doesn't declare), so this
-#'   function doesn't need to branch on `stan_model`. `alpha[1]` is
-#'   already the reference/neutral action class supplied via
-#'   `reference_category` -- no separate index is needed. Default `0.1`.
 #' @return A named list suitable as the `data` argument to
 #'   `cmdstanr::CmdStanModel$sample()` for the bilatr Stan model: `D`,
 #'   `T`, `A`, `C`, `is_obs`, `Y`, `rho_prior_a`, `rho_prior_b`,
 #'   `compute_log_lik`, `prior_only`, `compute_theta_filtered`,
-#'   `n_filter_dyads`, `filter_dyads`, `anchor_scale`, and (0.7.0,
+#'   `n_filter_dyads`, `filter_dyads`, and (0.7.0,
 #'   unconditionally -- see the fields' own inline comments in this
 #'   function's body) `n_countries`, `ctry_a`, `ctry_b`, `w_send` (only
 #'   consumed by the experimental `stable_gamma` variant; see
@@ -179,7 +161,6 @@ assemble_stan_data <- function(
   prior_only = 0,
   compute_theta_filtered = 0,
   filter_dyads = NULL,
-  anchor_scale = 0.1,
   actor1 = "Actor1CountryCode",
   actor2 = "Actor2CountryCode",
   date = "SQLDATE"
@@ -380,21 +361,15 @@ assemble_stan_data <- function(
     compute_theta_filtered = compute_theta_filtered,
     n_filter_dyads = length(filter_dyad_ids),
     filter_dyads = filter_dyad_ids,
-    # Only consumed by the legacy stable_soft_anchor/ou_soft_anchor
-    # programs (soft sign anchor on alpha[1]); stable/ou identify
-    # alpha[1]'s sign by construction and don't declare this field, but
-    # it's passed unconditionally regardless (CmdStan ignores data a
-    # program doesn't declare) -- see @param anchor_scale above.
-    anchor_scale = anchor_scale,
     # Consumed only by the experimental stable_gamma variant
     # (R/model_registry.R); unused by every other registered program,
     # whose Stan code doesn't declare these fields -- CmdStan ignores
-    # data a program doesn't declare, so (matching rho_prior_a/b and
-    # anchor_scale above) these are passed unconditionally rather than
-    # gated on which program will be fit, so a caller doesn't need to
-    # know the model name at assembly time. BREAKING: a `stan_data.rds`
-    # saved before 0.7.0 lacks these four fields and cannot be used with
-    # `stable_gamma` -- see NEWS.md.
+    # data a program doesn't declare, so (matching rho_prior_a/b above)
+    # these are passed unconditionally rather than gated on which program
+    # will be fit, so a caller doesn't need to know the model name at
+    # assembly time. BREAKING: a `stan_data.rds` saved before 0.7.0 lacks
+    # these four fields and cannot be used with `stable_gamma` -- see
+    # NEWS.md.
     n_countries = n_countries,
     ctry_a = ctry_a,
     ctry_b = ctry_b,

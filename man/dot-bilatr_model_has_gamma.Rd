@@ -7,8 +7,8 @@
 .bilatr_model_has_gamma(stan_model)
 }
 \arguments{
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}, or a
-recognized pre-0.4.0 alias; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
+\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
 }
 \value{
 \code{TRUE}/\code{FALSE}.

@@ -18,7 +18,19 @@
 #' In `helper_fixtures.R` (not local to one test file) since it is used
 #' by both `test_fast_csv_read.R` and `test_diagnose_convergence.R`'s
 #' peak-RSS regression guard.
-.make_synthetic_stan_csv <- function(path, n_cols, n_draws, n_warmup = 3L, save_warmup = FALSE) {
+#'
+#' `save_warmup_spelling`: `"numeric"` (default) writes `save_warmup = 0`/
+#' `1`, matching older CmdStan; `"logical"` writes `save_warmup = false`/
+#' `true`, matching CmdStan >= 2.33 (both spellings confirmed against real
+#' CmdStan output; see [.scan_stan_csv_header_and_skip()]'s docs, 0.10.0).
+#' `thin`: the config's `num_samples`/`num_warmup` are written as
+#' `n_draws * thin`/`n_warmup * thin`, so the physically-written row
+#' counts (`n_draws` post-warmup, `n_warmup` warmup) are exactly
+#' `ceiling(num_samples / thin)`/`ceiling(num_warmup / thin)` -- the same
+#' arithmetic a real thinned CmdStan run's file would satisfy.
+.make_synthetic_stan_csv <- function(path, n_cols, n_draws, n_warmup = 3L, save_warmup = FALSE,
+                                      save_warmup_spelling = c("numeric", "logical"), thin = 1L) {
+  save_warmup_spelling <- match.arg(save_warmup_spelling)
   sampler_cols <- c(
     "lp__", "accept_stat__", "stepsize__", "treedepth__",
     "n_leapfrog__", "divergent__", "energy__"
@@ -28,6 +40,13 @@
   con <- file(path, open = "wt")
   on.exit(close(con), add = TRUE)
 
+  save_warmup_str <- if (identical(save_warmup_spelling, "logical")) {
+    if (save_warmup) "true" else "false"
+  } else {
+    if (save_warmup) "1" else "0"
+  }
+  thin_str <- if (identical(thin, 1L)) "1 (Default)" else as.character(thin)
+
   writeLines(c(
     "# stan_version_major = 2",
     "# stan_version_minor = 38",
@@ -35,10 +54,10 @@
     "# model = synthetic_model",
     "# method = sample (Default)",
     "#   sample",
-    paste0("#     num_samples = ", n_draws),
-    paste0("#     num_warmup = ", n_warmup),
-    paste0("#     save_warmup = ", if (save_warmup) 1L else 0L),
-    "#     thin = 1 (Default)",
+    paste0("#     num_samples = ", n_draws * thin),
+    paste0("#     num_warmup = ", n_warmup * thin),
+    paste0("#     save_warmup = ", save_warmup_str),
+    paste0("#     thin = ", thin_str),
     "#     adapt",
     "#       engaged = 1 (Default)",
     "#     algorithm = hmc (Default)",
@@ -118,31 +137,19 @@ make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
 
 # --- fixture for CSV-file-path branches (diagnose_convergence(),
 # extract_theta()/extract_alpha()/extract_mu_intercept()): a real, tiny
-# multi-chain CmdStan run, since read_cmdstan_csv()/
-# cmdstanr:::read_csv_metadata() need real CmdStan CSV files, not a
-# hand-built posterior::draws_array like make_fake_draws() (in
-# test_diagnose_convergence.R) or the synthetic posterior::draws_df
-# fixtures in test_orient.R. D/T/A are kept small (a few dozen variables
-# spanning all three tiers) purely to keep the test fast; the chunking
-# logic itself is exercised via a deliberately tiny chunk_size/
+# multi-chain CmdStan run, since read_cmdstan_csv() needs real CmdStan CSV
+# files, not a hand-built posterior::draws_array like make_fake_draws()
+# (in test_diagnose_convergence.R). D/T/A are kept small (a few dozen
+# variables spanning all three tiers) purely to keep the test fast; the
+# chunking logic itself is exercised via a deliberately tiny chunk_size/
 # max_memory_mb, not by the fixture's own size.
 #
-# stan_model defaults to "stable", which since 0.4.2 identifies
-# alpha[1]'s sign by construction and has NO reflection symmetry (see
-# NEWS.md and inst/stan/bilatr_alphanorm.stan's header) -- the default
-# call has no basin to land in either way. To exercise bilatr_orient()'s
-# sign flip through the CSV-chunked path, pass
-# stan_model = "stable_soft_anchor" (the retired program that still has
-# the symmetry) along with a deliberately wrong-basin init built for
-# ITS parameters (a free sum_to_zero_vector `alpha_raw`, not
-# `alpha_raw_1`/`alpha_raw_mid`; see test_orient.R's pattern) -- also
-# pass ... = adapt_engaged = FALSE, step_size = <tiny>,
-# max_treedepth = <small> (test_orient.R's pinning trick) if the point
-# is to keep the chain from adapting its way out of that basin during
-# ordinary warmup, since this fixture's default 30 warmup iterations are
-# otherwise enough to escape a wrong-basin init on a dataset this small.
-# `compute_log_lik`/`anchor_scale`/`rho_prior_a`/`rho_prior_b` (needed by
-# one or more registered models) default to the same values
+# stan_model defaults to "stable"; every registered model (stable/ou/
+# stable_gamma) identifies alpha[1]'s sign by construction (see NEWS.md
+# and inst/stan/bilatr_alphanorm.stan's header, "IDENTIFICATION:
+# ORIENTATION FOLD"), so there is no basin to land in regardless of which
+# one is fit. `compute_log_lik`/`rho_prior_a`/`rho_prior_b` (needed by one
+# or more registered models) default to the same values
 # [assemble_stan_data()] does; pass `extra_data` to override them.
 make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, extra_data = list(), ...) {
   set.seed(1)
@@ -154,20 +161,8 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
   base_data <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     compute_log_lik = 0, prior_only = 0,
-    compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0),
-    anchor_scale = 0.1
+    compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0)
   )
-  # Only the legacy stable_soft_anchor/ou_soft_anchor programs (and their
-  # pre-0.4.0 aliases) still declare the likelihood-weighting fields
-  # (retired from stable/ou in 0.4.6, see NEWS.md) -- add unit weights
-  # only when fitting one of those, so stable/ou's default data_list here
-  # doesn't carry dead fields that would mislead a reader into thinking
-  # they're still consumed.
-  if (.canonical_stan_model(stan_model) %in% c("stable_soft_anchor", "ou_soft_anchor")) {
-    base_data <- c(base_data, list(
-      dyad_weight = rep(1, D), period_weight = rep(1, Tn), action_weight = rep(1, A)
-    ))
-  }
   data_list <- utils::modifyList(base_data, extra_data)
   mod <- .compile_stan_model(stan_model, opt_level = 1)
   outdir <- tempfile()

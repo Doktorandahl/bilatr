@@ -143,10 +143,7 @@ parameters` -- exact and Jacobian-free, since the likelihood only ever
 sees their product) rather than a hard constraint on the sampled
 parameter, so every fit already reports `theta` in its canonical
 orientation (higher `theta` = better relations) with no post-hoc
-relabeling needed -- [bilatr_orient()] is retained only to read fits
-made under the retired `stable_soft_anchor`/`ou_soft_anchor` programs
-(see `NEWS.md`), and [extract_alpha()]/[extract_theta()] skip it
-entirely for `stable`/`ou`.
+relabeling needed.
 
 ## 5. Diagnose
 

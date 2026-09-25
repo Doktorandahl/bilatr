@@ -81,48 +81,11 @@
       "experimental: not yet fit at production scale."
     ),
     status = "experimental"
-  ),
-  stable_soft_anchor = list(
-    file = "legacy/bilatr_stable_soft_anchor.stan",
-    description = paste(
-      "Legacy since 0.4.2 (see NEWS.md): the `stable` program used from",
-      "0.4.0 through 0.4.1, promoted from the experimental `alphanorm`",
-      "variant. Closes the affine ridge in the pre-0.4.0 model's",
-      "identification the same way `stable` still does (hard-pinning",
-      "location, normalizing alpha's RMS to 1), but via a FREE",
-      "sum_to_zero_vector alpha_raw with only a soft sign anchor on",
-      "alpha[1] (anchor_scale data field, default 0.1) -- this leaves an",
-      "exact alpha/theta reflection symmetry the anchor cannot reliably",
-      "break across independently-initialized chains (see NEWS.md and",
-      "dev/followup_review_and_orientation_2026-09-10.md). Retained only",
-      "to read/re-derive fits made before 0.4.2; use bilatr_orient() to",
-      "canonicalize their sign. Not fittable via fit_dyad_ts()/",
-      "fit_panel() (only the current `stable`); still reachable via",
-      "fit_dyad_ts_dev()/fit_panel_dev(stan_model = \"stable_soft_anchor\")",
-      "for that purpose."
-    ),
-    status = "legacy"
-  ),
-  ou_soft_anchor = list(
-    file = "legacy/bilatr_ou_soft_anchor.stan",
-    description = paste(
-      "Legacy since 0.4.2 (see NEWS.md): the `ou` program used from 0.4.0",
-      "through 0.4.1, promoted from the experimental `alphanorm_ou`",
-      "variant. Same OU/AR(1) dynamics as the current `ou`, but shares",
-      "stable_soft_anchor's free sum_to_zero_vector alpha_raw and soft",
-      "alpha[1] sign anchor rather than the current program's orientation",
-      "fold -- see `stable_soft_anchor`'s description for the",
-      "consequence. Retained only to read/re-derive fits made before",
-      "0.4.2."
-    ),
-    status = "legacy"
   )
 )
 
 # Historical note: several models were retired to inst/stan/legacy/
-# (gitignored, kept for local reference only, not registered, EXCEPT
-# stable_soft_anchor/ou_soft_anchor below, which -- unlike the others --
-# remain registered so pre-0.4.2 CmdStan output stays readable):
+# (gitignored, kept for local reference only, not registered):
 #   - the pre-0.3.0 centered "stable"/"phi_logn" models (centered
 #     process_noise hierarchy, hostile-anchored alpha[A]) and the
 #     transitional "stable_ncproc"/"phi_logn_ncproc" entries, in 0.3.0;
@@ -151,115 +114,72 @@
 #     both multiplied by sign(alpha_raw[1]) in transformed parameters, so
 #     alpha[1] >= 0 always in the REPORTED draws without excluding any
 #     region of the parameter space (see NEWS.md and each current .stan
-#     file's header, "IDENTIFICATION: ORIENTATION FOLD"). The retired
-#     soft-anchor programs are registered above as `stable_soft_anchor`/
-#     `ou_soft_anchor` (status = "legacy") so runs made under them stay
-#     readable; fits made under the current `stable`/`ou` are NOT
-#     parameter-comparable to fits made under the retired ones.
+#     file's header, "IDENTIFICATION: ORIENTATION FOLD"). The pre-0.4.2
+#     `stable_soft_anchor`/`ou_soft_anchor` programs (what `stable`/`ou`
+#     were named 0.4.0-0.4.1) were kept registered (status = "legacy")
+#     from 0.4.2 through 0.9.1 so runs made under them stayed readable.
+#   - 0.10.0: `stable_soft_anchor`/`ou_soft_anchor`, the pre-0.4.0
+#     `alphanorm`/`alphanorm_ou` aliases, and the entire post-hoc
+#     orientation stack they needed (`bilatr_orient()`,
+#     `.bilatr_flip_variables()`, `.warn_if_wrong_basin()`) were retired
+#     fully -- unlike every earlier retirement above, these two are no
+#     longer registered at all: [.canonical_stan_model()] now errors on
+#     all four names, naming bilatr <= 0.9.1 as what's needed to read
+#     fits made under them. This is safe because `stable`/`ou`'s
+#     orientation fold (since 0.4.2b) never needed the soft-anchor
+#     programs for anything except reading old fits, and none remain in
+#     active use.
 
 .BILATR_DEFAULT_MODEL <- "stable"
 
-#' Pre-0.4.0 `stan_model` names, mapped to their current registered name
+#' Names retired in 0.10.0 that once resolved to a registered model
 #'
-#' `alphanorm`/`alphanorm_ou` were promoted to `stable`/`ou` in 0.4.0 (see
-#' NEWS.md), then 0.4.2 replaced `stable`/`ou`'s identification (free
-#' `sum_to_zero_vector` alpha_raw + soft sign anchor -> hard-positivity
-#' construction) and retired the pre-0.4.2 programs as
-#' `stable_soft_anchor`/`ou_soft_anchor`. `alphanorm`/`alphanorm_ou`
-#' therefore now resolve to the LEGACY entries, not to `stable`/`ou`:
-#' every fit on disk made under the `alphanorm`/`alphanorm_ou` name was
-#' necessarily made before 0.4.2, so it is a `stable_soft_anchor`/
-#' `ou_soft_anchor` fit (soft anchor, needs [bilatr_orient()]), never a
-#' `stable`/`ou` one. Model output directories already on disk (and the
-#' diagnostics scripts pointed at them) were produced under the old
-#' names, so [.canonical_stan_model()] keeps accepting them rather than
-#' silently misbehaving (B1: an unrecognized `stan_model` used to make
-#' [.bilatr_flip_variables()] return `character(0)`, disabling sign
-#' orientation with no warning) or hard-erroring on input that has a
-#' well-defined, correct meaning.
+#' `alphanorm`/`alphanorm_ou` (the pre-0.4.0 names) and
+#' `stable_soft_anchor`/`ou_soft_anchor` (the pre-0.4.2 soft-sign-anchor
+#' programs those aliases ultimately resolved to) are no longer registered
+#' at all -- every fit made under any of these four names predates 0.4.2,
+#' so it needs bilatr <= 0.9.1 (the last version to still register and
+#' orient them) to read, not this or any later version.
 #' @keywords internal
-.bilatr_stan_model_aliases <- c(
-  alphanorm = "stable_soft_anchor",
-  alphanorm_ou = "ou_soft_anchor"
-)
-
-#' Tracks which pre-0.4.0 aliases have already emitted their
-#' once-per-session resolution message
-#'
-#' A post-hoc analysis script for one set of CSV files/`stan_model`
-#' realistically calls more than one alias-accepting entry point in the
-#' same session -- e.g. `extract_theta()`, then `extract_alpha()`, then
-#' `extract_mu_intercept()`, all with the same `stan_model = "alphanorm"`
-#' -- and some entry points canonicalise the same raw name more than
-#' once even within a single call of their own (`fit_bilatr()`, for
-#' instance, resolves it separately via `.compile_stan_model()` and
-#' [.warn_if_wrong_basin()]). Without this guard, the same message would
-#' print once per such call, for what is, from the caller's perspective,
-#' a single fact worth stating once. Keyed by alias name (not a single
-#' flag) so `alphanorm` and `alphanorm_ou` each message independently.
-#' Mutating an environment's contents is allowed even though the
-#' binding `.bilatr_alias_messaged` itself is locked (package
-#' namespaces lock bindings, not the mutable objects they point to).
-#' @keywords internal
-.bilatr_alias_messaged <- new.env(parent = emptyenv())
+.BILATR_RETIRED_MODEL_NAMES <- c("alphanorm", "alphanorm_ou", "stable_soft_anchor", "ou_soft_anchor")
 
 #' Resolve a `stan_model` argument to its canonical registered name
 #'
 #' Every `stan_model`-accepting entry point should call this before doing
 #' anything else with the value: an unrecognized name must never be
-#' allowed to silently fall through to [.bilatr_flip_variables()]'s
-#' `character(0)` default (which reads as "no reflection symmetry to
-#' correct" rather than "unrecognized name", and would leave a
-#' wrong-basin fit un-reoriented with no error or warning -- B1).
+#' allowed to silently fall through as though it were a no-op.
 #'
 #' @param name A `stan_model` value as given by the caller: a name
-#'   currently in `.bilatr_stan_models`, a pre-0.4.0 alias in
-#'   `.bilatr_stan_model_aliases`, or anything else (an error).
+#'   currently in `.bilatr_stan_models`, one of
+#'   `.BILATR_RETIRED_MODEL_NAMES` (a dedicated "retired in 0.10.0" error),
+#'   or anything else (a generic "unknown" error).
 #' @return The canonical registered name.
 #' @keywords internal
 .canonical_stan_model <- function(name) {
   if (name %in% names(.bilatr_stan_models)) {
     return(name)
   }
-  if (name %in% names(.bilatr_stan_model_aliases)) {
-    canonical <- unname(.bilatr_stan_model_aliases[[name]])
-    if (!isTRUE(.bilatr_alias_messaged[[name]])) {
-      message(
-        "stan_model '", name, "' is the pre-0.4.0 name of '", canonical,
-        "'; using '", canonical, "'. Note this is the LEGACY (pre-0.4.2, ",
-        "soft-anchor) identification, not the current 'stable'/'ou' -- ",
-        "every fit made under the '", name, "' name predates 0.4.2's ",
-        "hard-positivity change, so this is the correct resolution."
-      )
-      assign(name, TRUE, envir = .bilatr_alias_messaged)
-    }
-    return(canonical)
+  if (name %in% .BILATR_RETIRED_MODEL_NAMES) {
+    stop(
+      "stan_model '", name, "' was retired in bilatr 0.10.0 (see NEWS.md): ",
+      "its sign-ambiguous soft-anchor identification was replaced by the ",
+      "current models' orientation fold, and the post-hoc orientation ",
+      "machinery it needed no longer exists. Install bilatr <= 0.9.1 to ",
+      "read/re-derive a fit made under this name.",
+      call. = FALSE
+    )
   }
   stop(
     "Unknown stan_model '", name, "'. Registered models: ",
-    paste(names(.bilatr_stan_models), collapse = ", "),
-    ". Recognized pre-0.4.0 aliases: ",
-    paste(names(.bilatr_stan_model_aliases), collapse = ", "), ".",
+    paste(names(.bilatr_stan_models), collapse = ", "), ".",
     call. = FALSE
   )
 }
 
-#' Reset [.canonical_stan_model()]'s once-per-session alias-message guard
-#'
-#' Test-only: lets a test assert the alias message fires again after an
-#' earlier test in the same session already triggered it for the same
-#' name (the guard is otherwise indistinguishable from "already told the
-#' user, don't repeat it" across the whole test run, not just within one
-#' `test_that()` block).
-#' @keywords internal
-.reset_bilatr_alias_messaged <- function() {
-  rm(list = ls(.bilatr_alias_messaged), envir = .bilatr_alias_messaged)
-}
-
 #' Resolve a registered Stan model name to its file path
 #'
-#' @param name A name registered in `.bilatr_stan_models`, or a
-#'   recognized alias (see [.canonical_stan_model()]).
+#' @param name A name registered in `.bilatr_stan_models` (see
+#'   [.canonical_stan_model()]).
 #' @return The path to the model's `.stan` file (works both from the
 #'   package source tree under `devtools::load_all()` and from an
 #'   installed package, via `system.file()`).
@@ -291,8 +211,8 @@
 #' entry needs it so far and this keeps the registry's existing shape
 #' unchanged for every other model.
 #'
-#' @param stan_model Name registered in `.bilatr_stan_models`, or a
-#'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
+#' @param stan_model Name registered in `.bilatr_stan_models`; see
+#'   [.canonical_stan_model()].
 #' @return `TRUE`/`FALSE`.
 #' @keywords internal
 .bilatr_model_has_gamma <- function(stan_model) {

@@ -53,7 +53,7 @@ inst/stan/bilatr_alphanorm_gamma.stan's header and
 dev/claude_code_prompt_0.7.0_country_offsets.md, "Part 4"). \code{gamma} is
 fully identified (unlike \code{gamma_z}, which is prior-only pinned in its
 projected-out directions -- see \code{\link[=.bilatr_sign_tied_names]{.bilatr_sign_tied_names()}} in
-\code{R/orient.R} for where THAT is excluded instead, via the \code{tier = NA}
-path below, for a different reason than sign ambiguity).
+\code{R/sign_ambiguity.R} for where THAT is excluded instead, via the
+\code{tier = NA} path below, for a different reason than sign ambiguity).
 }
 \keyword{internal}

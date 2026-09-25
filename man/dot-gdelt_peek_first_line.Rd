@@ -7,6 +7,10 @@
 .gdelt_peek_first_line(path)
 }
 \description{
-Read the first line of a (possibly zipped) GDELT file
+\code{unz()} connections opened with \code{open = "rt"} up front fail with "seek
+not enabled for this connection" on older R (confirmed: R 4.3.3, though
+not on more recent R) once \code{readLines()} tries to read from them.
+Constructing the connection lazily (no \code{open} argument) and letting
+\code{readLines()} open it avoids this across R versions.
 }
 \keyword{internal}

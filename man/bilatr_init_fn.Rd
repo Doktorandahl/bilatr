@@ -18,11 +18,7 @@ argument.
 \description{
 Initial values are model-specific: \code{stan_model} selects among the
 registered models' distinct parameter sets (a non-centered
-\code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy, etc.);
-\code{stable}/\code{stable_soft_anchor} (and \code{ou}/\code{ou_soft_anchor}) share an
-identical parameter set and so share one \code{switch()} branch each --
-they differ only in what the \code{.stan} program does with \code{alpha_raw}'s
-sign once sampled (see \code{\link[=.alpha_raw_sum0_init]{.alpha_raw_sum0_init()}}), not in shape.
+\code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy, etc.).
 \code{stable_gamma} (0.7.0) gets its own branch: \code{stable}'s init list plus
 \code{gamma_z}/\code{sigma_gamma}, both started small (not exactly 0 -- same
 reasoning as \code{alpha_raw}'s non-zero start: an all-zero init is valid

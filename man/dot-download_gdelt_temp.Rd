@@ -7,6 +7,11 @@
 .download_gdelt_temp(plan, md5_lookup, verify, ...)
 }
 \description{
-\code{download_gdelt()}, temp mode: download, read, discard, per file
+When every file in \code{plan} is missing/failed/corrupt, \code{all_events} is a
+list of \code{NULL}s and \code{dplyr::bind_rows()} of that gives a zero-column
+tibble with no hint of what was expected. Falls back to
+\code{\link[=.gdelt_empty_tibble]{.gdelt_empty_tibble()}} (using \code{...}'s \code{columns}, or \code{\link[=read_gdelt]{read_gdelt()}}'s own
+default if \code{columns} wasn't passed) plus an empty \code{source_file} column,
+so downstream code gets the same shape either way.
 }
 \keyword{internal}

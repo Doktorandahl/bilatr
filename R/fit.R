@@ -80,21 +80,18 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #' `sum_to_zero_vector`'s constrained representation) and away from the
 #' `dot_self(alpha_raw) == 0` degeneracy.
 #'
-#' `stable`/`ou` also fold `alpha_raw[1]`'s sign into the REPORTED
-#' `alpha`/`theta` (`orientation_sign()`, each `.stan` file's header,
-#' "IDENTIFICATION: ORIENTATION FOLD"), which makes the reported
+#' Every registered model also folds `alpha_raw[1]`'s sign into the
+#' REPORTED `alpha`/`theta` (`orientation_sign()`, each `.stan` file's
+#' header, "IDENTIFICATION: ORIENTATION FOLD"), which makes the reported
 #' quantities correct regardless of which raw-space basin a chain
-#' occupies -- so, for those two models, this function's sign bias below
-#' is a nicety, not a correctness requirement: it just means a chain's
-#' RAW parameters (`alpha_raw` itself, and the theta-side raws that share
-#' its sign) usually won't label-switch either, keeping their own
-#' diagnostics interpretable more often (though never guaranteed; see
+#' occupies -- so this function's sign bias is a nicety, not a
+#' correctness requirement: it just means a chain's RAW parameters
+#' (`alpha_raw` itself, and the theta-side raws that share its sign)
+#' usually won't label-switch either, keeping their own diagnostics
+#' interpretable more often (though never guaranteed; see
 #' `R/diagnose_convergence.R`'s exclusion of those raw names from the
 #' tiered diagnostics, which is what actually protects a caller when this
-#' bias doesn't hold). The retired `stable_soft_anchor`/`ou_soft_anchor`
-#' programs have no fold, so for THEM this bias is what
-#' `.warn_if_wrong_basin()` below and `bilatr_orient()` (`R/orient.R`)
-#' exist to catch/repair when it fails.
+#' bias doesn't hold).
 #'
 #' @param A Number of action types.
 #' @return A length-`A` numeric vector summing to exactly 0, with its
@@ -113,11 +110,7 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #'
 #' Initial values are model-specific: `stan_model` selects among the
 #' registered models' distinct parameter sets (a non-centered
-#' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy, etc.);
-#' `stable`/`stable_soft_anchor` (and `ou`/`ou_soft_anchor`) share an
-#' identical parameter set and so share one `switch()` branch each --
-#' they differ only in what the `.stan` program does with `alpha_raw`'s
-#' sign once sampled (see [.alpha_raw_sum0_init()]), not in shape.
+#' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy, etc.).
 #' `stable_gamma` (0.7.0) gets its own branch: `stable`'s init list plus
 #' `gamma_z`/`sigma_gamma`, both started small (not exactly 0 -- same
 #' reasoning as `alpha_raw`'s non-zero start: an all-zero init is valid
@@ -137,8 +130,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
 
   init_list <- switch(
     stan_model,
-    stable = ,
-    stable_soft_anchor = list(
+    stable = list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
@@ -184,8 +176,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
         )
       )
     },
-    ou = ,
-    ou_soft_anchor = list(
+    ou = list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
@@ -212,64 +203,11 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   }
 }
 
-#' Warn if a fit's `alpha[1]` landed in the wrong reflection-symmetry basin
-#'
-#' Since 0.4.2, only the retired `stable_soft_anchor`/`ou_soft_anchor`
-#' have a reflection symmetry a chain's init can land on either side of
-#' (see `R/orient.R`); decided via [.bilatr_flip_variables()] (not a
-#' literal name list here) so this and `bilatr_orient()` never disagree
-#' about which models need it. The current `stable`/`ou` fold `alpha[1]`'s
-#' sign into the REPORTED `alpha`/`theta` instead (see each `.stan`
-#' file's header, "IDENTIFICATION: ORIENTATION FOLD"), so there is no
-#' wrong basin left for a caller to land in -- this function is a no-op
-#' for them, with no `fit$draws()` call at all. For models that still have the
-#' symmetry, with single-chain runs (this project's SLURM submission
-#' convention -- see `runscripts/submit_bilatr_runs.R`) there is no
-#' cross-chain Rhat or other diagnostic that would otherwise surface a
-#' wrong-basin fit, so this check was the only automatic signal; it
-#' reports regardless of sign so a caller always sees where `alpha[1]`
-#' landed, and warns specifically when it's negative.
-#'
-#' @param fit A `CmdStanMCMC` fit object.
-#' @param stan_model Name registered in `.bilatr_stan_models`.
-#' @return `fit`, invisibly (called for the message/warning side effect).
-#' @keywords internal
-.warn_if_wrong_basin <- function(fit, stan_model) {
-  if (length(.bilatr_flip_variables(stan_model)) == 0) {
-    return(invisible(fit))
-  }
-
-  alpha1_median <- stats::median(posterior::extract_variable(fit$draws("alpha[1]"), "alpha[1]"))
-  message("Posterior median of alpha[1]: ", round(alpha1_median, 3))
-
-  if (alpha1_median < 0) {
-    warning(
-      "stan_model = '", stan_model, "' fit has posterior median ",
-      "alpha[1] = ", round(alpha1_median, 3), " (< 0): this chain's init ",
-      "landed in the wrong-sign basin of the alpha/theta reflection ",
-      "symmetry (see the model's .stan file header, ",
-      "\"REFLECTION SYMMETRY\"). Use bilatr_orient() to relabel this ",
-      "fit's draws before downstream use.",
-      call. = FALSE
-    )
-  }
-
-  invisible(fit)
-}
-
 #' Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
 #' counterparts in R/fit_dev.R
 #'
-#' Canonicalises `stan_model` once, here, so `.compile_stan_model()`,
-#' [bilatr_init_fn()], and [.warn_if_wrong_basin()] all agree on the
-#' same resolved name: before this, a pre-0.4.0 alias
-#' (`"alphanorm"`/`"alphanorm_ou"`) reached [.compile_stan_model()] (via
-#' `.resolve_stan_model()`) and [.warn_if_wrong_basin()] (via
-#' [.bilatr_flip_variables()]) fine, since both canonicalise internally,
-#' but [bilatr_init_fn()] switches on the raw name directly and has no
-#' entry for the alias itself -- `fit_panel_dev(stan_model =
-#' "alphanorm")` reached sampling only by chance of resolving the Stan
-#' file correctly first, then died in the init generator.
+#' Canonicalises `stan_model` once, here, so `.compile_stan_model()` and
+#' [bilatr_init_fn()] agree on the same resolved name.
 #' @keywords internal
 fit_bilatr <- function(
   stan_data,
@@ -286,7 +224,7 @@ fit_bilatr <- function(
 ) {
   stan_model <- .canonical_stan_model(stan_model)
   mod <- .compile_stan_model(stan_model, opt_level)
-  fit <- mod$sample(
+  mod$sample(
     data = stan_data,
     chains = chains,
     parallel_chains = parallel_chains,
@@ -298,8 +236,6 @@ fit_bilatr <- function(
     output_dir = output_dir,
     ...
   )
-  .warn_if_wrong_basin(fit, stan_model)
-  fit
 }
 
 #' Fit the bilatr model to a single dyad's time series

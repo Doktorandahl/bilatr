@@ -1,7 +1,8 @@
-# --- synthetic CmdStan-shaped CSV, no CmdStan/cmdstan_path() needed -------
-# --- (cmdstanr:::read_csv_metadata() is a pure text parser; confirmed it ---
-# --- accepts a hand-written file with no real Stan run behind it) ---------
-# --- .make_synthetic_stan_csv() itself now lives in helper_fixtures.R, ---
+# --- synthetic CmdStan-shaped CSV, no cmdstanr/CmdStan needed -------------
+# --- (0.10.0: .prepare_fast_csv_read() parses config/header itself via ---
+# --- .scan_stan_csv_header_and_skip(), replacing cmdstanr:::            ---
+# --- read_csv_metadata() -- these tests never touch cmdstanr at all) -----
+# --- .make_synthetic_stan_csv() itself lives in helper_fixtures.R, -------
 # --- shared with test_diagnose_convergence.R's peak-RSS regression guard -
 
 test_that(".prepare_fast_csv_read()/.fast_read_post_warmup_draws() handle a wide synthetic CSV (no CmdStan)", {
@@ -61,6 +62,103 @@ test_that(".prepare_fast_csv_read() computes data_skip correctly with save_warmu
   draws <- .fast_read_post_warmup_draws(prepared, "x[1]")
   # exactly the post-warmup values (d * 1e6 + 1), never the -99 warmup rows
   expect_equal(as.numeric(draws), seq_len(n_draws) * 1e6 + 1)
+})
+
+test_that(".scan_stan_csv_header_and_skip() accepts both save_warmup spellings (numeric 0/1 and logical false/true)", {
+  n_cols <- 50L
+  n_draws <- 8L
+  n_warmup <- 3L
+
+  for (spelling in c("numeric", "logical")) {
+    f <- tempfile(fileext = ".csv")
+    on.exit(unlink(f), add = TRUE)
+    .make_synthetic_stan_csv(
+      f, n_cols = n_cols, n_draws = n_draws, n_warmup = n_warmup,
+      save_warmup = TRUE, save_warmup_spelling = spelling
+    )
+    scan <- .scan_stan_csv_header_and_skip(f)
+    expect_true(scan$save_warmup, info = paste("spelling:", spelling))
+    expect_equal(scan$num_warmup, n_warmup, info = paste("spelling:", spelling))
+
+    # and the reverse: save_warmup = FALSE under both spellings
+    f2 <- tempfile(fileext = ".csv")
+    on.exit(unlink(f2), add = TRUE)
+    .make_synthetic_stan_csv(
+      f2, n_cols = n_cols, n_draws = n_draws, n_warmup = n_warmup,
+      save_warmup = FALSE, save_warmup_spelling = spelling
+    )
+    scan2 <- .scan_stan_csv_header_and_skip(f2)
+    expect_false(scan2$save_warmup, info = paste("spelling:", spelling))
+  }
+})
+
+test_that(".prepare_fast_csv_read() handles thin > 1 (num_post_warmup_draws = ceiling(num_samples / thin))", {
+  f <- tempfile(fileext = ".csv")
+  on.exit(unlink(f), add = TRUE)
+  n_cols <- 30L
+  n_draws <- 6L # physical post-warmup rows
+  .make_synthetic_stan_csv(f, n_cols = n_cols, n_draws = n_draws, save_warmup = FALSE, thin = 2L)
+
+  scan <- .scan_stan_csv_header_and_skip(f)
+  expect_equal(scan$thin, 2L)
+  expect_equal(scan$num_samples, n_draws * 2L)
+  expect_equal(scan$num_post_warmup_draws, n_draws)
+
+  prepared <- .prepare_fast_csv_read(f)
+  expect_equal(prepared$num_post_warmup_draws, n_draws)
+  draws <- .fast_read_post_warmup_draws(prepared, "x[1]")
+  expect_equal(as.numeric(draws), seq_len(n_draws) * 1e6 + 1)
+})
+
+# --- parity check against cmdstanr:::read_csv_metadata() (0.10.0) --------
+# --- allowed to use `:::` here specifically to verify the replacement ----
+
+test_that(".scan_stan_csv_header_and_skip()/.prepare_fast_csv_read() match cmdstanr:::read_csv_metadata() on a real CmdStan fixture", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  f <- fx$csv_files[1]
+
+  old_meta <- cmdstanr:::read_csv_metadata(f)
+  new_scan <- .scan_stan_csv_header_and_skip(f)
+
+  expect_equal(new_scan$num_samples, as.integer(old_meta$iter_sampling))
+  expect_equal(new_scan$num_warmup, as.integer(old_meta$iter_warmup))
+  expect_equal(new_scan$thin, as.integer(old_meta$thin))
+  expect_equal(new_scan$save_warmup, old_meta$save_warmup == 1)
+  expect_equal(new_scan$num_post_warmup_draws, ceiling(old_meta$iter_sampling / old_meta$thin))
+
+  old_bracket <- vapply(old_meta$variables, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
+  prepared <- .prepare_fast_csv_read(fx$csv_files)
+  expect_setequal(prepared$variables, old_bracket)
+})
+
+test_that(".scan_stan_csv_header_and_skip() matches cmdstanr:::read_csv_metadata() on real production CSVs", {
+  skip_if_not_installed("cmdstanr")
+
+  prod_files <- c(
+    testthat::test_path("..", "..", "runscripts", "tmpdata", "bilatr1_sample.csv"),
+    testthat::test_path("..", "..", "runscripts", "tmpdata", "bilatr1_sample10.csv")
+  )
+  skip_if_not(all(file.exists(prod_files)), "production CSV fixtures not present")
+
+  for (f in prod_files) {
+    old_meta <- cmdstanr:::read_csv_metadata(f)
+    new_scan <- .scan_stan_csv_header_and_skip(f)
+
+    expect_equal(new_scan$num_samples, as.integer(old_meta$iter_sampling), info = f)
+    expect_equal(new_scan$num_warmup, as.integer(old_meta$iter_warmup), info = f)
+    expect_equal(new_scan$thin, as.integer(old_meta$thin), info = f)
+    expect_equal(new_scan$save_warmup, old_meta$save_warmup == 1, info = f)
+
+    old_bracket <- vapply(old_meta$variables, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
+    header_fields <- strsplit(new_scan$header_line, ",", fixed = TRUE)[[1]]
+    variables_dot <- header_fields[!endsWith(header_fields, "__") | header_fields == "lp__"]
+    new_bracket <- vapply(variables_dot, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
+    expect_setequal(new_bracket, old_bracket)
+  }
 })
 
 # --- .fast_read_post_warmup_draws() matches cmdstanr::read_cmdstan_csv() --

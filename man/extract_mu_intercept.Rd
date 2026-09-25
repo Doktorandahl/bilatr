@@ -9,7 +9,6 @@ extract_mu_intercept(
   fit,
   event_classes = NULL,
   probs = c(0.05, 0.5, 0.95),
-  stan_model = .BILATR_DEFAULT_MODEL,
   scratch_dir = NULL
 )
 }
@@ -26,14 +25,6 @@ index.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
-
-\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
-which model produced \code{fit}, or a recognized pre-0.4.0 alias
-(\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to \code{"stable"}/\code{"ou"} with a
-message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) -- an unrecognized name
-errors immediately rather than silently skipping sign orientation.
-See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}
-(\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/\code{\link[=fit_panel]{fit_panel()}} always fit.}
 
 \item{scratch_dir}{Deprecated and ignored since 0.4.1; see
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
@@ -52,12 +43,9 @@ softmax level-shift.
 }
 \details{
 \code{mu_intercept} never flips under the alpha/theta reflection symmetry
-(\verb{alpha .* theta} is invariant under the joint negation; see
-\code{\link[=bilatr_orient]{bilatr_orient()}}), so \code{"alpha[1]"} is only read alongside it when
-\code{stan_model} still has that symmetry to check (the retired
-\code{stable_soft_anchor}/\code{ou_soft_anchor}) -- for \code{stable}/\code{ou}, since
-0.4.2, \code{\link[=bilatr_orient]{bilatr_orient()}} is skipped entirely and \code{mu_intercept} is
-read alone.
+(\verb{alpha .* theta} is invariant under the joint negation), and \code{stable}/
+\code{ou}'s orientation fold leaves nothing else to correct here, so
+\code{mu_intercept} is read alone.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths,
 for the same post-hoc/no-in-memory-fit case described in

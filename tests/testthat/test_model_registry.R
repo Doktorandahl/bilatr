@@ -1,26 +1,26 @@
-test_that("the registry contains stable/ou/stable_gamma plus their retired legacy soft-anchor entries", {
+test_that("the registry contains exactly stable/ou/stable_gamma", {
   expect_setequal(
     names(.bilatr_stan_models),
-    c("stable", "ou", "stable_gamma", "stable_soft_anchor", "ou_soft_anchor")
+    c("stable", "ou", "stable_gamma")
   )
   expect_identical(.BILATR_DEFAULT_MODEL, "stable")
-  # retired variants that are NOT kept registered (the pre-0.4.0
-  # stable/ou themselves, and phi_logn) must not be registered; note
-  # alphanorm/alphanorm_ou are aliases, not registered names, checked
-  # separately below
+  # retired variants must not be registered: the pre-0.4.0 stable/ou
+  # themselves, phi_logn, and (0.10.0) the pre-0.4.2 soft-anchor stack
+  # and its pre-0.4.0 aliases
   expect_false(any(
-    c("phi_logn", "stable_ncproc", "phi_logn_ncproc", "alphanorm", "alphanorm_ou") %in%
+    c(
+      "phi_logn", "stable_ncproc", "phi_logn_ncproc",
+      "alphanorm", "alphanorm_ou", "stable_soft_anchor", "ou_soft_anchor"
+    ) %in%
       names(.bilatr_stan_models)
   ))
 })
 
-test_that("stable is 'stable'; ou/stable_gamma are 'experimental'; the retired soft-anchor entries are 'legacy'", {
+test_that("stable is 'stable'; ou/stable_gamma are 'experimental'", {
   statuses <- vapply(.bilatr_stan_models, function(x) x$status, character(1))
   expect_identical(statuses[["stable"]], "stable")
   expect_identical(statuses[["ou"]], "experimental")
   expect_identical(statuses[["stable_gamma"]], "experimental")
-  expect_identical(statuses[["stable_soft_anchor"]], "legacy")
-  expect_identical(statuses[["ou_soft_anchor"]], "legacy")
 })
 
 test_that(".resolve_stan_model() resolves valid names to existing files", {
@@ -30,57 +30,27 @@ test_that(".resolve_stan_model() resolves valid names to existing files", {
 
   expect_match(.resolve_stan_model("ou"), "bilatr_alphanorm_ou\\.stan$")
   expect_match(.resolve_stan_model("stable_gamma"), "bilatr_alphanorm_gamma\\.stan$")
-
-  expect_match(.resolve_stan_model("stable_soft_anchor"), "legacy/bilatr_stable_soft_anchor\\.stan$")
-  expect_match(.resolve_stan_model("ou_soft_anchor"), "legacy/bilatr_ou_soft_anchor\\.stan$")
 })
 
 test_that(".bilatr_model_has_gamma() is TRUE only for stable_gamma", {
   expect_true(.bilatr_model_has_gamma("stable_gamma"))
   expect_false(.bilatr_model_has_gamma("stable"))
   expect_false(.bilatr_model_has_gamma("ou"))
-  expect_false(.bilatr_model_has_gamma("stable_soft_anchor"))
-  expect_false(.bilatr_model_has_gamma("ou_soft_anchor"))
 })
 
 test_that(".resolve_stan_model() errors informatively on an unknown name", {
   expect_error(.resolve_stan_model("not_a_real_model"), "Unknown stan_model")
   expect_error(.resolve_stan_model("not_a_real_model"), "stable")
-  # phi_logn is retired -> also an unknown name now (never registered,
-  # and not a recognized alias either)
+  # phi_logn is retired -> also an unknown name now (never registered)
   expect_error(.resolve_stan_model("phi_logn"), "Unknown stan_model")
 })
 
-test_that(".canonical_stan_model()/.resolve_stan_model() accept the pre-0.4.0 alphanorm/alphanorm_ou aliases, now resolving to the legacy soft-anchor entries (B1)", {
-  # the alias message is once-per-session (per name), not once-per-call
-  # (see .reset_bilatr_alias_messaged()'s docs) -- reset before each
-  # call this test expects to message again
-  .reset_bilatr_alias_messaged()
-
-  # alphanorm/alphanorm_ou were never registered names themselves --
-  # .canonical_stan_model() maps them to the legacy soft-anchor entries
-  # with a message, it doesn't add them to .bilatr_stan_models. Since
-  # 0.4.2, every fit made under the "alphanorm"/"alphanorm_ou" name
-  # necessarily predates the hard-positivity change, so this is the
-  # correct resolution (see R/model_registry.R).
-  expect_message(canonical <- .canonical_stan_model("alphanorm"), "pre-0.4.0 name of 'stable_soft_anchor'")
-  expect_identical(canonical, "stable_soft_anchor")
-  expect_message(canonical_ou <- .canonical_stan_model("alphanorm_ou"), "pre-0.4.0 name of 'ou_soft_anchor'")
-  expect_identical(canonical_ou, "ou_soft_anchor")
-
-  .reset_bilatr_alias_messaged()
-  expect_message(alphanorm_path <- .resolve_stan_model("alphanorm"), "pre-0.4.0 name")
-  expect_identical(alphanorm_path, .resolve_stan_model("stable_soft_anchor"))
-  expect_message(alphanorm_ou_path <- .resolve_stan_model("alphanorm_ou"), "pre-0.4.0 name")
-  expect_identical(alphanorm_ou_path, .resolve_stan_model("ou_soft_anchor"))
-})
-
-test_that(".canonical_stan_model() messages only once per session per alias name", {
-  .reset_bilatr_alias_messaged()
-  expect_message(.canonical_stan_model("alphanorm"), "pre-0.4.0 name of 'stable_soft_anchor'")
-  expect_no_message(.canonical_stan_model("alphanorm"))
-  # a different alias still messages independently
-  expect_message(.canonical_stan_model("alphanorm_ou"), "pre-0.4.0 name of 'ou_soft_anchor'")
+test_that("each name retired in 0.10.0 gives a dedicated 'retired' error, not the generic 'unknown' one", {
+  for (name in c("alphanorm", "alphanorm_ou", "stable_soft_anchor", "ou_soft_anchor")) {
+    expect_error(.canonical_stan_model(name), "retired in bilatr 0\\.10\\.0")
+    expect_error(.canonical_stan_model(name), "bilatr <= 0\\.9\\.1")
+    expect_error(.resolve_stan_model(name), "retired in bilatr 0\\.10\\.0")
+  }
 })
 
 test_that("every registered model's file actually exists under inst/stan/", {

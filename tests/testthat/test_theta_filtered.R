@@ -80,8 +80,7 @@
   data_list <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     compute_log_lik = 0, prior_only = 0,
-    compute_theta_filtered = 1, n_filter_dyads = D, filter_dyads = seq_len(D),
-    anchor_scale = 0.1
+    compute_theta_filtered = 1, n_filter_dyads = D, filter_dyads = seq_len(D)
   )
   sum0 <- function(x) x - mean(x)
   params <- list(
@@ -105,7 +104,7 @@
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     compute_log_lik = 0, prior_only = 0,
     compute_theta_filtered = 1, n_filter_dyads = D, filter_dyads = seq_len(D),
-    anchor_scale = 0.1, rho_prior_a = 8, rho_prior_b = 2
+    rho_prior_a = 8, rho_prior_b = 2
   )
   sum0 <- function(x) x - mean(x)
   params <- list(
@@ -279,8 +278,7 @@ test_that("no orientation_sign() double-flip: theta_filtered agrees between oppo
   data_list <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
     compute_log_lik = 0, prior_only = 0,
-    compute_theta_filtered = 1, n_filter_dyads = D, filter_dyads = seq_len(D),
-    anchor_scale = 0.1
+    compute_theta_filtered = 1, n_filter_dyads = D, filter_dyads = seq_len(D)
   )
 
   mod <- .compile_stan_model("stable", opt_level = 1)

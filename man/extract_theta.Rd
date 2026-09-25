@@ -8,7 +8,6 @@ extract_theta(
   fit,
   stan_data,
   probs = c(0.05, 0.5, 0.95),
-  stan_model = .BILATR_DEFAULT_MODEL,
   max_memory_mb = 8192,
   chunk_size = NULL,
   parallel = FALSE,
@@ -28,14 +27,6 @@ attribute).}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
-
-\item{stan_model}{Name registered in \code{.bilatr_stan_models} identifying
-which model produced \code{fit}, or a recognized pre-0.4.0 alias
-(\code{"alphanorm"}/\code{"alphanorm_ou"}, mapped to \code{"stable"}/\code{"ou"} with a
-message; see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}) -- an unrecognized name
-errors immediately rather than silently skipping sign orientation.
-See \code{\link[=bilatr_orient]{bilatr_orient()}}. Defaults to \code{.BILATR_DEFAULT_MODEL}
-(\code{"stable"}), matching what \code{\link[=fit_dyad_ts]{fit_dyad_ts()}}/\code{\link[=fit_panel]{fit_panel()}} always fit.}
 
 \item{max_memory_mb, chunk_size, parallel, n_workers}{Only used when
 \code{fit} is CSV file paths; identical in meaning to
@@ -66,37 +57,23 @@ single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=
 \code{stable}/\code{ou} fold \code{alpha[1]}'s sign into the reported \code{alpha}/\code{theta}
 (see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
 so \code{theta} is already in its canonical orientation (higher theta =
-better relations) and this function skips
-\code{\link[=bilatr_orient]{bilatr_orient()}} entirely for them -- no draws-through-orientation
-round trip, since \code{.bilatr_flip_variables(stan_model)} is
-\code{character(0)}. Only the retired \code{stable_soft_anchor}/\code{ou_soft_anchor}
-\code{stan_model}s (their free \code{sum_to_zero_vector} alpha with a soft sign
-anchor leaves a real reflection symmetry a chain's init can land on
-either side of) still get routed through \code{\link[=bilatr_orient]{bilatr_orient()}} here.
+better relations) with no post-hoc relabeling needed.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --
 reads and summarises \code{theta} directly from the raw CSVs in
-memory-bounded chunks via \link{.chunked_summarise_csv_with_orientation}
-rather than materializing the full draws array, for the same
-production-scale-panel reason \code{diagnose_convergence()} needed it.
-\strong{This trades memory for wall-time, and the exchange rate can be
-steep}: reading is single-threaded, and each chunk's cost is roughly
-a full parse of the largest chain file regardless of how many columns
-are requested (see \code{max_memory_mb} below and in
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation), so total sweep time scales
-with chunk COUNT, not memory saved. Prefer the in-memory path when
-you already have \code{fit} in memory (no benefit to re-reading), and the
-CSV path's default \code{max_memory_mb} as large as your job's memory
-allocation can afford, not as small as "safely" possible. Sign
-orientation in this mode is decided from the first chunk itself
-(\code{alpha[1]} prepended, read once, dropped before summarising --
-see \link{.chunked_summarise_csv_with_orientation}) rather than a separate
-pass, applied per chunk before summarising, matching the in-memory
-path's raw-draws flip rather than a post-hoc adjustment of
-already-computed quantiles; the flip only happens for \code{stan_model}s
-with a reflection symmetry, same as the in-memory path. This mode
-only supports the default \code{probs}, since it reuses
+memory-bounded chunks via \link{.chunked_summarise_csv} rather than
+materializing the full draws array, for the same production-scale-panel
+reason \code{diagnose_convergence()} needed it. \strong{This trades memory for
+wall-time, and the exchange rate can be steep}: reading is
+single-threaded, and each chunk's cost is roughly a full parse of the
+largest chain file regardless of how many columns are requested (see
+\code{max_memory_mb} below and in \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation),
+so total sweep time scales with chunk COUNT, not memory saved. Prefer
+the in-memory path when you already have \code{fit} in memory (no benefit
+to re-reading), and the CSV path's default \code{max_memory_mb} as large as
+your job's memory allocation can afford, not as small as "safely"
+possible. This mode only supports the default \code{probs}, since it reuses
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s chunked-read helper (which always computes
 a fixed \code{q5}/\code{median}/\code{q95} summary, not user-configurable quantiles)
 rather than re-reading data already summarised once; pass an
@@ -108,6 +85,6 @@ theta <- extract_theta(fit, stan_data)
 
 # a completed SLURM run, never read into this R session
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-theta <- extract_theta(csv_files, stan_data, stan_model = "ou", max_memory_mb = 16384)
+theta <- extract_theta(csv_files, stan_data, max_memory_mb = 16384)
 }
 }

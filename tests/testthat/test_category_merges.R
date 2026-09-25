@@ -200,8 +200,8 @@ test_that("the merge ranking (pairwise and ladder order) is invariant to phi", {
   fit_low <- list(draws = function(variables) make_draws(phi_low))
   fit_high <- list(draws = function(variables) make_draws(phi_high))
 
-  res_low <- diagnose_category_merges(fit_low, stan_data, stan_model = "stable")
-  res_high <- diagnose_category_merges(fit_high, stan_data, stan_model = "stable")
+  res_low <- diagnose_category_merges(fit_low, stan_data)
+  res_high <- diagnose_category_merges(fit_high, stan_data)
 
   expect_equal(res_low$pairwise$index_a, res_high$pairwise$index_a)
   expect_equal(res_low$pairwise$index_b, res_high$pairwise$index_b)
@@ -227,7 +227,7 @@ test_that("the empirical-share default matches shares computed by hand from a sm
       dimnames = list(NULL, NULL, colnames(alpha_draws))))
   })
 
-  res <- diagnose_category_merges(fake_fit, stan_data, stan_model = "stable", phi = 1)
+  res <- diagnose_category_merges(fake_fit, stan_data, phi = 1)
 
   hand_shares <- apply(Y, 3, sum)
   hand_shares <- hand_shares / sum(hand_shares)
@@ -251,7 +251,7 @@ test_that("merge_cost() on an explicit grouping matches the ladder's cumulative 
       dimnames = list(NULL, NULL, colnames(alpha_draws))))
   })
 
-  res <- diagnose_category_merges(fake_fit, stan_data, stan_model = "stable", phi = 1)
+  res <- diagnose_category_merges(fake_fit, stan_data, phi = 1)
 
   # price the exact grouping the ladder's step 1 represents
   step1 <- res$ladder[1, ]
@@ -273,7 +273,7 @@ test_that("a prior_only = 1 short fit reproduces alpha_prior_moments() within MC
   is_obs <- matrix(1L, D, Tn)
   data_list <- list(
     T = Tn, D = D, A = A, C = 1, is_obs = is_obs, Y = Y,
-    compute_log_lik = 0, prior_only = 1, compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0), anchor_scale = 0.1
+    compute_log_lik = 0, prior_only = 1, compute_theta_filtered = 0, n_filter_dyads = 0, filter_dyads = integer(0)
   )
 
   # A prior-only fit's alpha has no likelihood pulling on it at all, so
@@ -309,7 +309,7 @@ test_that("print.bilatr_category_merges() runs without error on the CmdStan fixt
   skip_on_ci()
 
   fx <- make_csv_diagnostics_fixture(stan_model = "stable")
-  res <- diagnose_category_merges(fx$fit, fx$stan_data, stan_model = "stable")
+  res <- diagnose_category_merges(fx$fit, fx$stan_data)
   expect_s3_class(res, "bilatr_category_merges")
   expect_output(print(res), "bilatr_category_merges")
   expect_output(print(res), "not a severity")

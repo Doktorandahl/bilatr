@@ -14,10 +14,9 @@ devtools::load_all(".", quiet = TRUE)
 fragment_path <- "inst/stan/include/partial_log_lik.stanfunctions"
 fragment_lines <- readLines(fragment_path)
 
-# Only the two currently-registered, actively-fit programs get the
-# splice -- inst/stan/legacy/ files (including the retired
-# stable_soft_anchor/ou_soft_anchor from 0.4.2) are frozen snapshots and
-# must not be rewritten by this script.
+# Only the currently-registered programs get the splice -- every
+# inst/stan/legacy/ file is a frozen snapshot of a retired model and must
+# not be rewritten by this script.
 target_files <- c(
   "inst/stan/bilatr_alphanorm.stan",
   "inst/stan/bilatr_alphanorm_ou.stan",

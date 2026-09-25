@@ -20,7 +20,6 @@ assemble_stan_data(
   prior_only = 0,
   compute_theta_filtered = 0,
   filter_dyads = NULL,
-  anchor_scale = 0.1,
   actor1 = "Actor1CountryCode",
   actor2 = "Actor2CountryCode",
   date = "SQLDATE"
@@ -124,24 +123,6 @@ fifty dyads) to compute the filter cheaply for just those. Errors,
 listing the offending names, if any requested dyad was dropped by
 \code{min_n_events} or never existed.}
 
-\item{anchor_scale}{Scale of the soft sign anchor
-\verb{target += log_inv_logit(alpha[1] * inv(anchor_scale))}. Since 0.4.2
-(see NEWS.md), this is consumed only by the LEGACY
-\code{stable_soft_anchor}/\code{ou_soft_anchor} Stan programs (see
-\code{R/model_registry.R}), which normalize \code{alpha} via a free
-\code{sum_to_zero_vector} with no fixed element -- leaving an exact
-reflection symmetry (\code{alpha}, \code{theta} -> \code{-alpha}, \code{-theta} is
-likelihood-invariant) the anchor only softly penalizes (\code{alpha[1] < 0}), not reliably breaks across independently-initialized chains;
-see \code{bilatr_orient()} for the post-hoc fix those two programs still
-need. The current \code{stable}/\code{ou} programs fold \code{alpha[1]}'s sign into
-the reported \code{alpha}/\code{theta} instead (see each \code{.stan} file's
-header, "IDENTIFICATION: ORIENTATION FOLD") and don't declare
-\code{anchor_scale} at all; it is still supplied unconditionally
-here (CmdStan ignores data a program doesn't declare), so this
-function doesn't need to branch on \code{stan_model}. \code{alpha[1]} is
-already the reference/neutral action class supplied via
-\code{reference_category} -- no separate index is needed. Default \code{0.1}.}
-
 \item{actor1, actor2}{Names of the sender/target actor columns; see
 \code{?bilatr_event_data}.}
 
@@ -152,7 +133,7 @@ A named list suitable as the \code{data} argument to
 \code{cmdstanr::CmdStanModel$sample()} for the bilatr Stan model: \code{D},
 \code{T}, \code{A}, \code{C}, \code{is_obs}, \code{Y}, \code{rho_prior_a}, \code{rho_prior_b},
 \code{compute_log_lik}, \code{prior_only}, \code{compute_theta_filtered},
-\code{n_filter_dyads}, \code{filter_dyads}, \code{anchor_scale}, and (0.7.0,
+\code{n_filter_dyads}, \code{filter_dyads}, and (0.7.0,
 unconditionally -- see the fields' own inline comments in this
 function's body) \code{n_countries}, \code{ctry_a}, \code{ctry_b}, \code{w_send} (only
 consumed by the experimental \code{stable_gamma} variant; see

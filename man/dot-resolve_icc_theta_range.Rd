@@ -10,8 +10,6 @@
   theta_range,
   theta_summary,
   quantile_probs,
-  needs_orient,
-  stan_model,
   n_dyads_fallback,
   seed
 )

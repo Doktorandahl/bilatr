@@ -17,7 +17,7 @@
 #'
 #' @keywords internal
 .resolve_icc_theta_range <- function(fit, stan_data, theta_range, theta_summary, quantile_probs,
-                                      needs_orient, stan_model, n_dyads_fallback, seed) {
+                                      n_dyads_fallback, seed) {
   if (!is.null(theta_range)) {
     return(theta_range)
   }
@@ -39,12 +39,7 @@
   sampled_d <- sort(sample(D, n_sample))
   theta_vars <- unlist(lapply(sampled_d, function(d) paste0("theta[", d, ",", seq_len(Tn), "]")))
 
-  if (needs_orient) {
-    draws <- .get_draws(fit, c("alpha[1]", theta_vars))
-    draws <- bilatr_orient(draws, stan_model = stan_model, variables = "theta")
-  } else {
-    draws <- .get_draws(fit, theta_vars)
-  }
+  draws <- .get_draws(fit, theta_vars)
   theta_mat <- posterior::as_draws_matrix(draws)[, theta_vars, drop = FALSE]
   theta_means <- colMeans(theta_mat)
 
@@ -140,8 +135,8 @@
 #' @param type `"probability"` (default) for `p_k(theta)`, or
 #'   `"information"` for the per-category Fisher information
 #'   contribution (see Details).
-#' @param stan_model Name registered in `.bilatr_stan_models`, or a
-#'   recognized pre-0.4.0 alias; see [.canonical_stan_model()].
+#' @param stan_model Name registered in `.bilatr_stan_models`; see
+#'   [.canonical_stan_model()].
 #' @param country Only meaningful for `stan_model = "stable_gamma"` (see
 #'   `R/model_registry.R`'s `.bilatr_model_has_gamma()`) -- ignored, with
 #'   a warning if supplied, for any other `stan_model`. `NULL` (default)
@@ -153,8 +148,8 @@
 #'   `stan_data`'s `"country_codes"` attribute) or a raw integer country
 #'   index gives that country's curves instead, subtracting its `gamma_c`
 #'   from `eta` (`gamma`, read once, Tier 1/cheap, alongside `alpha`/
-#'   `mu_intercept` above -- `gamma` needs no [bilatr_orient()] call,
-#'   since it is orientation-free by construction; see
+#'   `mu_intercept` above -- `gamma` is orientation-free by construction,
+#'   so no relabeling applies to it; see
 #'   `inst/stan/bilatr_alphanorm_gamma.stan`'s header).
 #' @param n_dyads_fallback Number of dyads to subsample for the
 #'   last-resort `theta_range` fallback (see Details). Default `300`.
@@ -183,7 +178,6 @@ icc_curves <- function(
 ) {
   type <- match.arg(type)
   stan_model <- .canonical_stan_model(stan_model)
-  needs_orient <- length(.bilatr_flip_variables(stan_model)) > 0
   has_gamma <- .bilatr_model_has_gamma(stan_model)
 
   if (!is.null(country) && !has_gamma) {
@@ -196,9 +190,6 @@ icc_curves <- function(
   }
 
   am_draws <- .get_draws(fit, c("alpha", "mu_intercept"))
-  if (needs_orient) {
-    am_draws <- bilatr_orient(am_draws, stan_model = stan_model, variables = c("alpha", "mu_intercept"))
-  }
   alpha_mat <- .as_plain_matrix(.as_ordered_matrix(am_draws, "alpha"))
   mu_mat <- .as_plain_matrix(.as_ordered_matrix(am_draws, "mu_intercept"))
   A <- ncol(alpha_mat)
@@ -207,8 +198,8 @@ icc_curves <- function(
   # gamma_vec (0.7.0): the fixed A-length-per-draw country offset
   # subtracted from every grid point's eta below -- 0 (the global
   # baseline) unless `country` was supplied for a stable_gamma fit. Read
-  # once here (Tier 1, cheap: A x n_countries), never through
-  # bilatr_orient() (gamma is orientation-free by construction).
+  # once here (Tier 1, cheap: A x n_countries); gamma is orientation-free
+  # by construction, so no relabeling applies to it.
   gamma_vec <- 0
   if (!is.null(country)) {
     if (is.character(country)) {
@@ -254,7 +245,7 @@ icc_curves <- function(
 
   theta_range <- .resolve_icc_theta_range(
     fit, stan_data, theta_range, theta_summary, quantile_probs,
-    needs_orient, stan_model, n_dyads_fallback, seed
+    n_dyads_fallback, seed
   )
   theta_grid <- seq(theta_range[1], theta_range[2], length.out = n_grid)
   q_probs <- c(probs[1], 0.5, probs[length(probs)])
