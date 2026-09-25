@@ -1,3 +1,105 @@
+# bilatr 0.9.1
+
+Six follow-up fixes from the 0.9.0 review, plus a full rewrite of the
+GDELT download/ingest layer against facts verified live against GDELT's
+own index and codebook (see `dev/claude_code_prompt_0.9.1_gdelt.md`;
+summary and verification detail at `dev/summary_0.9.1_gdelt.md`).
+Re-verified against the
+production `gdelt_bilatr.rds` extract after the 0f refactor: every
+`stan_data` field, `event_classes`, and `country_codes` are `identical()`
+to 0.9.0's (`95f509e`) for both `directed = TRUE` and `FALSE`, and
+`assemble_stan_data()` is now faster on that extract (directed: 29.8s ->
+21.2s; undirected: 24.6s -> 16.1s).
+
+## Breaking changes
+
+* `download_gdelt_raw_zip()`, `extract_all_relevant_gdelt()`, and
+  `get_actor_combos()` are removed, along with `gdelt_export_url()` and
+  `get_gdelt_column_names()`. Replaced by `download_gdelt()`,
+  `read_gdelt()`, and `count_gdelt_actor_types()` (`gdelt_columns()`
+  replaces `get_gdelt_column_names()`); `R/data_ingestion.R` is deleted.
+  Nothing in the tests or runscripts called the old functions.
+* Stricter date parsing (`.parse_event_date()`): a malformed `YYYYMMDD`
+  string (wrong digit count, trailing text, an invalid calendar date like
+  month 13) that used to parse leniently via `strptime` is now `NA`,
+  reported by `validate_bilatr_events()` as unparseable.
+* Leading/trailing whitespace in an actor code (`actor1`/`actor2`) is now
+  a `validate_bilatr_events()` error, not a silent extra actor (` "USA"`
+  and `"USA"` used to become two different countries).
+
+## New
+
+* `gdelt_files(start, end)`: a pure function listing the yearly/monthly/
+  daily GDELT files covering a date range.
+* `download_gdelt(start, end, dest_dir = NULL, ...)`: `dest_dir = NULL`
+  downloads to a temp path, reads it, and discards it (no folder, no
+  zips left behind); `dest_dir = "dir"` caches the zips and returns a
+  status table (`"downloaded"`/`"cached"`/`"missing"`/`"failed"`/
+  `"corrupt"`) instead of reading. One request per file under a raised
+  timeout (was 60s), `.part`-staged so a failed download never sits at
+  the final path, and MD5-verified against GDELT's own `md5sums` index.
+* `read_gdelt(files, columns, actor_types, actor_type_match, countries,
+  country_match, cross_border, root_events_only, event_codes,
+  date_range)`: an explicit 58-column schema (`?bilatr_gdelt_layout`),
+  chunked reads (bounded memory), and a richer filter set than the old
+  `extract_all_relevant_gdelt()` -- countries, root-events-only,
+  CAMEO-event-code prefixes, and a `SQLDATE` range, on top of the
+  existing cross-border/actor-type filter (now checking all three
+  `Type1-3Code` slots per side, with a `"both"`/`"either"` match mode).
+* `gdelt_columns(set = c("core", "actors", "geo", "all"))`: named presets
+  over the full schema.
+* `count_gdelt_actor_types(files, ...)`: replaces `get_actor_combos()`;
+  counts actor-type combinations over all three type slots per side
+  (not just `Type1Code`).
+* ISO `YYYY-MM-DD` and `POSIXt` dates are now accepted by every function
+  that parses an event date.
+
+## Bug fixes
+
+* G1: daily GDELT files (58 columns, from 2013-04-01) no longer get an
+  anonymous `X58` column -- `SOURCEURL` is now a named, typed column
+  (and `NA` for 57-column backfiles, so mixed-era output binds cleanly).
+* G2: a download failure or GDELT 404 is now a reported status plus one
+  summary `warning()`, never a silently-returned path to a truncated or
+  nonexistent file; the default timeout is now 3600s, not R's 60s
+  default (which could truncate a large backfile).
+* Free-text fields containing a literal `"` (e.g. `Actor1Name`,
+  `*Geo_FullName`) no longer get mis-split by readr's default quote
+  handling (`read_gdelt()` reads with `quote = ""`).
+* Column types are now explicit (`?bilatr_gdelt_layout`) rather than
+  guessed per file. This is a genuine correctness fix, not just
+  cleanliness: readr's guesser can infer a sparse column (e.g.
+  `Actor1Type3Code`, populated in a small minority of rows) as `logical`
+  from an all-`NA` sample, silently breaking any later `%in%`
+  actor-type match against real values further down the file --
+  confirmed live on `2020-01-01`'s daily file, where this recovered 2
+  events `extract_all_relevant_gdelt()` was silently dropping.
+* 0c: `?bilatr_event_data`/`assemble_stan_data()`'s docs now correctly
+  say validation runs on every row, including rows outside `years` --
+  matching the code's actual (and correct) behaviour all along.
+* 0d: `grouped_events_to_dyad_period(years =)` now reports how many rows
+  it dropped, matching `assemble_stan_data()`.
+* 0e: an empty `data`, or a `years` matching no rows, now errors clearly
+  ("no events fall within `years`", with the data's actual year range),
+  instead of a misleading "No dyads have at least `min_n_events`" error
+  that points at the wrong argument.
+
+## Internal
+
+* 0f: `assemble_stan_data()` used to validate `data` twice (once itself,
+  once inside `grouped_events_to_dyad_period()`) and parse the date
+  column up to four times. Both functions now share an internal
+  `.slim_event_table()`/worker path, so validation and date parsing each
+  happen exactly once per call -- confirmed faster on the production
+  extract (see the entry's opening paragraph) with identical output.
+* `httr` dropped from Imports (was used only for `download_gdelt_raw_zip()`'s
+  `HEAD()` pre-check); `furrr` dropped from Suggests (no longer
+  referenced anywhere, including examples).
+* The base GDELT URL is overridable via
+  `getOption("bilatr.gdelt_base_url", ...)`, which is what makes
+  `download_gdelt()`/`read_gdelt()` testable offline against `file://`
+  fixtures (`tests/testthat/helper_gdelt.R`).
+
 # bilatr 0.9.0
 
 Retires ICEWS and replaces the implicit event-data format with an explicit,
@@ -23,7 +125,8 @@ storage type, `double` -> `integer`, with numerically identical values).
   built (the class order was previously built first, so an out-of-window-only
   class got an all-zero `Y` column identified only by its prior). `A`/
   `event_classes` can shrink for inputs containing classes seen only outside
-  `years`; production data is unaffected (see Part 5 above).
+  `years`; verified against the production extract; see the entry's opening
+  paragraph.
 * `recode_cameo()` now `stop()`s on a non-character/factor code column,
   instead of failing inside `left_join()` with an opaque type-mismatch error.
 

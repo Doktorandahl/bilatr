@@ -226,6 +226,70 @@ test_that("D4: a reference_category absent from the in-window data errors (prese
   )
 })
 
+test_that("0a: .parse_event_date() is strict about malformed input and wide about accepted forms", {
+  # Reproduction table from dev/claude_code_prompt_0.9.1_gdelt.md 0a.
+  expect_true(is.na(.parse_event_date("2020011"))) # 7 chars: was wrongly 2020-01-01
+  expect_true(is.na(.parse_event_date("20200101abc"))) # trailing text: was wrongly 2020-01-01
+  expect_true(is.na(.parse_event_date("2020 0101"))) # embedded space: was wrongly 2020-01-01
+  expect_equal(.parse_event_date("2020-01-01"), as.Date("2020-01-01")) # was wrongly NA
+  expect_equal(
+    .parse_event_date(as.POSIXct("2020-05-01 10:00", tz = "UTC")),
+    as.Date("2020-05-01")
+  ) # was wrongly NA
+  expect_true(is.na(.parse_event_date("20201301"))) # invalid month: must stay NA
+
+  # Every other accepted/rejected form named in the contract table.
+  expect_equal(.parse_event_date(as.Date("2020-01-01")), as.Date("2020-01-01"))
+  expect_equal(.parse_event_date(20200101L), as.Date("2020-01-01"))
+  expect_equal(.parse_event_date(20200101), as.Date("2020-01-01"))
+  expect_equal(.parse_event_date(factor("2020-01-01")), as.Date("2020-01-01"))
+  expect_equal(.parse_event_date(factor("20200101")), as.Date("2020-01-01"))
+  expect_true(is.na(.parse_event_date(2020011))) # numeric, 7-digit
+  expect_true(is.na(.parse_event_date(20200101.5))) # not a whole number
+  expect_true(is.na(.parse_event_date(NA_character_)))
+})
+
+test_that("0b: leading/trailing whitespace in an actor code is a validator error, not a silent trim", {
+  events <- tibble::tibble(
+    Actor1CountryCode = c(" USA", "USA"),
+    Actor2CountryCode = c("RUS", "RUS"),
+    SQLDATE = 20200101L,
+    PentaClass = c(0, 1)
+  )
+  err <- tryCatch(
+    validate_bilatr_events(events, grouping_var = "PentaClass"),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "whitespace")
+
+  events2 <- events
+  events2$Actor2CountryCode <- c("RUS ", "RUS")
+  err2 <- tryCatch(
+    validate_bilatr_events(events2, grouping_var = "PentaClass"),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err2, "whitespace")
+})
+
+test_that("0c: validate_bilatr_events() runs on every row, including rows outside `years`", {
+  # Reproduction: an NA class in a row outside `years` must still error,
+  # even though that row would be dropped by the window filter.
+  events <- tibble::tibble(
+    Actor1CountryCode = c("USA", "USA"),
+    Actor2CountryCode = c("RUS", "RUS"),
+    SQLDATE = c(20100101L, 20150101L),
+    PentaClass = c(NA, 0)
+  )
+  expect_error(
+    assemble_stan_data(events, years = 2015:2016, resolution = "yearly", grouping_var = "PentaClass"),
+    "missing \\(NA\\)"
+  )
+  expect_error(
+    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", years = 2015:2016),
+    "missing \\(NA\\)"
+  )
+})
+
 test_that("recode_cameo() errors on numeric EventCode, and reports unmatched/bare-root counts", {
   events_numeric <- tibble::tibble(EventCode = c(10L, 190L))
   expect_error(recode_cameo(events_numeric), "leading zero")

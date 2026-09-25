@@ -4,21 +4,27 @@
 #' it as the data list expected by the package's Stan model (the
 #' registered `stable` program; see `R/model_registry.R`).
 #'
-#' Validates `data` against `?bilatr_event_data` first, drops rows outside
-#' `years` before the set of observed event classes is determined (see
-#' `@param years`), then delegates the aggregation itself to
-#' [grouped_events_to_dyad_period()].
+#' Validates `data` against `?bilatr_event_data` **first, against every
+#' row** -- including rows outside `years` -- so a data problem in an
+#' out-of-window row (e.g. an unparseable date) is still caught (0.9.1,
+#' audit 0c). Only after validation does it drop rows outside `years` and
+#' determine the set of observed event classes (see `@param years`), then
+#' aggregate the survivors itself (the worker also used by
+#' [grouped_events_to_dyad_period()], which this function no longer calls
+#' -- see NEWS 0.9.1, audit 0f).
 #'
 #' @param data A data frame of event-level records; see
 #'   `?bilatr_event_data`. Two helpers produce data in this format:
-#'   [extract_all_relevant_gdelt()] and [recode_cameo()].
+#'   [read_gdelt()]/[download_gdelt()] and [recode_cameo()].
 #' @param years Integer vector of years to cover. Rows outside `years` are
-#'   dropped from `data` before anything else -- including before the
-#'   class order is built (0.9.0; previously an action class seen only
-#'   outside `years` still got an all-zero column of `Y`, identified only
-#'   by its prior). A `message()` reports how many rows were dropped, and
-#'   names any class present in `data` that has zero in-window events (and
-#'   so is absent from `event_classes`/`A`/`Y`).
+#'   dropped -- after validation (see above), and before the class order
+#'   is built (0.9.0; previously an action class seen only outside `years`
+#'   still got an all-zero column of `Y`, identified only by its prior).
+#'   A `message()` reports how many rows were dropped, and names any class
+#'   present in `data` that has zero in-window events (and so is absent
+#'   from `event_classes`/`A`/`Y`). If no rows of `data` fall within
+#'   `years`, errors and reports the data's actual year range (0.9.1,
+#'   audit 0e); an empty `data` errors too.
 #' @param resolution Either `"monthly"` or `"yearly"`.
 #' @param grouping_var Name of the event-class column to aggregate on
 #'   (e.g. `"QuadClass"`, `"PentaClass"`).
@@ -140,7 +146,7 @@
 #'   [extract_gamma()]).
 #' @examples
 #' \dontrun{
-#' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+#' events <- download_gdelt("2020-01-01")
 #' events <- recode_cameo(events)
 #' agg <- grouped_events_to_dyad_period(
 #'   events,
@@ -189,26 +195,47 @@ assemble_stan_data <- function(
   }
 
   validate_bilatr_events(data, grouping_var, actor1, actor2, date)
+  # Validated and slimmed exactly once per call (0.9.1, audit 0f): the
+  # date column is parsed here and nowhere else in this function, and
+  # the slim table -- not the original `data` -- is what's windowed and
+  # handed to .dyad_period_from_slim() below (the same worker
+  # grouped_events_to_dyad_period() calls), so that function no longer
+  # re-validates or re-parses.
+  slim <- .slim_event_table(data, grouping_var, actor1, actor2, date)
 
   # Window-first (0.9.0, audit D3): drop rows outside `years` before the
   # class order is built, so a class seen only outside the window never
-  # gets an all-zero column of `Y` identified only by its prior. Done
-  # here (on the raw `data`) rather than inside
-  # grouped_events_to_dyad_period() so the dropped-class message below
-  # can compare against the FULL set of classes in `data`, not just the
-  # in-window survivors grouped_events_to_dyad_period() ever sees.
-  event_year <- as.integer(format(.parse_event_date(data[[date]]), "%Y"))
-  all_classes <- unique(as.character(data[[grouping_var]]))
-  in_window <- event_year %in% years
+  # gets an all-zero column of `Y` identified only by its prior. `
+  # all_classes` is captured from the FULL slim table, before windowing,
+  # so the dropped-class message below can compare against every class
+  # in `data`, not just the in-window survivors.
+  all_classes <- unique(slim$.class)
+  n_total <- nrow(slim)
+  full_year_range <- if (n_total > 0) range(slim$.year) else NULL
+  in_window <- slim$.year %in% years
   n_dropped <- sum(!in_window)
   if (n_dropped > 0) {
     message(sprintf(
       "assemble_stan_data(): dropping %d row(s) outside `years`.", n_dropped
     ))
   }
-  data <- data[in_window, , drop = FALSE]
+  slim <- slim[in_window, , drop = FALSE]
 
-  zero_window_classes <- setdiff(all_classes, unique(as.character(data[[grouping_var]])))
+  # Empty-window guard (0.9.1, audit 0e): before this, an empty `data` or
+  # a `years` matching no rows fell through to the "No dyads have at
+  # least min_n_events" error below, which points at the wrong knob
+  # (min_n_events, not years/data).
+  if (nrow(slim) == 0) {
+    if (n_total == 0) {
+      stop("assemble_stan_data(): `data` is empty; nothing to assemble.", call. = FALSE)
+    }
+    stop(sprintf(
+      "assemble_stan_data(): no events fall within `years` (data's years span %d-%d).",
+      full_year_range[1], full_year_range[2]
+    ), call. = FALSE)
+  }
+
+  zero_window_classes <- setdiff(all_classes, unique(slim$.class))
   if (length(zero_window_classes) > 0) {
     message(
       "assemble_stan_data(): the following class(es) of `", grouping_var,
@@ -217,17 +244,7 @@ assemble_stan_data <- function(
     )
   }
 
-  agg <- grouped_events_to_dyad_period(
-    data,
-    resolution = resolution,
-    grouping_var = grouping_var,
-    directed = directed,
-    reference_category = reference_category,
-    years = NULL,
-    actor1 = actor1,
-    actor2 = actor2,
-    date = date
-  )
+  agg <- .dyad_period_from_slim(slim, resolution, directed, reference_category)
   # Captured here, immediately, rather than relied on to survive the
   # dplyr pipeline below (fill_dyad_period_skeleton()'s right_join/
   # arrange/mutate chain, then the min_n_events dplyr::filter()): custom

@@ -16,7 +16,7 @@ single place the contract is spelled out; every other function's
    Role \tab Default column \tab Requirement \cr
    Actor 1 (sender, for directed dyads) \tab \code{Actor1CountryCode} \tab character, factor or integer (used as character); no \code{NA}; no empty string; must not contain \code{"_"} (the dyad-key separator) \cr
    Actor 2 (target) \tab \code{Actor2CountryCode} \tab same; and \code{actor1 != actor2} in every row (bilatr models \emph{bilateral} relations) \cr
-   Event date \tab \code{SQLDATE} \tab a \code{Date}, or \code{YYYYMMDD} as integer/numeric/character; no \code{NA} \cr
+   Event date \tab \code{SQLDATE} \tab a \code{Date}; a \code{POSIXt} (converted in its own time zone); a whole-number \code{YYYYMMDD} (integer, numeric, or 8-digit character/factor, e.g. \code{20200101}); or an ISO \code{YYYY-MM-DD} character/factor (e.g. \code{"2020-01-01"}); no \code{NA}; anything else (short/long digit runs, trailing text, an invalid calendar date) fails to parse and is reported as \code{NA} \cr
    Event class \tab \code{grouping_var} (no default) \tab any atomic type, used as character; no \code{NA} \cr
 }
 
@@ -29,15 +29,17 @@ user's own \code{dyad}/\code{date}/\code{year}/\code{month}/\code{event_type} co
 present) are left exactly as they are; the internal aggregate these
 functions build uses its own column names.
 
-Rows outside the analysis \code{years} window (see \code{\link[=assemble_stan_data]{assemble_stan_data()}})
-are dropped before anything else -- including before the set of
-observed event classes is determined -- and a \code{message()} reports how
-many rows were dropped.
+\code{\link[=validate_bilatr_events]{validate_bilatr_events()}} runs against \strong{every} row of \code{data}, including
+rows outside the analysis \code{years} window (see \code{\link[=assemble_stan_data]{assemble_stan_data()}}) --
+so a data problem in an out-of-window row (e.g. an unparseable date) is
+still caught. Windowing happens afterwards: rows outside \code{years} are
+dropped before the set of observed event classes is determined, and a
+\code{message()} reports how many rows were dropped.
 
-Two helpers produce data in this format: \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}
-(GDELT; to be replaced in 0.9.1) and \code{\link[=recode_cameo]{recode_cameo()}} (attaches a CAMEO
-event-class column such as \code{QuadClass}/\code{PentaClass}/\code{ModifiedRootCode}
-to an existing event table).
+Two helpers produce data in this format: \code{\link[=read_gdelt]{read_gdelt()}}/\code{\link[=download_gdelt]{download_gdelt()}}
+(GDELT) and \code{\link[=recode_cameo]{recode_cameo()}} (attaches a CAMEO event-class column such
+as \code{QuadClass}/\code{PentaClass}/\code{ModifiedRootCode} to an existing event
+table).
 }
 \examples{
 # A 10-row event table with COW-style numeric actor codes and a Date

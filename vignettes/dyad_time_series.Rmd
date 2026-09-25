@@ -29,8 +29,14 @@ event table in the format documented at `?bilatr_event_data`:
 ```{r, eval = FALSE}
 library(bilatr)
 
-# one CAMEO-coded event file
-events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+# a quick look: download, filter, and read one day's events, keeping
+# nothing on disk
+events <- download_gdelt("2020-01-01")
+events <- recode_cameo(events)
+
+# for real work: keep the zips as a cache and read them yourself
+status <- download_gdelt("2020-01-01", "2020-01-31", dest_dir = "data/gdelt_raw")
+events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
 events <- recode_cameo(events)
 ```
 

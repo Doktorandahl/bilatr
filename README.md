@@ -58,8 +58,18 @@ library(dplyr)
 # Bring an event table in the format documented at ?bilatr_event_data:
 # an actor1/actor2 pair (any code alphabet -- ISO3, ISO2, COW numeric,
 # free-text labels), an event date, and an event-class column. GDELT
-# helpers are included but optional:
-events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+# helpers are included but optional -- two download modes:
+
+# a) a quick look: download, filter, and read into memory, nothing kept
+#    on disk
+events <- download_gdelt("2020-01-01")
+
+# -- OR --
+
+# b) for real work: keep the zips as a cache (skips files already
+#    present on a later call) and read them yourself
+status <- download_gdelt("2020-01-01", "2020-01-31", dest_dir = "data/gdelt_raw")
+events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
 
 # Recode CAMEO event codes to QuadClass/PentaClass using the package's
 # built-in lookup table (no external CAMEO reference package needed):

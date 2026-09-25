@@ -29,15 +29,17 @@ assemble_stan_data(
 \arguments{
 \item{data}{A data frame of event-level records; see
 \code{?bilatr_event_data}. Two helpers produce data in this format:
-\code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}} and \code{\link[=recode_cameo]{recode_cameo()}}.}
+\code{\link[=read_gdelt]{read_gdelt()}}/\code{\link[=download_gdelt]{download_gdelt()}} and \code{\link[=recode_cameo]{recode_cameo()}}.}
 
 \item{years}{Integer vector of years to cover. Rows outside \code{years} are
-dropped from \code{data} before anything else -- including before the
-class order is built (0.9.0; previously an action class seen only
-outside \code{years} still got an all-zero column of \code{Y}, identified only
-by its prior). A \code{message()} reports how many rows were dropped, and
-names any class present in \code{data} that has zero in-window events (and
-so is absent from \code{event_classes}/\code{A}/\code{Y}).}
+dropped -- after validation (see above), and before the class order
+is built (0.9.0; previously an action class seen only outside \code{years}
+still got an all-zero column of \code{Y}, identified only by its prior).
+A \code{message()} reports how many rows were dropped, and names any class
+present in \code{data} that has zero in-window events (and so is absent
+from \code{event_classes}/\code{A}/\code{Y}). If no rows of \code{data} fall within
+\code{years}, errors and reports the data's actual year range (0.9.1,
+audit 0e); an empty \code{data} errors too.}
 
 \item{resolution}{Either \code{"monthly"} or \code{"yearly"}.}
 
@@ -180,14 +182,18 @@ it as the data list expected by the package's Stan model (the
 registered \code{stable} program; see \code{R/model_registry.R}).
 }
 \details{
-Validates \code{data} against \code{?bilatr_event_data} first, drops rows outside
-\code{years} before the set of observed event classes is determined (see
-\verb{@param years}), then delegates the aggregation itself to
-\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}.
+Validates \code{data} against \code{?bilatr_event_data} \strong{first, against every
+row} -- including rows outside \code{years} -- so a data problem in an
+out-of-window row (e.g. an unparseable date) is still caught (0.9.1,
+audit 0c). Only after validation does it drop rows outside \code{years} and
+determine the set of observed event classes (see \verb{@param years}), then
+aggregate the survivors itself (the worker also used by
+\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}, which this function no longer calls
+-- see NEWS 0.9.1, audit 0f).
 }
 \examples{
 \dontrun{
-events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+events <- download_gdelt("2020-01-01")
 events <- recode_cameo(events)
 agg <- grouped_events_to_dyad_period(
   events,

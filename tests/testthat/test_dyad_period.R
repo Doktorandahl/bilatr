@@ -51,6 +51,23 @@ test_that("directed = FALSE collapses ordered pairs to a single undirected dyad 
   expect_equal(dplyr::n_distinct(undirected$dyad), 1L)
 })
 
+test_that("0d: grouped_events_to_dyad_period(years =) reports how many rows it dropped", {
+  events <- tibble::tibble(
+    Actor1CountryCode = c("USA", "USA", "USA"),
+    Actor2CountryCode = c("RUS", "RUS", "RUS"),
+    SQLDATE = c(20100101L, 20200101L, 20200201L),
+    PentaClass = c(0, 1, 2)
+  )
+  expect_message(
+    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", years = 2020),
+    "dropping 1 row"
+  )
+  # no years supplied: no filtering, no message
+  expect_no_message(
+    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass")
+  )
+})
+
 test_that("fill_dyad_period_skeleton fills gaps with zero counts and flags is_obs correctly", {
   agg <- tibble::tibble(
     dyad = "USA_CHN",

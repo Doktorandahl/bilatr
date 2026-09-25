@@ -7,15 +7,26 @@
 .parse_event_date(x)
 }
 \arguments{
-\item{x}{A \code{Date}, numeric, or character vector.}
+\item{x}{A \code{Date}, \code{POSIXt}, numeric, character, or factor vector.}
 }
 \value{
 A \code{Date} vector, the same length as \code{x}.
 }
 \description{
-A \code{Date} column is returned as-is. Numeric or character input is
-parsed as \code{YYYYMMDD} (\code{as.Date(as.character(x), format = "\\\%Y\\\%m\\\%d")});
-a value that fails to parse becomes \code{NA}, which is what
-\code{\link[=validate_bilatr_events]{validate_bilatr_events()}}'s date rule flags.
+A \code{Date} column is returned as-is. A \code{POSIXt} column is converted with
+\code{as.Date(format(x, "\\\%Y-\\\%m-\\\%d"))}, taking the calendar date in the
+object's own time zone rather than converting to UTC. Numeric input
+must be a whole number; it is formatted as an integer
+(\code{formatC(x, format = "d", big.mark = "")}, so no value goes through
+scientific notation) and then parsed as character. Character input
+(including numeric-as-character and factor levels) is accepted only
+if it matches exactly \verb{^[0-9]\{8\}$} (parsed as \verb{\\\%Y\\\%m\\\%d}) or exactly
+\verb{^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}$} (parsed as \verb{\\\%Y-\\\%m-\\\%d}); anything else,
+including a non-whole numeric value, an 8-digit string with trailing
+text, or an invalid calendar date (e.g. month 13), becomes \code{NA}, which
+is what \code{\link[=validate_bilatr_events]{validate_bilatr_events()}}'s date rule flags. This is
+deliberately stricter than plain \code{as.Date(x, format = "\\\%Y\\\%m\\\%d")}
+(\code{strptime} underneath), which allows one- or two-digit months/days
+and silently ignores trailing text.
 }
 \keyword{internal}

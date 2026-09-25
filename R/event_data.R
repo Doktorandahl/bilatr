@@ -11,7 +11,7 @@
 #' | --- | --- | --- |
 #' | Actor 1 (sender, for directed dyads) | `Actor1CountryCode` | character, factor or integer (used as character); no `NA`; no empty string; must not contain `"_"` (the dyad-key separator) |
 #' | Actor 2 (target) | `Actor2CountryCode` | same; and `actor1 != actor2` in every row (bilatr models *bilateral* relations) |
-#' | Event date | `SQLDATE` | a `Date`, or `YYYYMMDD` as integer/numeric/character; no `NA` |
+#' | Event date | `SQLDATE` | a `Date`; a `POSIXt` (converted in its own time zone); a whole-number `YYYYMMDD` (integer, numeric, or 8-digit character/factor, e.g. `20200101`); or an ISO `YYYY-MM-DD` character/factor (e.g. `"2020-01-01"`); no `NA`; anything else (short/long digit runs, trailing text, an invalid calendar date) fails to parse and is reported as `NA` |
 #' | Event class | `grouping_var` (no default) | any atomic type, used as character; no `NA` |
 #'
 #' Actor codes may have any length and any characters apart from `"_"`:
@@ -22,15 +22,17 @@
 #' present) are left exactly as they are; the internal aggregate these
 #' functions build uses its own column names.
 #'
-#' Rows outside the analysis `years` window (see [assemble_stan_data()])
-#' are dropped before anything else -- including before the set of
-#' observed event classes is determined -- and a `message()` reports how
-#' many rows were dropped.
+#' [validate_bilatr_events()] runs against **every** row of `data`, including
+#' rows outside the analysis `years` window (see [assemble_stan_data()]) --
+#' so a data problem in an out-of-window row (e.g. an unparseable date) is
+#' still caught. Windowing happens afterwards: rows outside `years` are
+#' dropped before the set of observed event classes is determined, and a
+#' `message()` reports how many rows were dropped.
 #'
-#' Two helpers produce data in this format: [extract_all_relevant_gdelt()]
-#' (GDELT; to be replaced in 0.9.1) and [recode_cameo()] (attaches a CAMEO
-#' event-class column such as `QuadClass`/`PentaClass`/`ModifiedRootCode`
-#' to an existing event table).
+#' Two helpers produce data in this format: [read_gdelt()]/[download_gdelt()]
+#' (GDELT) and [recode_cameo()] (attaches a CAMEO event-class column such
+#' as `QuadClass`/`PentaClass`/`ModifiedRootCode` to an existing event
+#' table).
 #'
 #' @examples
 #' # A 10-row event table with COW-style numeric actor codes and a Date
@@ -58,19 +60,87 @@ NULL
 
 #' Parse an event date column into a `Date` vector
 #'
-#' A `Date` column is returned as-is. Numeric or character input is
-#' parsed as `YYYYMMDD` (`as.Date(as.character(x), format = "\%Y\%m\%d")`);
-#' a value that fails to parse becomes `NA`, which is what
-#' [validate_bilatr_events()]'s date rule flags.
+#' A `Date` column is returned as-is. A `POSIXt` column is converted with
+#' `as.Date(format(x, "\%Y-\%m-\%d"))`, taking the calendar date in the
+#' object's own time zone rather than converting to UTC. Numeric input
+#' must be a whole number; it is formatted as an integer
+#' (`formatC(x, format = "d", big.mark = "")`, so no value goes through
+#' scientific notation) and then parsed as character. Character input
+#' (including numeric-as-character and factor levels) is accepted only
+#' if it matches exactly `^[0-9]{8}$` (parsed as `\%Y\%m\%d`) or exactly
+#' `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` (parsed as `\%Y-\%m-\%d`); anything else,
+#' including a non-whole numeric value, an 8-digit string with trailing
+#' text, or an invalid calendar date (e.g. month 13), becomes `NA`, which
+#' is what [validate_bilatr_events()]'s date rule flags. This is
+#' deliberately stricter than plain `as.Date(x, format = "\%Y\%m\%d")`
+#' (`strptime` underneath), which allows one- or two-digit months/days
+#' and silently ignores trailing text.
 #'
-#' @param x A `Date`, numeric, or character vector.
+#' @param x A `Date`, `POSIXt`, numeric, character, or factor vector.
 #' @return A `Date` vector, the same length as `x`.
 #' @keywords internal
 .parse_event_date <- function(x) {
   if (inherits(x, "Date")) {
     return(x)
   }
-  as.Date(as.character(x), format = "%Y%m%d")
+  if (inherits(x, "POSIXt")) {
+    return(as.Date(format(x, "%Y-%m-%d")))
+  }
+  if (is.numeric(x)) {
+    whole <- !is.na(x) & x == trunc(x)
+    chr <- rep(NA_character_, length(x))
+    chr[whole] <- formatC(x[whole], format = "d", big.mark = "")
+    return(.parse_event_date_strict(chr))
+  }
+  .parse_event_date_strict(as.character(x))
+}
+
+#' Parse a character vector as a strict `YYYYMMDD` or `YYYY-MM-DD` date
+#'
+#' The shared strict-parsing core of [.parse_event_date()]: values not
+#' matching one of the two accepted forms exactly become `NA` before
+#' `as.Date()` is even called, so `strptime`'s leniency (short digit
+#' runs, trailing text) never applies.
+#'
+#' @param x A character vector.
+#' @return A `Date` vector, the same length as `x`.
+#' @keywords internal
+.parse_event_date_strict <- function(x) {
+  out <- as.Date(rep(NA_character_, length(x)))
+  ymd <- !is.na(x) & grepl("^[0-9]{8}$", x)
+  iso <- !is.na(x) & grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", x)
+  out[ymd] <- as.Date(x[ymd], format = "%Y%m%d")
+  out[iso] <- as.Date(x[iso], format = "%Y-%m-%d")
+  out
+}
+
+#' Build the slim four-column working table from a validated event table
+#'
+#' Shared by [grouped_events_to_dyad_period()] and [assemble_stan_data()]
+#' so that, between the two of them, a `data` table is validated exactly
+#' once and its date column parsed exactly once per call (0.9.1, audit
+#' 0f) -- previously `assemble_stan_data()` validated `data` itself and
+#' then again inside [grouped_events_to_dyad_period()], and parsed dates
+#' up to four times. Callers must validate `data` (via
+#' [validate_bilatr_events()]) before calling this; it does no validation
+#' of its own.
+#'
+#' @param data A data frame; see `?bilatr_event_data`.
+#' @param grouping_var,actor1,actor2,date Column names; see
+#'   [validate_bilatr_events()].
+#' @return A tibble with `.actor1`, `.actor2`, `.date` (parsed), `.class`
+#'   (as character), `.year`, and `.month`.
+#' @keywords internal
+.slim_event_table <- function(data, grouping_var, actor1, actor2, date) {
+  slim <- tibble::tibble(
+    .actor1 = as.character(data[[actor1]]),
+    .actor2 = as.character(data[[actor2]]),
+    .date = .parse_event_date(data[[date]]),
+    .class = as.character(data[[grouping_var]])
+  )
+  slim$.year <- as.integer(format(slim$.date, "%Y"))
+  slim$.month <- as.integer(format(slim$.date, "%m"))
+  slim
 }
 
 #' Deterministically order an unordered pair of actor codes
@@ -151,9 +221,17 @@ validate_bilatr_events <- function(
   add_rule(sprintf("`%s` has missing (NA) values", actor1), is.na(a1))
   add_rule(sprintf("`%s` has empty-string values", actor1), !is.na(a1) & a1 == "")
   add_rule(sprintf("`%s` contains \"_\", the dyad-key separator", actor1), !is.na(a1) & grepl("_", a1, fixed = TRUE))
+  add_rule(
+    sprintf("`%s` has leading/trailing whitespace (e.g. \" USA\" and \"USA\" would otherwise become two actors)", actor1),
+    !is.na(a1) & grepl("^\\s|\\s$", a1)
+  )
   add_rule(sprintf("`%s` has missing (NA) values", actor2), is.na(a2))
   add_rule(sprintf("`%s` has empty-string values", actor2), !is.na(a2) & a2 == "")
   add_rule(sprintf("`%s` contains \"_\", the dyad-key separator", actor2), !is.na(a2) & grepl("_", a2, fixed = TRUE))
+  add_rule(
+    sprintf("`%s` has leading/trailing whitespace (e.g. \" USA\" and \"USA\" would otherwise become two actors)", actor2),
+    !is.na(a2) & grepl("^\\s|\\s$", a2)
+  )
   add_rule(
     sprintf("`%s` equals `%s` (a self-dyad; bilatr models bilateral relations)", actor1, actor2),
     !is.na(a1) & !is.na(a2) & a1 == a2

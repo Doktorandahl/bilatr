@@ -68,7 +68,7 @@ check on the dyad-key convention.
 }
 \description{
 Collapses event-level data (in the format documented at
-\code{?bilatr_event_data}; as produced by e.g. \code{\link[=extract_all_relevant_gdelt]{extract_all_relevant_gdelt()}}
+\code{?bilatr_event_data}; as produced by e.g. \code{\link[=read_gdelt]{read_gdelt()}}/\code{\link[=download_gdelt]{download_gdelt()}}
 and \code{\link[=recode_cameo]{recode_cameo()}}) to dyad-by-time-period counts of a chosen
 event-class column, one column per class plus a \code{total_events} column.
 This is the shared aggregation step feeding \code{\link[=assemble_stan_data]{assemble_stan_data()}}.
@@ -83,7 +83,7 @@ overwritten.
 }
 \examples{
 \dontrun{
-events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+events <- download_gdelt("2020-01-01")
 events <- recode_cameo(events)
 grouped_events_to_dyad_period(
   events,

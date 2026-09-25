@@ -120,6 +120,33 @@ test_that("min_n_events drops low-activity dyads, and errors clearly if it drops
   )
 })
 
+test_that("0e: an empty window gives a clear error naming the data's year range, not a min_n_events error", {
+  events <- make_fake_events(years = 2015:2019)
+  events <- recode_cameo(events, code_col = "EventCode")
+
+  err <- tryCatch(
+    assemble_stan_data(events, years = 2050, resolution = "yearly", grouping_var = "PentaClass"),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "no events fall within")
+  expect_match(err, "2015-2019")
+  expect_false(grepl("No dyads", err))
+})
+
+test_that("0e: an empty `data` errors clearly instead of via the min_n_events path", {
+  empty <- tibble::tibble(
+    Actor1CountryCode = character(0),
+    Actor2CountryCode = character(0),
+    SQLDATE = integer(0),
+    PentaClass = character(0)
+  )
+  err <- tryCatch(
+    assemble_stan_data(empty, years = 2020, resolution = "yearly", grouping_var = "PentaClass"),
+    error = function(e) conditionMessage(e)
+  )
+  expect_match(err, "`data` is empty")
+})
+
 test_that("dyad_ids attribute reattaches dyad_id to the dyad string for every observed dyad", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")

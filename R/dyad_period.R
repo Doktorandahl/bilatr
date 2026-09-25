@@ -58,7 +58,7 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #' Aggregate event data to dyad-period class counts
 #'
 #' Collapses event-level data (in the format documented at
-#' `?bilatr_event_data`; as produced by e.g. [extract_all_relevant_gdelt()]
+#' `?bilatr_event_data`; as produced by e.g. [read_gdelt()]/[download_gdelt()]
 #' and [recode_cameo()]) to dyad-by-time-period counts of a chosen
 #' event-class column, one column per class plus a `total_events` column.
 #' This is the shared aggregation step feeding [assemble_stan_data()].
@@ -111,7 +111,7 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #'   check on the dyad-key convention.
 #' @examples
 #' \dontrun{
-#' events <- extract_all_relevant_gdelt("data/gdelt_raw/20200101.zip")
+#' events <- download_gdelt("2020-01-01")
 #' events <- recode_cameo(events)
 #' grouped_events_to_dyad_period(
 #'   events,
@@ -135,20 +135,39 @@ grouped_events_to_dyad_period <- function(
   resolution <- match.arg(resolution)
 
   validate_bilatr_events(data, grouping_var, actor1, actor2, date)
-
-  slim <- tibble::tibble(
-    .actor1 = as.character(data[[actor1]]),
-    .actor2 = as.character(data[[actor2]]),
-    .date = .parse_event_date(data[[date]]),
-    .class = as.character(data[[grouping_var]])
-  )
-  slim$.year <- as.integer(format(slim$.date, "%Y"))
-  slim$.month <- as.integer(format(slim$.date, "%m"))
+  slim <- .slim_event_table(data, grouping_var, actor1, actor2, date)
 
   if (!is.null(years)) {
+    n_before <- nrow(slim)
     slim <- dplyr::filter(slim, .year %in% years)
+    n_dropped <- n_before - nrow(slim)
+    if (n_dropped > 0) {
+      message(sprintf(
+        "grouped_events_to_dyad_period(): dropping %d row(s) outside `years`.", n_dropped
+      ))
+    }
   }
 
+  .dyad_period_from_slim(slim, resolution, directed, reference_category)
+}
+
+#' Aggregate an already-validated, already-windowed slim event table
+#'
+#' The worker both [grouped_events_to_dyad_period()] and
+#' [assemble_stan_data()] call (0.9.1, audit 0f), so that between the two
+#' exported functions `data` is validated and its date column parsed
+#' exactly once per call. Takes the output of [.slim_event_table()]
+#' (optionally already filtered to a `years` window) and does everything
+#' [grouped_events_to_dyad_period()] used to do after that point: side
+#' A/B assignment, the dyad key, class ordering, aggregation, and the
+#' `w_send` attribute.
+#'
+#' @param slim Output of [.slim_event_table()], optionally window-filtered.
+#' @param resolution Already-matched `"monthly"`/`"yearly"`.
+#' @param directed,reference_category See [grouped_events_to_dyad_period()].
+#' @return See [grouped_events_to_dyad_period()]'s `@return`.
+#' @keywords internal
+.dyad_period_from_slim <- function(slim, resolution, directed, reference_category) {
   if (directed) {
     slim$actor_a <- slim$.actor1
     slim$actor_b <- slim$.actor2
