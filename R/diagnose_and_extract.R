@@ -55,13 +55,16 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   passed through to the `alpha`/`mu_intercept` outputs exactly as in
 #'   [extract_alpha()]. Defaults to `stan_data`'s `"event_classes"`
-#'   attribute, if present.
-#' @param scratch_dir Deprecated and ignored since 0.4.1; see
-#'   [diagnose_convergence()].
+#'   attribute, if present. When supplied, `alpha`/`mu_intercept` also get
+#'   a `class_label` column (0.10.1), from `event_class_labels(stan_data)`
+#'   (see [event_class_labels()]) -- unlike [extract_alpha()]/[extract_mu_intercept()], there is no
+#'   `class_labels` argument here to override that default.
 #' @return A list with elements `diagnostics` (a `bilatr_diagnostics`
 #'   object, as from [diagnose_convergence()]), `theta`, `alpha`, and
 #'   `mu_intercept` (tibbles, in the same shape [extract_theta()]/
-#'   [extract_alpha()]/[extract_mu_intercept()] return), plus
+#'   [extract_alpha()]/[extract_mu_intercept()] return, plus a
+#'   `class_label` column on `alpha`/`mu_intercept` when `event_classes`
+#'   is supplied), plus
 #'   `theta_filtered`/`theta_filtered_sd` (0.5.0+; empty tibbles unless
 #'   `compute_theta_filtered = 1` was set when the fit was assembled) --
 #'   same `dyad_id`/`time_index`/`dyad_ids`-joined shape as `theta`, with
@@ -82,9 +85,7 @@ diagnose_and_extract_bilatr <- function(
   stan_model = .BILATR_DEFAULT_MODEL,
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
   event_classes = attr(stan_data, "event_classes"),
-  max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = parallelly::availableCores(), scratch_dir = NULL,
-  read_seconds = NULL
+  max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
   stan_model <- .canonical_stan_model(stan_model)
   if (!is.character(csv_files)) {
@@ -99,13 +100,6 @@ diagnose_and_extract_bilatr <- function(
     )
   }
   max_memory_mb_missing <- missing(max_memory_mb)
-  if (!is.null(scratch_dir)) {
-    warning(
-      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
-      "copy is made any more.",
-      call. = FALSE
-    )
-  }
 
   tiers <- .validate_tiers(tiers)
   if (any(c(2L, 3L) %in% tiers) && missing(n_dt)) {
@@ -137,8 +131,8 @@ diagnose_and_extract_bilatr <- function(
   country_codes <- attr(stan_data, "country_codes")
 
   summ <- .read_diagnostics_summary_from_csv(
-    csv_files, tiers, max_memory_mb, chunk_size, parallel, n_workers,
-    max_memory_mb_missing, read_seconds = read_seconds
+    csv_files, tiers, max_memory_mb, chunk_size, n_cores,
+    max_memory_mb_missing
   )
 
   diagnostics <- .assemble_bilatr_diagnostics(
@@ -192,8 +186,17 @@ diagnose_and_extract_bilatr <- function(
   mu_intercept <- action_extract("mu_intercept[")
 
   if (!is.null(event_classes)) {
-    alpha <- dplyr::mutate(alpha, event_class = event_classes[action_index])
-    mu_intercept <- dplyr::mutate(mu_intercept, event_class = event_classes[action_index])
+    labels <- .resolve_class_labels(NULL, event_classes, stan_data = stan_data)
+    alpha <- dplyr::mutate(
+      alpha,
+      event_class = event_classes[action_index],
+      class_label = labels[action_index]
+    )
+    mu_intercept <- dplyr::mutate(
+      mu_intercept,
+      event_class = event_classes[action_index],
+      class_label = labels[action_index]
+    )
   }
 
   list(

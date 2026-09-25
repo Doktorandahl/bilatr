@@ -55,11 +55,13 @@
 #' A handful of other classification schemes previously shipped in this
 #' table (`EventRootCode2`, `EventRootCode3`, `EventRootCode4`,
 #' `BilatrClass`, `BilatrClass2`, each with their `*Name`/`*RootCodes`
-#' columns) have been retired from it. Their `assign_*()`/`*_name()`
-#' functions are still available internally in `R/cameo_recode.R` for
-#' backward compatibility (see e.g. [assign_eventrootcode2()],
-#' [assign_bilatr_class()]), but are no longer attached by
-#' [recode_cameo()].
+#' columns) have been retired from it, and their `assign_*()`/`*_name()`
+#' functions removed entirely (0.10.1; they are no longer attached by
+#' [recode_cameo()], and reading pre-0.10.1 output that used them needs
+#' an older bilatr install). [event_class_labels()] is the current,
+#' data-driven way to get a class's human-readable label from a fitted
+#' model's `stan_data`, for any scheme that still has a `*Name` column
+#' here (`QuadClass`, `PentaClass`, `ModifiedRootCode`).
 #' @source Built by `data-raw/build_cameo_lookup.R` in the source
 #'   repository. CAMEO event codes and labels from Schrodt (2012), *CAMEO
 #'   Conflict and Mediation Event Observations Event and Actor Codebook*,

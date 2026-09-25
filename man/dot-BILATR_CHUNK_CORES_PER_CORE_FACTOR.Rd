@@ -33,7 +33,7 @@ precise physical-memory figure -- an acceptable direction of error
 for a job-sizing floor, given the alternative is under-counting and
 risking exactly the OOM this package's memory model exists to
 prevent. \strong{Only measured up to \code{n_cores = 8}}: a caller sizing a job
-with \code{n_workers} well beyond that (the audit's own per-chain example
+with \code{n_cores} well beyond that (the audit's own per-chain example
 used 24) is extrapolating this linear term 3x past its measured
 range -- validate with \code{dev/bench_memory.R} at your actual \code{n_cores}
 before trusting the estimate for a real SLURM allocation that large.

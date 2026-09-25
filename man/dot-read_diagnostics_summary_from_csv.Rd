@@ -9,16 +9,14 @@
   tiers,
   max_memory_mb,
   chunk_size,
-  parallel,
-  n_workers,
-  max_memory_mb_missing,
-  read_seconds = NULL
+  n_cores,
+  max_memory_mb_missing
 )
 }
 \arguments{
 \item{csv_files}{Character vector of CmdStan CSV file paths.}
 
-\item{tiers, max_memory_mb, chunk_size, parallel, n_workers}{See
+\item{tiers, max_memory_mb, chunk_size, n_cores}{See
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
 \item{max_memory_mb_missing}{Whether the caller left \code{max_memory_mb}

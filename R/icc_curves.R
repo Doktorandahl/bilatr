@@ -126,9 +126,10 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   in `stan_data`'s action-dimension order. Defaults to `stan_data`'s
 #'   `"event_classes"` attribute if `stan_data` is supplied.
-#' @param class_label_fn Optional function mapping an integer
-#'   `action_index` vector to pretty labels, matching
-#'   [diagnose_category_merges()]'s argument of the same name.
+#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
+#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]) when `stan_data`
+#'   is supplied, else the raw event classes.
 #' @param n_grid Number of theta grid points. Default `201`.
 #' @param probs The lower/upper posterior interval bounds (a third,
 #'   e.g. the median, is always included). Default `c(0.05, 0.95)`.
@@ -167,7 +168,7 @@ icc_curves <- function(
   quantile_probs = c(0.01, 0.99),
   categories = NULL,
   event_classes = NULL,
-  class_label_fn = NULL,
+  class_labels = NULL,
   n_grid = 201,
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
@@ -229,7 +230,7 @@ icc_curves <- function(
     event_classes <- attr(stan_data, "event_classes")
   }
   event_classes_used <- event_classes %||% as.character(seq_len(A))
-  labels <- if (!is.null(class_label_fn)) as.character(class_label_fn(seq_len(A))) else event_classes_used
+  labels <- .resolve_class_labels(class_labels, event_classes_used, stan_data = stan_data)
 
   if (is.null(categories)) {
     cat_idx <- seq_len(A)

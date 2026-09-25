@@ -12,7 +12,6 @@ assemble_stan_data(
   directed = TRUE,
   reference_category = NULL,
   min_n_events = 1,
-  weighted = FALSE,
   chunk_size = 100,
   rho_prior_a = 8,
   rho_prior_b = 2,
@@ -61,18 +60,6 @@ supplied but absent from the (in-window) data, errors (0.9.0; see
 \code{\link[=validate_reference_class]{validate_reference_class()}}).}
 
 \item{min_n_events}{Minimum total events for a dyad to be retained.}
-
-\item{weighted}{Defunct. The \code{dyad_weight}/\code{period_weight}/
-\code{action_weight} likelihood-weighting scheme was removed in 0.4.6 (see
-NEWS.md) -- never used in production, and \code{action_weight} in
-particular made the Dirichlet-multinomial concentration depend on
-\code{theta}, complicating the hand-differentiated forward filter built on
-top of this likelihood. Kept only as a formal so old call sites that
-actually requested weighting fail loudly instead of silently fitting
-an unweighted model: must be \code{FALSE} or \code{"none"} (both accepted as
-the only meaningful values now, matching this project's own SLURM
-runscripts, which map their own \code{weighted = "none"} CLI argument to
-\code{FALSE} before calling this function); any other value errors.}
 
 \item{chunk_size}{\code{reduce_sum} grainsize used to chunk the likelihood
 across dyads. 16 cores with \code{chunk_size = 600} was the

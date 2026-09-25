@@ -45,17 +45,6 @@
 #'   supplied but absent from the (in-window) data, errors (0.9.0; see
 #'   [validate_reference_class()]).
 #' @param min_n_events Minimum total events for a dyad to be retained.
-#' @param weighted Defunct. The `dyad_weight`/`period_weight`/
-#'   `action_weight` likelihood-weighting scheme was removed in 0.4.6 (see
-#'   NEWS.md) -- never used in production, and `action_weight` in
-#'   particular made the Dirichlet-multinomial concentration depend on
-#'   `theta`, complicating the hand-differentiated forward filter built on
-#'   top of this likelihood. Kept only as a formal so old call sites that
-#'   actually requested weighting fail loudly instead of silently fitting
-#'   an unweighted model: must be `FALSE` or `"none"` (both accepted as
-#'   the only meaningful values now, matching this project's own SLURM
-#'   runscripts, which map their own `weighted = "none"` CLI argument to
-#'   `FALSE` before calling this function); any other value errors.
 #' @param chunk_size `reduce_sum` grainsize used to chunk the likelihood
 #'   across dyads. 16 cores with `chunk_size = 600` was the
 #'   Pareto-optimal setting found in this project's own benchmarking for
@@ -153,7 +142,6 @@ assemble_stan_data <- function(
   directed = TRUE,
   reference_category = NULL,
   min_n_events = 1,
-  weighted = FALSE,
   chunk_size = 100,
   rho_prior_a = 8,
   rho_prior_b = 2,
@@ -166,14 +154,6 @@ assemble_stan_data <- function(
   date = "SQLDATE"
 ) {
   resolution <- match.arg(resolution)
-
-  if (!isFALSE(weighted) && !identical(weighted, "none")) {
-    stop(
-      "likelihood weighting was removed in 0.4.6; see NEWS. ",
-      "`weighted` must be `FALSE` or \"none\".",
-      call. = FALSE
-    )
-  }
 
   validate_bilatr_events(data, grouping_var, actor1, actor2, date)
   # Validated and slimmed exactly once per call (0.9.1, audit 0f): the

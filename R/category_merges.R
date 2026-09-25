@@ -224,14 +224,10 @@
 #' @param event_classes Character vector of event-class labels, length
 #'   `A`, in the same order as `stan_data`'s `"event_classes"` attribute.
 #'   Defaults to that attribute if present, else `"1", "2", ...`.
-#' @param class_label_fn Optional function mapping an integer
-#'   `action_index` vector to pretty labels (e.g. `bilatr:::
-#'   eventrootcode3_name`), matching the scheme `event_classes` was built
-#'   under. There is no scheme registry in this package (each CAMEO
-#'   regrouping has its own standalone namer in `R/cameo_recode.R`), so
-#'   the caller supplies the right one for their scheme, exactly as the
-#'   `runscripts/` do. Defaults to `NULL` (raw `event_classes` used as
-#'   the label too).
+#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
+#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]; falling back
+#'   to the raw `event_classes` if that has nothing to offer).
 #' @param shares Reference category shares: `NULL` (default) uses the
 #'   empirical shares from `stan_data$Y`, summed over dyads/periods and
 #'   normalised (a single, FIXED reference point); `"theta0"` evaluates at
@@ -266,7 +262,7 @@ diagnose_category_merges <- function(
   fit,
   stan_data,
   event_classes = NULL,
-  class_label_fn = NULL,
+  class_labels = NULL,
   shares = NULL,
   phi = NULL,
   probs = c(0.05, 0.5, 0.95)
@@ -287,11 +283,7 @@ diagnose_category_merges <- function(
   if (is.null(event_classes)) {
     event_classes <- as.character(seq_len(A))
   }
-  labels <- if (!is.null(class_label_fn)) {
-    as.character(class_label_fn(seq_len(A)))
-  } else {
-    event_classes
-  }
+  labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
 
   # shares
   if (is.null(shares)) {

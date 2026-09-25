@@ -422,27 +422,6 @@ test_that(".bilatr_worker_tradeoff()'s wall time falls with more chunks-per-seco
   expect_true(all(out$core_seconds[out$n_workers != 1] >= out$core_seconds[out$n_workers == 1]))
 })
 
-test_that(".resolve_chunk_size_and_report() names a better n_workers level only when read_seconds is supplied", {
-  prepared <- list(num_post_warmup_draws = 1000, n_chains = 1, file_mb = 14000)
-
-  expect_no_message(
-    .resolve_chunk_size_and_report(
-      n_vars = 1900000, prepared = prepared, max_memory_mb = 24 * 8192,
-      chunk_size = NULL, n_cores = 24, max_memory_mb_missing = FALSE
-    ),
-    message = "estimated to give BOTH lower"
-  )
-
-  expect_message(
-    .resolve_chunk_size_and_report(
-      n_vars = 1900000, prepared = prepared, max_memory_mb = 24 * 8192,
-      chunk_size = NULL, n_cores = 24, max_memory_mb_missing = FALSE,
-      read_seconds = 300
-    ),
-    "estimated to give BOTH lower"
-  )
-})
-
 test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation", {
   # ARRAY(3) + PER_CHAIN/n_chains(2/n_chains), no cores term at
   # n_cores = 1. 0.10.0 dropped the FLIP(1) term the pre-0.10.0 formula
@@ -537,10 +516,10 @@ test_that("diagnose_convergence() from CSV files: parallel and sequential chunk 
   fx <- make_csv_diagnostics_fixture()
 
   diag_seq <- suppressWarnings(suppressMessages(diagnose_convergence(
-    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = FALSE
+    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, n_cores = 1
   )))
   diag_par <- suppressWarnings(suppressMessages(diagnose_convergence(
-    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, parallel = TRUE, n_workers = 2
+    fx$csv_files, n_dt = fx$n_dt, tiers = 1:3, chunk_size = 3, n_cores = 2
   )))
 
   expect_equal(dplyr::arrange(diag_seq$tier3, dyad_id), dplyr::arrange(diag_par$tier3, dyad_id))

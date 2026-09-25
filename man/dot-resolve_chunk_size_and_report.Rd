@@ -10,8 +10,7 @@
   max_memory_mb,
   chunk_size,
   n_cores,
-  max_memory_mb_missing,
-  read_seconds = NULL
+  max_memory_mb_missing
 )
 }
 \arguments{
@@ -24,13 +23,10 @@ calculation itself).}
 
 \item{max_memory_mb, chunk_size}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
-\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{n_cores}.}
 
 \item{max_memory_mb_missing}{Whether the caller left \code{max_memory_mb}
 at its default (via \code{missing()} in the calling function).}
-
-\item{read_seconds}{Optional; see \code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}. \code{NULL}
-(the default) skips the trade-off message entirely.}
 }
 \value{
 The resolved integer chunk size.
@@ -43,16 +39,14 @@ and each chunk's cost is roughly a full parse of the largest chain
 file regardless of how many variables are kept (see
 \link{.fast_read_post_warmup_draws}), so fewer, larger chunks are cheaper
 in wall-time, and the CPU-bound summary step's wall-time (not memory)
-is what \code{n_workers}/\code{parallel} trade against. A second \code{message()},
+is what \code{n_cores} trades against. A second \code{message()},
 always emitted, reports the resolved chunk count/size and the
 estimated peak broken into its file-sized and per-chunk terms
 separately (see \code{\link[=.compute_chunk_size]{.compute_chunk_size()}}), so a caller can see the
-actual budget being spent before a long run commits to it. A third
-\code{message()}, only when \code{read_seconds} is supplied, names a
-\code{n_workers} level (via \code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}) that would give
-both lower estimated wall time AND lower estimated core-seconds than
-the chosen \code{n_cores}, if one exists in a small grid around it --
-silently skipped without \code{read_seconds}, since wall-time can't be
-estimated at all without it (see that helper's docs).
+actual budget being spent before a long run commits to it. For the
+wall-time/core-hour trade-off across candidate \code{n_cores} values, see
+\code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}, which takes a wall-time reading from your
+own job's logs (there is no way to estimate it without one, so this
+function does not attempt to).
 }
 \keyword{internal}

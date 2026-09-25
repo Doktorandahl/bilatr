@@ -15,7 +15,7 @@ test_that("extract_theta() from CSV files matches the in-memory path exactly, se
   )
 
   theta_csv_par <- suppressWarnings(suppressMessages(extract_theta(
-    fx$csv_files, fx$stan_data, chunk_size = 3, parallel = TRUE, n_workers = 2
+    fx$csv_files, fx$stan_data, chunk_size = 3, n_cores = 2
   )))
   expect_equal(
     dplyr::arrange(theta_mem, dyad_id, time_index),

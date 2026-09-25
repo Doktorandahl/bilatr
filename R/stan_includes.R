@@ -12,7 +12,7 @@
 # (fixed upstream in PR #1226, merged 2026-07-25, not yet in any release).
 # This project's own devtools::load_all() working tree lives under a
 # space-containing path, so this is not a CI-only concern: it would break
-# real fit_*_dev()/fit_panel()/fit_dyad_ts() calls made from source.
+# real fit_panel()/fit_dyad_ts() calls made from source.
 #
 # The shared likelihood's single source of truth is therefore
 # inst/stan/include/partial_log_lik.stanfunctions, a plain text file that

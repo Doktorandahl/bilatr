@@ -37,7 +37,7 @@ test_that("diagnose_and_extract_bilatr() matches calling the four functions sepa
 
   # parallel path gives the same result
   fused_par <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
-    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, chunk_size = 3, parallel = TRUE, n_workers = 2
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, chunk_size = 3, n_cores = 2
   )))
   expect_equal(
     dplyr::arrange(fused_par$theta, dyad_id, time_index),

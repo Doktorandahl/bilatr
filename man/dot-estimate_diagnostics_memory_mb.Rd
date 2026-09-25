@@ -18,7 +18,7 @@
 
 \item{chunk_size}{Variables per chunk.}
 
-\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{n_cores}.}
 
 \item{file_mb}{From \link{.prepare_fast_csv_read}.}
 }

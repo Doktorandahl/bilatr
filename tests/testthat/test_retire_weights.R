@@ -132,18 +132,3 @@ test_that("the 0.4.6 stable program is bit-identical to the pre-0.4.6 one at uni
   expect_true(bit_identical_draws)
   expect_true(bit_identical_diagnostics)
 })
-
-test_that("weighted = 'dyad-period'/'all'/TRUE all error with the 0.4.6 removal message", {
-  events <- make_fake_events()
-  events <- recode_cameo(events, code_col = "EventCode")
-  for (bad in list("dyad-period", "all", TRUE)) {
-    expect_error(
-      assemble_stan_data(
-        events,
-        years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
-        weighted = bad
-      ),
-      "removed in 0.4.6"
-    )
-  }
-})

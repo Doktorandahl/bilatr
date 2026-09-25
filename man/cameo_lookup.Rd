@@ -54,11 +54,13 @@ is blank.}
 A handful of other classification schemes previously shipped in this
 table (\code{EventRootCode2}, \code{EventRootCode3}, \code{EventRootCode4},
 \code{BilatrClass}, \code{BilatrClass2}, each with their \verb{*Name}/\verb{*RootCodes}
-columns) have been retired from it. Their \verb{assign_*()}/\verb{*_name()}
-functions are still available internally in \code{R/cameo_recode.R} for
-backward compatibility (see e.g. \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}},
-\code{\link[=assign_bilatr_class]{assign_bilatr_class()}}), but are no longer attached by
-\code{\link[=recode_cameo]{recode_cameo()}}.
+columns) have been retired from it, and their \verb{assign_*()}/\verb{*_name()}
+functions removed entirely (0.10.1; they are no longer attached by
+\code{\link[=recode_cameo]{recode_cameo()}}, and reading pre-0.10.1 output that used them needs
+an older bilatr install). \code{\link[=event_class_labels]{event_class_labels()}} is the current,
+data-driven way to get a class's human-readable label from a fitted
+model's \code{stan_data}, for any scheme that still has a \verb{*Name} column
+here (\code{QuadClass}, \code{PentaClass}, \code{ModifiedRootCode}).
 }
 \source{
 Built by \code{data-raw/build_cameo_lookup.R} in the source

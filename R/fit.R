@@ -203,11 +203,12 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
   }
 }
 
-#' Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-#' counterparts in R/fit_dev.R
+#' Shared sampling logic behind fit_dyad_ts()/fit_panel()
 #'
 #' Canonicalises `stan_model` once, here, so `.compile_stan_model()` and
-#' [bilatr_init_fn()] agree on the same resolved name.
+#' [bilatr_init_fn()] agree on the same resolved name, and emits the
+#' once-per-session experimental-model message (see
+#' [.bilatr_warn_if_experimental()]).
 #' @keywords internal
 fit_bilatr <- function(
   stan_data,
@@ -223,6 +224,7 @@ fit_bilatr <- function(
   ...
 ) {
   stan_model <- .canonical_stan_model(stan_model)
+  .bilatr_warn_if_experimental(stan_model)
   mod <- .compile_stan_model(stan_model, opt_level)
   mod$sample(
     data = stan_data,
@@ -268,6 +270,13 @@ fit_bilatr <- function(
 #'   [compile_bilatr_model()].
 #' @param output_dir Directory to write CmdStan's raw output CSVs to, or
 #'   `NULL` for a temporary directory.
+#' @param stan_model (0.10.1) Name registered in `.bilatr_stan_models`
+#'   (see [.canonical_stan_model()]); an unregistered name errors,
+#'   including the four names retired in 0.10.0. Defaults to
+#'   `"stable"` (`.BILATR_DEFAULT_MODEL`). Fitting a model whose registry
+#'   `status` is `"experimental"` (currently `ou`/`stable_gamma`) emits a
+#'   `message()` the first time it is fit in a session (see
+#'   [.bilatr_warn_if_experimental()]).
 #' @param ... Additional arguments passed to `CmdStanModel$sample()`.
 #' @return A `CmdStanMCMC` fit object.
 #' @examples
@@ -288,8 +297,9 @@ fit_dyad_ts <- function(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
-  opt_level = 2,
+  opt_level = 3,
   output_dir = NULL,
+  stan_model = .BILATR_DEFAULT_MODEL,
   ...
 ) {
   if (stan_data$D != 1) {
@@ -301,6 +311,7 @@ fit_dyad_ts <- function(
       call. = FALSE
     )
   }
+  stan_model <- .canonical_stan_model(stan_model)
   fit_bilatr(
     stan_data,
     chains,
@@ -311,7 +322,7 @@ fit_dyad_ts <- function(
     seed,
     opt_level,
     output_dir,
-    stan_model = .BILATR_DEFAULT_MODEL,
+    stan_model = stan_model,
     ...
   )
 }
@@ -363,6 +374,7 @@ fit_panel <- function(
   seed = NULL,
   opt_level = 3,
   output_dir = NULL,
+  stan_model = .BILATR_DEFAULT_MODEL,
   ...
 ) {
   if (stan_data$D < 2) {
@@ -374,6 +386,7 @@ fit_panel <- function(
       call. = FALSE
     )
   }
+  stan_model <- .canonical_stan_model(stan_model)
   fit_bilatr(
     stan_data,
     chains,
@@ -384,7 +397,7 @@ fit_panel <- function(
     seed,
     opt_level,
     output_dir,
-    stan_model = .BILATR_DEFAULT_MODEL,
+    stan_model = stan_model,
     ...
   )
 }

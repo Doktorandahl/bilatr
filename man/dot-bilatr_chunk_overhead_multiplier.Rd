@@ -10,7 +10,7 @@
 \arguments{
 \item{n_chains}{From \link{.prepare_fast_csv_read}.}
 
-\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{n_cores}.}
 }
 \value{
 The multiplier \code{k}, in units of \code{raw_mb}.

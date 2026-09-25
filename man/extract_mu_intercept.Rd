@@ -5,12 +5,7 @@
 \title{Extract global action-type intercepts (mu_intercept) with action-class
 labels}
 \usage{
-extract_mu_intercept(
-  fit,
-  event_classes = NULL,
-  probs = c(0.05, 0.5, 0.95),
-  scratch_dir = NULL
-)
+extract_mu_intercept(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
@@ -25,9 +20,6 @@ index.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
-
-\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}

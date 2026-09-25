@@ -16,10 +16,7 @@ diagnose_and_extract_bilatr(
   event_classes = attr(stan_data, "event_classes"),
   max_memory_mb = 8192,
   chunk_size = NULL,
-  parallel = FALSE,
-  n_workers = parallelly::availableCores(),
-  scratch_dir = NULL,
-  read_seconds = NULL
+  n_cores = 1L
 )
 }
 \arguments{
@@ -59,7 +56,10 @@ computed" from "computed, nothing to report".}
 \item{event_classes}{Optional character vector of event-class labels,
 passed through to the \code{alpha}/\code{mu_intercept} outputs exactly as in
 \code{\link[=extract_alpha]{extract_alpha()}}. Defaults to \code{stan_data}'s \code{"event_classes"}
-attribute, if present.}
+attribute, if present. When supplied, \code{alpha}/\code{mu_intercept} also get
+a \code{class_label} column (0.10.1), from \code{event_class_labels(stan_data)}
+(see \code{\link[=event_class_labels]{event_class_labels()}}) -- unlike \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}}, there is no
+\code{class_labels} argument here to override that default.}
 
 \item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory per
@@ -78,12 +78,12 @@ kept -- \code{max_memory_mb} must be large enough to cover that file
 size, plus a fixed R/package-loading floor, at minimum (this
 \code{stop()}s with a clear message naming the shortfall if it isn't).
 Beyond that, fewer/larger chunks are cheaper in read wall-time, but
--- see \code{parallel} below -- a larger \code{n_workers} shrinks the
+-- see \code{n_cores} below -- a larger \code{n_cores} shrinks the
 largest chunk size the SAME \code{max_memory_mb} budget can afford, so
 the two are not independent: prefer the LARGEST \code{max_memory_mb}
 your job's allocation can afford, and check the resolved chunk
 count in the pre-flight \code{message()} before committing to a large
-\code{n_workers} on a tight budget.}
+\code{n_cores} on a tight budget.}
 
 \item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Explicit override: number of Tier 3 variables read per
@@ -92,61 +92,47 @@ instead; set this directly only if you want to bypass that
 calculation (e.g. you've measured actual memory use and want to
 tune it by hand).}
 
-\item{parallel}{Only used when \code{fit} is CSV file paths and \code{tiers}
+\item{n_cores}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Chunks are always read strictly sequentially regardless
 of this argument -- reading is disk-bound and single-threaded no
 matter how many cores are available (see
 \link{.fast_read_post_warmup_draws}), so there is nothing to gain, and
-\code{n_workers} chunks' worth of memory to lose, by reading more than one
-chunk at a time. \code{parallel} instead controls whether the CPU-bound
+\code{n_cores} chunks' worth of memory to lose, by reading more than one
+chunk at a time. \code{n_cores} instead controls whether the CPU-bound
 part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
-\code{n_workers} cores (via \code{posterior::summarise_draws()}'s \code{.cores}
-argument, which forks \code{n_workers} worker processes) or just one.
+that many cores (via \code{posterior::summarise_draws()}'s \code{.cores}
+argument, which forks \code{n_cores} worker processes) or just one.
 Measured (\code{dev/bench_memory.R}, see \link{.BILATR_CHUNK_CORES_PER_CORE_FACTOR}):
-this genuinely costs memory roughly proportional to \code{n_workers}, not
+this genuinely costs memory roughly proportional to \code{n_cores}, not
 a fixed amount regardless of it, and that cost comes out of the SAME
-\code{max_memory_mb} budget the read uses -- so a larger \code{n_workers}
+\code{max_memory_mb} budget the read uses -- so a larger \code{n_cores}
 indirectly means MORE, not fewer, passes over each chain file at a
 fixed \code{max_memory_mb}, trading read wall-time for summary wall-time
 rather than being free on top of it. Worth checking the resolved
 chunk count (in the pre-flight \code{message()}) at your intended
-\code{n_workers} before committing a long run to it -- a very large
-\code{n_workers} on a large \code{n_vars} sweep can end up costing MORE total
+\code{n_cores} before committing a long run to it -- a very large
+\code{n_cores} on a large \code{n_vars} sweep can end up costing MORE total
 wall-time than a smaller one, if it forces enough extra chunks. More
-workers is NOT monotonically better on either axis: pass
-\code{read_seconds} (below) to see the actual trade-off
-(\code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}) for your job rather than guessing at
-it from this description alone.}
-
-\item{n_workers}{Only used when \code{parallel = TRUE}. Defaults to
-\code{parallelly::availableCores()}, which -- unlike
-\code{parallel::detectCores()} -- respects a SLURM allocation's
+cores is NOT monotonically better on either axis --
+\code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}} can estimate the actual trade-off for
+your job, given a wall-time reading from your own logs, rather than
+guessing at it from this description alone. Defaults to \code{1L}
+(today's default behaviour). Inside a SLURM allocation,
+\code{parallelly::availableCores()} is the right way to fill this in --
+unlike \code{parallel::detectCores()}, it respects
 \code{SLURM_CPUS_PER_TASK} (among other cluster/container schedulers)
-rather than reporting the whole node's core count. See \code{parallel}
-above: this is a genuine memory/wall-time trade-off now, not a
-free choice, so consider an explicit, moderate value (rather than
-the default, which can be large on a big allocation) for a
-memory-constrained job.}
-
-\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
-
-\item{read_seconds}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Optional wall-time (seconds) for ONE chunk's read,
-from your own job's logs -- see \code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}}, which
-this is passed straight through to. \code{NULL} (the default) skips the
-trade-off entirely: there is no way to estimate wall time at all
-without it, so nothing is reported rather than guessed. When
-supplied, an extra \code{message()} names a \code{n_workers} level that would
-give both lower estimated wall time and lower estimated
-core-seconds than your current \code{n_workers}, if the small grid
-checked (\code{n_workers} itself, \code{1}, half, and double) finds one.}
+rather than reporting the whole node's core count -- but this is a
+genuine memory/wall-time trade-off, not a free choice, so consider
+an explicit, moderate value for a memory-constrained job rather
+than the largest available.}
 }
 \value{
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}
 object, as from \code{\link[=diagnose_convergence]{diagnose_convergence()}}), \code{theta}, \code{alpha}, and
 \code{mu_intercept} (tibbles, in the same shape \code{\link[=extract_theta]{extract_theta()}}/
-\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} return), plus
+\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} return, plus a
+\code{class_label} column on \code{alpha}/\code{mu_intercept} when \code{event_classes}
+is supplied), plus
 \code{theta_filtered}/\code{theta_filtered_sd} (0.5.0+; empty tibbles unless
 \code{compute_theta_filtered = 1} was set when the fit was assembled) --
 same \code{dyad_id}/\code{time_index}/\code{dyad_ids}-joined shape as \code{theta}, with

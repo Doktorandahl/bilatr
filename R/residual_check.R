@@ -404,9 +404,9 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   in `stan_data`'s action-dimension order. Defaults to `stan_data`'s
 #'   `"event_classes"` attribute.
-#' @param class_label_fn Optional function mapping an integer
-#'   `action_index` vector to pretty labels, matching
-#'   [diagnose_category_merges()]'s argument of the same name.
+#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
+#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]).
 #' @return A `bilatr_residual_check` object: `dyads` (one row per sampled
 #'   dyad: `dyad_id`, `dyad`, `dyad2`, `n_d`, `n_obs_t`, `along_mean`,
 #'   `along_lower`/`along_upper`, `perp_norm2_mean`, `ppp_dyad`,
@@ -437,7 +437,7 @@ check_compositional_residuals <- function(
   seed = 1,
   probs = c(0.05, 0.95),
   event_classes = attr(stan_data, "event_classes"),
-  class_label_fn = NULL
+  class_labels = NULL
 ) {
   stan_model <- .canonical_stan_model(stan_model)
 
@@ -678,7 +678,7 @@ check_compositional_residuals <- function(
   eps_sensitivity_tbl <- tibble::tibble(eps = eps_all, pooled_ppp = pooled_ppp, implied_beta_rms = implied_beta_rms)
 
   if (is.null(event_classes)) event_classes <- as.character(seq_len(A))
-  labels <- if (!is.null(class_label_fn)) as.character(class_label_fn(seq_len(A))) else event_classes
+  labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
 
   cat_obs_mean <- rowMeans(cat_contrib_obs)
   cat_rep_mean <- rowMeans(cat_contrib_rep)

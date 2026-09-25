@@ -14,16 +14,16 @@ assign_modified_root_code(code)
 Integer vector of \code{ModifiedRootCode} values (1-18).
 }
 \description{
-\code{ModifiedRootCode} is a variant of \code{\link[=assign_eventrootcode3]{assign_eventrootcode3()}} that merges
-its "Investigate" (root 09) and "Demand" (root 10) classes back into a
-single "Investigate or demand" class. Every other class, including the
-\code{016}/\code{018}/\code{019} relocations, is unchanged from \code{EventRootCode3}.
+A regrouping of the 20 CAMEO root codes that relocates \code{016} into the
+Reject class and \code{018}/\code{019} into the diplomatic-cooperation class,
+splits root \code{04} ("Consult") by kind of consultation, splits root \code{13}
+("Threaten") off from force posture only where noted, and merges
+Investigate (root \code{09}) and Demand (root \code{10}) into a single
+"Investigate or demand" class.
 }
 \details{
-Classes are numbered 1-18 in ascending root-code order (so
-\code{EventRootCode3} classes 1-11 keep their values, with 11 now covering
-both roots 09 and 10, and \code{EventRootCode3} classes 13-19 shift down by
-one to 12-18); see \code{\link[=modified_root_code_name]{modified_root_code_name()}} for labels. This scheme
-was previously named \code{ERC16NZ}.
+Classes are numbered 1-18 in ascending root-code order; see
+\code{\link[=modified_root_code_name]{modified_root_code_name()}} for labels. This scheme was previously
+named \code{ERC16NZ}.
 }
 \keyword{internal}

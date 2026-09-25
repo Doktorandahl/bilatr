@@ -36,10 +36,12 @@ CAMEO root codes (formerly named \code{ERC16NZ}).
 A handful of other classification schemes
 (\code{EventRootCode2}/\code{EventRootCode3}/\code{EventRootCode4}, \code{BilatrClass}/
 \code{BilatrClass2}) previously shipped in \link{cameo_lookup} have been retired
-from it; their \verb{assign_*()}/\verb{*_name()} functions are still available
-internally (see \code{\link[=assign_eventrootcode2]{assign_eventrootcode2()}}, \code{\link[=assign_bilatr_class]{assign_bilatr_class()}},
-etc.) for backward compatibility, but are no longer attached by this
-function.
+from it, and their \verb{assign_*()}/\verb{*_name()} functions removed entirely
+(0.10.1); they are no longer attached by this function. See
+\code{\link[=event_class_labels]{event_class_labels()}} for the current, data-driven way to label a
+class from a fitted model's \code{stan_data} (covers \code{QuadClass},
+\code{PentaClass}, and \code{ModifiedRootCode}, the schemes still labeled in
+\link{cameo_lookup}).
 
 Any of these columns that already exist in \code{data} are left as they are
 (not overwritten, no \code{.x}/\code{.y} suffixing), with a warning naming them.

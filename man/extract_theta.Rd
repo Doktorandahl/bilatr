@@ -10,10 +10,7 @@ extract_theta(
   probs = c(0.05, 0.5, 0.95),
   max_memory_mb = 8192,
   chunk_size = NULL,
-  parallel = FALSE,
-  n_workers = parallelly::availableCores(),
-  scratch_dir = NULL,
-  read_seconds = NULL
+  n_cores = 1L
 )
 }
 \arguments{
@@ -28,17 +25,11 @@ attribute).}
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
-\item{max_memory_mb, chunk_size, parallel, n_workers}{Only used when
+\item{max_memory_mb, chunk_size, n_cores}{Only used when
 \code{fit} is CSV file paths; identical in meaning to
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s arguments of the same name (including
 the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 \code{theta} alone rather than all of Tier 3.}
-
-\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
-
-\item{read_seconds}{Only used when \code{fit} is CSV file paths; identical
-in meaning to \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s argument of the same name.}
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},

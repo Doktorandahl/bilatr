@@ -59,3 +59,47 @@ test_that("every registered model's file actually exists under inst/stan/", {
     expect_true(file.exists(path), info = paste("missing Stan file for model:", name))
   }
 })
+
+# The following two blocks moved from tests/testthat/test_fit_dev.R
+# (0.10.1: fit_dyad_ts()/fit_panel() gained stan_model directly, so the
+# dispatch/validation these exercised is reached through the public
+# functions now, not the removed fit_dyad_ts_dev()/fit_panel_dev()).
+
+test_that("fit_dyad_ts()/fit_panel() reject an unknown stan_model before touching Stan", {
+  fake_data_d1 <- list(D = 1, T = 3, A = 4)
+  fake_data_d3 <- list(D = 3, T = 3, A = 4)
+  expect_error(
+    fit_dyad_ts(fake_data_d1, stan_model = "not_a_real_model"),
+    "Unknown stan_model"
+  )
+  expect_error(
+    fit_panel(fake_data_d3, stan_model = "not_a_real_model"),
+    "Unknown stan_model"
+  )
+})
+
+test_that("fit_dyad_ts()/fit_panel() still validate D == 1 / D >= 2 for a registered stan_model", {
+  fake_data_d3 <- list(D = 3, T = 3, A = 4)
+  fake_data_d1 <- list(D = 1, T = 3, A = 4)
+  expect_error(
+    fit_dyad_ts(fake_data_d3, stan_model = "stable"),
+    "expects a single-dyad"
+  )
+  expect_error(
+    fit_panel(fake_data_d1, stan_model = "stable"),
+    "expects multiple dyads"
+  )
+})
+
+test_that(".bilatr_warn_if_experimental() messages once per stan_model name per session, and never for 'stable'", {
+  .reset_bilatr_experimental_messaged()
+
+  expect_message(.bilatr_warn_if_experimental("ou"), "experimental")
+  expect_no_message(.bilatr_warn_if_experimental("ou"))
+  expect_message(.bilatr_warn_if_experimental("stable_gamma"), "experimental")
+  expect_no_message(.bilatr_warn_if_experimental("stable_gamma"))
+  expect_no_message(.bilatr_warn_if_experimental("stable"))
+
+  .reset_bilatr_experimental_messaged()
+  expect_message(.bilatr_warn_if_experimental("ou"), "experimental")
+})

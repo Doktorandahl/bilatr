@@ -8,7 +8,7 @@ diagnose_category_merges(
   fit,
   stan_data,
   event_classes = NULL,
-  class_label_fn = NULL,
+  class_labels = NULL,
   shares = NULL,
   phi = NULL,
   probs = c(0.05, 0.5, 0.95)
@@ -26,13 +26,10 @@ and the \code{effective_info} figure's mean event count).}
 \code{A}, in the same order as \code{stan_data}'s \code{"event_classes"} attribute.
 Defaults to that attribute if present, else \verb{"1", "2", ...}.}
 
-\item{class_label_fn}{Optional function mapping an integer
-\code{action_index} vector to pretty labels (e.g. \code{bilatr::: eventrootcode3_name}), matching the scheme \code{event_classes} was built
-under. There is no scheme registry in this package (each CAMEO
-regrouping has its own standalone namer in \code{R/cameo_recode.R}), so
-the caller supplies the right one for their scheme, exactly as the
-\verb{runscripts/} do. Defaults to \code{NULL} (raw \code{event_classes} used as
-the label too).}
+\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
+to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}; falling back
+to the raw \code{event_classes} if that has nothing to offer).}
 
 \item{shares}{Reference category shares: \code{NULL} (default) uses the
 empirical shares from \code{stan_data$Y}, summed over dyads/periods and

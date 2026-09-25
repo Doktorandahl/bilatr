@@ -2,8 +2,7 @@
 % Please edit documentation in R/fit.R
 \name{fit_bilatr}
 \alias{fit_bilatr}
-\title{Shared sampling logic behind fit_dyad_ts()/fit_panel() and their _dev
-counterparts in R/fit_dev.R}
+\title{Shared sampling logic behind fit_dyad_ts()/fit_panel()}
 \usage{
 fit_bilatr(
   stan_data,
@@ -21,6 +20,8 @@ fit_bilatr(
 }
 \description{
 Canonicalises \code{stan_model} once, here, so \code{.compile_stan_model()} and
-\code{\link[=bilatr_init_fn]{bilatr_init_fn()}} agree on the same resolved name.
+\code{\link[=bilatr_init_fn]{bilatr_init_fn()}} agree on the same resolved name, and emits the
+once-per-session experimental-model message (see
+\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}).
 }
 \keyword{internal}

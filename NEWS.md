@@ -1,3 +1,77 @@
+# bilatr 0.10.1
+
+Public API cleanup (see `dev/claude_code_prompt_0.10.1_api_cleanup.md`;
+summary and verification detail at
+`dev/summary_0.10.1_api_cleanup.md`). Removes several dead/redundant
+arguments, gives `fit_panel()`/`fit_dyad_ts()` a `stan_model` argument in
+place of the internal `_dev` wrappers, and replaces the retired
+per-scheme CAMEO label functions with a data-driven
+`event_class_labels()`. Behavioural parity for every touched function
+verified `identical()` against 0.10.0 (`7ffb609`) via a temporary `git
+worktree`, on both `stable` and `stable_gamma` fixtures, apart from the
+two documented additions below. The full non-CmdStan-independent test
+suite (1,171 tests) passed with 0 failures, each file run in its own
+fresh process against a real CmdStan install; `devtools::check()` is
+clean apart from one pre-existing, unrelated NOTE.
+
+## Breaking changes
+
+* `scratch_dir` is removed from `diagnose_convergence()`,
+  `diagnose_and_extract_bilatr()`, `extract_theta()`, `extract_alpha()`,
+  and `extract_mu_intercept()` -- it has been deprecated and ignored
+  since 0.4.1.
+* `weighted` is removed from `assemble_stan_data()` -- it has been
+  defunct (must be `FALSE`/`"none"`) since 0.4.6.
+* `read_seconds` is removed from `diagnose_convergence()`,
+  `diagnose_and_extract_bilatr()`, and `extract_theta()`, along with the
+  dominance-grid message it fed in the internal chunk-size resolver.
+  `.bilatr_worker_tradeoff()` is unchanged and still internal; it remains
+  the planned engine for a future chunk-size/cores vignette.
+* `parallel`/`n_workers` are replaced by a single `n_cores = 1L` in
+  `diagnose_convergence()`, `diagnose_and_extract_bilatr()`, and
+  `extract_theta()`.
+* `class_label_fn` is replaced by `class_labels` in
+  `diagnose_category_merges()`, `extract_gamma()`, `icc_curves()`, and
+  `check_compositional_residuals()`. Unlike `class_label_fn` (called on
+  the integer `action_index`, a footgun whenever `reference_category`
+  wasn't the smallest code), `class_labels` is matched to `event_classes`
+  by class *value*: a named character vector, or an unnamed vector in
+  `event_classes` order. Defaults to `event_class_labels(stan_data)`.
+* The 12 deprecated CAMEO scheme helpers (`assign_eventrootcode2/3/4()`,
+  `eventrootcode2/3/4_name()`, `eventrootcode3/4_rootcodes()`,
+  `assign_bilatr_class()`/`assign_bilatr_class2()`,
+  `bilatr_class_name()`/`bilatr_class2_name()`) are removed.
+  `assign_modified_root_code()` no longer depends on
+  `assign_eventrootcode3()`; its logic is inlined into one `case_when()`
+  and verified `identical()` to the old two-step derivation over every
+  code in `cameo_lookup` and in `original_code/gdelt_bilatr.rds` (310
+  distinct codes).
+* `fit_panel_dev()`/`fit_dyad_ts_dev()` (`R/fit_dev.R`, never exported)
+  are removed. `fit_panel()`/`fit_dyad_ts()` gain `stan_model =
+  "stable"`, validated through `.canonical_stan_model()`.
+* `fit_dyad_ts()`'s `opt_level` default changes from `2` to `3`, matching
+  `fit_panel()`. No documented reason for the difference was found
+  anywhere in the source or `NEWS.md`.
+
+## New
+
+* `event_class_labels(stan_data, scheme = attr(stan_data,
+  "grouping_var"))`: a named character vector of labels, one per event
+  class, read from `cameo_lookup`'s `*Name` column for `QuadClass`/
+  `PentaClass`/`ModifiedRootCode` (raw codes otherwise). Replaces the
+  standalone per-scheme namer functions this release removes.
+* `stan_model` on `fit_panel()`/`fit_dyad_ts()`. Fitting a model whose
+  registry `status` is `"experimental"` (`ou`, `stable_gamma`) emits a
+  `message()` the first time it's fit in a session.
+* `diagnose_and_extract_bilatr()`'s `alpha`/`mu_intercept` outputs gain a
+  `class_label` column (previously `event_class` only), from the same
+  `event_class_labels(stan_data)` default.
+
+## Internal
+
+* `parallelly` moved from Imports to Suggests; its only remaining
+  reference is documentation of `n_cores`' SLURM recipe.
+
 # bilatr 0.10.0
 
 Retires the pre-0.4.2 soft-anchor stack fully (`stable_soft_anchor`/

@@ -4,12 +4,7 @@
 \alias{extract_alpha}
 \title{Extract discrimination parameters (alpha) with action-class labels}
 \usage{
-extract_alpha(
-  fit,
-  event_classes = NULL,
-  probs = c(0.05, 0.5, 0.95),
-  scratch_dir = NULL
-)
+extract_alpha(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} or
@@ -24,9 +19,6 @@ index.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
-
-\item{scratch_dir}{Deprecated and ignored since 0.4.1; see
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 }
 \value{
 A tibble with one row per action type: \code{action_index}
@@ -50,8 +42,8 @@ construction, so no post-hoc relabeling is needed here.
 independently-submitted single-chain SLURM jobs have all completed,
 with only their saved CSVs on disk. Unlike \code{\link[=extract_theta]{extract_theta()}}'s
 CSV-path mode, \code{alpha} is small (Tier 1: a handful of values
-regardless of dyad-set size), so there is no chunking/\code{parallel}
-machinery here -- just one plain read (via \link{.get_draws}) across all
+regardless of dyad-set size), so there is no chunking machinery
+here -- just one plain read (via \link{.get_draws}) across all
 of \code{fit}, then the same extraction logic either way.
 }
 \examples{

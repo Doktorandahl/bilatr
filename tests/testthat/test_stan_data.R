@@ -86,26 +86,6 @@ test_that("directed = FALSE yields fewer or equal dyads than directed = TRUE", {
   expect_lte(sd_undirected$D, sd_directed$D)
 })
 
-test_that("weighted = FALSE (default) and weighted = 'none' are both accepted, silent no-ops", {
-  events <- make_fake_events()
-  events <- recode_cameo(events, code_col = "EventCode")
-  sd_false <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", weighted = FALSE)
-  sd_none <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", weighted = "none")
-  expect_equal(sd_false, sd_none)
-  expect_false(any(c("dyad_weight", "period_weight", "action_weight") %in% names(sd_false)))
-})
-
-test_that("weighted rejects anything other than FALSE/'none' (likelihood weighting removed in 0.4.6)", {
-  events <- make_fake_events()
-  events <- recode_cameo(events, code_col = "EventCode")
-  for (bad in list(TRUE, "all", "dyad", "dyad-period")) {
-    expect_error(
-      assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", weighted = bad),
-      "removed in 0.4.6"
-    )
-  }
-})
-
 test_that("min_n_events drops low-activity dyads, and errors clearly if it drops all of them", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")

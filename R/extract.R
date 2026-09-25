@@ -40,15 +40,11 @@
 #'   attribute).
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
-#' @param max_memory_mb,chunk_size,parallel,n_workers Only used when
+#' @param max_memory_mb,chunk_size,n_cores Only used when
 #'   `fit` is CSV file paths; identical in meaning to
 #'   [diagnose_convergence()]'s arguments of the same name (including
 #'   the one-time default-`max_memory_mb` `message()`), applied here to
 #'   `theta` alone rather than all of Tier 3.
-#' @param scratch_dir Deprecated and ignored since 0.4.1; see
-#'   [diagnose_convergence()].
-#' @param read_seconds Only used when `fit` is CSV file paths; identical
-#'   in meaning to [diagnose_convergence()]'s argument of the same name.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, `dyad`, `dyad2`, `year` (and `month`, if applicable),
 #'   the posterior `mean` of theta, and one column per requested quantile.
@@ -63,18 +59,9 @@
 #' @export
 extract_theta <- function(
   fit, stan_data, probs = c(0.05, 0.5, 0.95),
-  max_memory_mb = 8192, chunk_size = NULL, parallel = FALSE,
-  n_workers = parallelly::availableCores(), scratch_dir = NULL,
-  read_seconds = NULL
+  max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
-  if (!is.null(scratch_dir)) {
-    warning(
-      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
-      "copy is made any more.",
-      call. = FALSE
-    )
-  }
 
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
@@ -104,10 +91,9 @@ extract_theta <- function(
     var_tiers <- .classify_bilatr_tier(prepared$variables)
     theta_vars <- var_tiers$variable[var_tiers$tier == 3L & startsWith(var_tiers$variable, "theta[")]
 
-    n_cores <- if (parallel) n_workers else 1L
     chunk_size_used <- .resolve_chunk_size_and_report(
       length(theta_vars), prepared, max_memory_mb, chunk_size, n_cores,
-      max_memory_mb_missing, read_seconds = read_seconds
+      max_memory_mb_missing
     )
     theta_summ <- .chunked_summarise_csv(prepared, theta_vars, chunk_size_used, n_cores) %>%
       dplyr::select(variable, mean, `5%` = q5, `50%` = median, `95%` = q95)
@@ -171,8 +157,8 @@ extract_theta <- function(
 #' independently-submitted single-chain SLURM jobs have all completed,
 #' with only their saved CSVs on disk. Unlike [extract_theta()]'s
 #' CSV-path mode, `alpha` is small (Tier 1: a handful of values
-#' regardless of dyad-set size), so there is no chunking/`parallel`
-#' machinery here -- just one plain read (via [.get_draws]) across all
+#' regardless of dyad-set size), so there is no chunking machinery
+#' here -- just one plain read (via [.get_draws]) across all
 #' of `fit`, then the same extraction logic either way.
 #'
 #' @inheritParams extract_theta
@@ -193,14 +179,7 @@ extract_theta <- function(
 #' alpha <- extract_alpha(csv_files, event_classes = event_classes)
 #' }
 #' @export
-extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), scratch_dir = NULL) {
-  if (!is.null(scratch_dir)) {
-    warning(
-      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
-      "copy is made any more.",
-      call. = FALSE
-    )
-  }
+extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
   draws <- .get_draws(fit, "alpha")
 
   out <- posterior::summarise_draws(
@@ -246,14 +225,7 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95),
 #' mu_intercept <- extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
 #' }
 #' @export
-extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95), scratch_dir = NULL) {
-  if (!is.null(scratch_dir)) {
-    warning(
-      "`scratch_dir` is deprecated and ignored since 0.4.1: no scratch ",
-      "copy is made any more.",
-      call. = FALSE
-    )
-  }
+extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
   draws <- .get_draws(fit, "mu_intercept")
 
   out <- posterior::summarise_draws(
@@ -291,8 +263,10 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #' the chunked Tier 3 machinery `extract_theta()` needs.
 #'
 #' @param fit A `CmdStanMCMC` fit object from a `stable_gamma` fit (via
-#'   `fit_panel_dev()`/`fit_dyad_ts_dev()`, since `stable_gamma` is
-#'   experimental and not reachable via `fit_panel()`/`fit_dyad_ts()`),
+#'   `fit_panel(stan_model = "stable_gamma")`/
+#'   `fit_dyad_ts(stan_model = "stable_gamma")`; `stable_gamma` is
+#'   experimental, so fitting it emits a one-time message -- see
+#'   [.bilatr_warn_if_experimental()]),
 #'   or a character vector of raw CmdStan CSV file paths.
 #' @param stan_data The Stan data list used to produce `fit`, as returned
 #'   by [assemble_stan_data()] `>= 0.7.0` (must carry its
@@ -301,9 +275,10 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #' @param event_classes Optional character vector of event-class labels,
 #'   in the same order used to build `stan_data` (i.e. `stan_data`'s
 #'   `"event_classes"` attribute, the default).
-#' @param class_label_fn Optional function mapping an integer
-#'   `action_index` vector to pretty labels, matching
-#'   [diagnose_category_merges()]'s argument of the same name.
+#' @param class_labels Optional; see [.resolve_class_labels()]. Ignored
+#'   when `event_classes` is `NULL` (nothing to key labels by). Defaults
+#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]).
 #' @return A tibble (subclassed `bilatr_gamma`, with an [autoplot()]/
 #'   [plot()] method) with one row per (country, action type):
 #'   `country_code`, `country_index`, `action_index` (and
@@ -318,7 +293,7 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 extract_gamma <- function(
   fit, stan_data, probs = c(0.05, 0.5, 0.95),
   event_classes = attr(stan_data, "event_classes"),
-  class_label_fn = NULL
+  class_labels = NULL
 ) {
   country_codes <- attr(stan_data, "country_codes")
   if (is.null(country_codes)) {
@@ -346,9 +321,8 @@ extract_gamma <- function(
 
   if (!is.null(event_classes)) {
     out <- dplyr::mutate(out, event_class = event_classes[action_index])
-  }
-  if (!is.null(class_label_fn)) {
-    out <- dplyr::mutate(out, class_label = as.character(class_label_fn(action_index)))
+    labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
+    out <- dplyr::mutate(out, class_label = labels[action_index])
   }
 
   meta_cols <- c("country_code", "country_index", "action_index", intersect(c("event_class", "class_label"), names(out)))

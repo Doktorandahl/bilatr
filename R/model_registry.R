@@ -1,16 +1,19 @@
 # Internal registry of Stan model variants shipped under inst/stan/.
 #
-# Exported functions (fit_dyad_ts(), fit_panel(), compile_bilatr_model())
-# always resolve `.BILATR_DEFAULT_MODEL` and never expose model choice to
-# callers. The `_dev` variants in R/fit_dev.R accept a `stan_model` name
-# and resolve it here, for use during model development only.
+# fit_dyad_ts()/fit_panel() (and, for the default model only,
+# compile_bilatr_model()) accept a `stan_model` name and resolve it here
+# (0.10.1: previously only the internal `_dev` variants in the
+# now-removed R/fit_dev.R exposed model choice). An unregistered name
+# errors via .canonical_stan_model() rather than silently falling
+# through.
 #
 # To register a new model variant: add an entry below (the `file` must
 # exist under inst/stan/), and it becomes immediately fittable via
-# fit_dyad_ts_dev()/fit_panel_dev(stan_model = "<name>"). `status` is
-# `"stable"` for the single default model (see .BILATR_DEFAULT_MODEL) or
-# `"experimental"` for anything else; exported functions only ever fit the
-# stable one.
+# fit_dyad_ts()/fit_panel(stan_model = "<name>"). `status` is `"stable"`
+# for the single default model (see .BILATR_DEFAULT_MODEL) or
+# `"experimental"` for anything else; fitting an experimental model emits
+# a one-time-per-session message (see .bilatr_warn_if_experimental()
+# below).
 
 .bilatr_stan_models <- list(
   stable = list(
@@ -217,4 +220,45 @@
 #' @keywords internal
 .bilatr_model_has_gamma <- function(stan_model) {
   .canonical_stan_model(stan_model) %in% c("stable_gamma")
+}
+
+#' Session-lifetime guard for the once-per-model experimental-model message
+#' @keywords internal
+.bilatr_experimental_messaged <- new.env(parent = emptyenv())
+
+#' Reset the once-per-session experimental-model message guard
+#'
+#' Internal, for tests: [.bilatr_warn_if_experimental()] only messages once
+#' per `stan_model` name per session, so a test exercising that message
+#' needs to reset the guard first rather than relying on being the first
+#' caller in the process.
+#' @keywords internal
+.reset_bilatr_experimental_messaged <- function() {
+  rm(list = ls(.bilatr_experimental_messaged), envir = .bilatr_experimental_messaged)
+}
+
+#' Message once per session when fitting a registry `status = "experimental"`
+#' model
+#'
+#' [fit_dyad_ts()]/[fit_panel()] call this after resolving `stan_model`, so a
+#' caller who picks an experimental variant (`ou`, `stable_gamma`; see
+#' `.bilatr_stan_models`) is told so exactly once per model name per
+#' session, not on every fit.
+#'
+#' @param stan_model A canonical name (already resolved via
+#'   [.canonical_stan_model()]).
+#' @return `NULL`, invisibly.
+#' @keywords internal
+.bilatr_warn_if_experimental <- function(stan_model) {
+  if (identical(.bilatr_stan_models[[stan_model]]$status, "experimental") &&
+    !exists(stan_model, envir = .bilatr_experimental_messaged, inherits = FALSE)) {
+    message(
+      "stan_model = \"", stan_model, "\" is experimental (not yet ",
+      "prior-predictive calibrated or fit at production scale; see ",
+      "?.bilatr_stan_models or R/model_registry.R). This message is ",
+      "shown once per session."
+    )
+    assign(stan_model, TRUE, envir = .bilatr_experimental_messaged)
+  }
+  invisible(NULL)
 }

@@ -12,8 +12,9 @@ fit_dyad_ts(
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
-  opt_level = 2,
+  opt_level = 3,
   output_dir = NULL,
+  stan_model = .BILATR_DEFAULT_MODEL,
   ...
 )
 }
@@ -41,6 +42,14 @@ chain.}
 
 \item{output_dir}{Directory to write CmdStan's raw output CSVs to, or
 \code{NULL} for a temporary directory.}
+
+\item{stan_model}{(0.10.1) Name registered in \code{.bilatr_stan_models}
+(see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}); an unregistered name errors,
+including the four names retired in 0.10.0. Defaults to
+\code{"stable"} (\code{.BILATR_DEFAULT_MODEL}). Fitting a model whose registry
+\code{status} is \code{"experimental"} (currently \code{ou}/\code{stable_gamma}) emits a
+\code{message()} the first time it is fit in a session (see
+\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}).}
 
 \item{...}{Additional arguments passed to \code{CmdStanModel$sample()}.}
 }

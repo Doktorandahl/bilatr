@@ -10,13 +10,15 @@ extract_gamma(
   stan_data,
   probs = c(0.05, 0.5, 0.95),
   event_classes = attr(stan_data, "event_classes"),
-  class_label_fn = NULL
+  class_labels = NULL
 )
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object from a \code{stable_gamma} fit (via
-\code{fit_panel_dev()}/\code{fit_dyad_ts_dev()}, since \code{stable_gamma} is
-experimental and not reachable via \code{fit_panel()}/\code{fit_dyad_ts()}),
+\code{fit_panel(stan_model = "stable_gamma")}/
+\code{fit_dyad_ts(stan_model = "stable_gamma")}; \code{stable_gamma} is
+experimental, so fitting it emits a one-time message -- see
+\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}),
 or a character vector of raw CmdStan CSV file paths.}
 
 \item{stan_data}{The Stan data list used to produce \code{fit}, as returned
@@ -29,9 +31,10 @@ by \code{\link[=assemble_stan_data]{assemble_stan_data()}} \verb{>= 0.7.0} (must
 in the same order used to build \code{stan_data} (i.e. \code{stan_data}'s
 \code{"event_classes"} attribute, the default).}
 
-\item{class_label_fn}{Optional function mapping an integer
-\code{action_index} vector to pretty labels, matching
-\code{\link[=diagnose_category_merges]{diagnose_category_merges()}}'s argument of the same name.}
+\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Ignored
+when \code{event_classes} is \code{NULL} (nothing to key labels by). Defaults
+to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}).}
 }
 \value{
 A tibble (subclassed \code{bilatr_gamma}, with an \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}/

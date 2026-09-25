@@ -14,7 +14,7 @@
 
 \item{max_memory_mb}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
-\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{parallel}/\code{n_workers}.}
+\item{n_cores}{See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{n_cores}.}
 }
 \value{
 Integer chunk size, at least \code{1}.

@@ -17,7 +17,7 @@ check_compositional_residuals(
   seed = 1,
   probs = c(0.05, 0.95),
   event_classes = attr(stan_data, "event_classes"),
-  class_label_fn = NULL
+  class_labels = NULL
 )
 }
 \arguments{
@@ -61,9 +61,9 @@ medians (\code{dyads$along_lower}/\code{along_upper},
 in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
 \code{"event_classes"} attribute.}
 
-\item{class_label_fn}{Optional function mapping an integer
-\code{action_index} vector to pretty labels, matching
-\code{\link[=diagnose_category_merges]{diagnose_category_merges()}}'s argument of the same name.}
+\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
+to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}).}
 }
 \value{
 A \code{bilatr_residual_check} object: \code{dyads} (one row per sampled

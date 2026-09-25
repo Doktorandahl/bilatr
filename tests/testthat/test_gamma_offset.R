@@ -356,7 +356,7 @@ test_that("stable_gamma recovers a known country-level gamma from simulated data
   attr(stan_data, "event_classes") <- as.character(seq_len(A))
   attr(stan_data, "country_codes") <- paste0("C", seq_len(n_countries))
 
-  fit <- suppressWarnings(fit_panel_dev(
+  fit <- suppressWarnings(fit_panel(
     stan_data,
     chains = 2, parallel_chains = 2, threads_per_chain = 1,
     iter_warmup = 300, iter_sampling = 300, seed = 1, opt_level = 1,
@@ -441,13 +441,13 @@ test_that("check_compositional_residuals()'s implied_beta_rms is materially smal
     attr(stan_data, "event_classes") <- as.character(seq_len(A))
     attr(stan_data, "country_codes") <- paste0("C", seq_len(n_countries))
 
-    fit_stable <- suppressWarnings(fit_panel_dev(
+    fit_stable <- suppressWarnings(fit_panel(
       stan_data,
       chains = 2, parallel_chains = 2, threads_per_chain = 1,
       iter_warmup = 250, iter_sampling = 250, seed = 1, opt_level = 1,
       stan_model = "stable", refresh = 0, show_messages = FALSE
     ))
-    fit_gamma <- suppressWarnings(fit_panel_dev(
+    fit_gamma <- suppressWarnings(fit_panel(
       stan_data,
       chains = 2, parallel_chains = 2, threads_per_chain = 1,
       iter_warmup = 250, iter_sampling = 250, seed = 1, opt_level = 1,

@@ -14,8 +14,7 @@
 \item{chunk_size}{Variables per chunk.}
 
 \item{n_cores}{Cores for \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}}'s \code{.cores}; \code{1L}
-for a fully sequential run. See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
-\code{parallel}/\code{n_workers} for how a caller arrives at this number.}
+for a fully sequential run. See \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{n_cores}.}
 }
 \value{
 A tibble, the row-bound \code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}} output

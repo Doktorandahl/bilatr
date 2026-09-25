@@ -12,7 +12,7 @@ icc_curves(
   quantile_probs = c(0.01, 0.99),
   categories = NULL,
   event_classes = NULL,
-  class_label_fn = NULL,
+  class_labels = NULL,
   n_grid = 201,
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
@@ -50,9 +50,10 @@ a character vector of \code{event_class} labels, or an integer vector of
 in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
 \code{"event_classes"} attribute if \code{stan_data} is supplied.}
 
-\item{class_label_fn}{Optional function mapping an integer
-\code{action_index} vector to pretty labels, matching
-\code{\link[=diagnose_category_merges]{diagnose_category_merges()}}'s argument of the same name.}
+\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
+to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}) when \code{stan_data}
+is supplied, else the raw event classes.}
 
 \item{n_grid}{Number of theta grid points. Default \code{201}.}
 
