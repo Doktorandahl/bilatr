@@ -474,15 +474,16 @@ event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var
 #'   lacks a usable `"event_classes"` attribute (e.g. a hand-built
 #'   `stan_data` list in a test or a pre-0.9.0 `stan_data.rds`) --
 #'   `class_labels`/`event_classes` are the caller-supplied fallback for
-#'   exactly that case, so a `stan_data` that can't answer
-#'   [event_class_labels()] on its own is not a hard error here.
+#'   exactly that case. Only the missing-attribute case is treated this
+#'   way; a genuine error raised by [event_class_labels()] itself (once
+#'   the attribute is present) is not caught here and propagates.
 #' @return Character vector, `length(event_classes)`, in `event_classes`
 #'   order.
 #' @keywords internal
 .resolve_class_labels <- function(class_labels, event_classes, stan_data = NULL) {
   if (is.null(class_labels)) {
-    class_labels <- if (!is.null(stan_data)) {
-      tryCatch(event_class_labels(stan_data), error = function(e) NULL)
+    class_labels <- if (!is.null(stan_data) && !is.null(attr(stan_data, "event_classes"))) {
+      event_class_labels(stan_data)
     } else {
       NULL
     }

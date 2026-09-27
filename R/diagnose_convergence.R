@@ -22,15 +22,16 @@
 #' structurally, by bracket-index count (`n_index >= 2`, see that
 #' function), not by name, so a `theta_filtered[d, t]`/
 #' `theta_filtered_sd[d, t]` variable lands there automatically, the same
-#' way `log_lik[d, t]` already does. One caveat: when
-#' `assemble_stan_data()`'s `filter_dyads` narrows the dyad set, the
-#' `dyad_id`/`index_1` these two variables get in Tier 3 output is the
-#' *position within the filtered subset* (`1..n_filter_dyads`), not the
-#' true `D`-space `dyad_id` -- there is no translation layer back to the
-#' true `dyad_id` here (out of scope for 0.5.0); joining these two
-#' variables' Tier 3 rows to `dyad_ids`/other per-dyad metadata by
-#' `dyad_id` is only valid when `filter_dyads` was `NULL` (i.e. every
-#' dyad was filtered, in `Y`'s original order).
+#' way `log_lik[d, t]` already does. Through 0.10.1, [.compute_tier3()]
+#' grouped every Tier 3 base name by its first index as `dyad_id`, which
+#' was wrong for these two: that index is the *position within*
+#' `filter_dyads`, not the true `D`-space `dyad_id`, so their rows were
+#' mis-joined into other dyads' `min_ess`/`max_rhat` whenever
+#' `filter_dyads` narrowed the dyad set. 0.10.2 (B4) fixes this by giving
+#' every Tier 3 base name other than `theta` its own row in a separate
+#' `tier3_other` table (one row per base name, no per-dyad breakdown, so
+#' no index translation is needed) -- see [.compute_tier3()] and
+#' [diagnose_convergence()]'s `@return`.
 #' `gamma` (0.7.0, `stable_gamma` only: `A x n_countries`) is listed here
 #' too, for the same by-name reason as `alpha`: it has two `[...]`
 #' indices (action, country), which the structural
@@ -133,10 +134,12 @@
 #' sparsity profile is unknown and it should never be silently hidden.
 #'
 #' @param variable Character vector of `summarise_draws()` variable names.
-#' @return A tibble with columns `variable`, `tier` (`1L`, `2L`, `3L`, or
-#'   `NA` for excluded sign-ambiguous raw parameters), `dyad_id` (the
-#'   first index, `NA` outside Tier 2/3), and `time_index` (the second
-#'   index, `NA` outside Tier 3).
+#' @return A tibble with columns `variable`, `base_name` (0.10.2: kept so
+#'   downstream Tier 3 code -- [.compute_tier3()] -- can split by base
+#'   name without re-deriving it), `tier` (`1L`, `2L`, `3L`, or `NA` for
+#'   excluded sign-ambiguous raw parameters), `dyad_id` (the first index,
+#'   `NA` outside Tier 2/3), and `time_index` (the second index, `NA`
+#'   outside Tier 3).
 #' @keywords internal
 .classify_bilatr_tier <- function(variable) {
   parsed <- .parse_variable_indices(variable)
@@ -154,7 +157,7 @@
     dyad_id = dplyr::if_else(tier %in% c(2L, 3L), index_1, NA_integer_),
     time_index = dplyr::if_else(tier == 3L, index_2, NA_integer_)
   ) %>%
-    dplyr::select(variable, tier, dyad_id, time_index)
+    dplyr::select(variable, base_name, tier, dyad_id, time_index)
 }
 
 #' Normalize the `n_dt` argument to a two-column tibble
@@ -378,7 +381,23 @@
   )
 }
 
-#' Compute the Tier 3 (per-dyad-period latent state) diagnostics tibble
+#' Compute the Tier 3 (per-dyad-period latent state) diagnostics tibbles
+#'
+#' Tier 3 is matched structurally by index count (see
+#' [.classify_bilatr_tier()]), so it can hold more than `theta[d, t]`:
+#' `theta_filtered[k, t]`/`theta_filtered_sd[k, t]` (0.5.0+, `k` is the
+#' *position within* `filter_dyads`, not `dyad_id`) and `log_lik[d, t]`
+#' (`compute_log_lik = 1`) also land here. Grouping every Tier 3 base
+#' name by its first index as `dyad_id`, as this function did through
+#' 0.10.1, mis-joins `theta_filtered*` onto the wrong dyads whenever
+#' `filter_dyads` narrows the dyad set, folds `log_lik` into `theta`'s own
+#' `min_ess`/`max_rhat`, and inflates `n_theta` to count all of them
+#' despite its name (0.10.2, B4). This now splits Tier 3 in two: `tier3`
+#' aggregates `base_name == "theta"` only (matching its name and the
+#' per-dyad `dyad_id`/`time_index` semantics the rest of the package
+#' assumes), and every other Tier 3 base name gets one row in
+#' `tier3_other` -- no per-dyad breakdown, so no `filter_dyads`
+#' index-translation is needed there either.
 #' @keywords internal
 .compute_tier3 <- function(summ, n_dt_tbl, rhat_threshold, ess_threshold) {
   tier3_raw <- summ %>%
@@ -388,9 +407,11 @@
       ess_flag = (ess_bulk < ess_threshold) | (ess_tail < ess_threshold)
     )
 
-  tier3_joined <- dplyr::left_join(tier3_raw, n_dt_tbl, by = "dyad_id")
+  theta_joined <- tier3_raw %>%
+    dplyr::filter(.data$base_name == "theta") %>%
+    dplyr::left_join(n_dt_tbl, by = "dyad_id")
 
-  tier3_joined %>%
+  tier3 <- theta_joined %>%
     dplyr::group_by(dyad_id, n_dt) %>%
     dplyr::summarise(
       n_theta = dplyr::n(),
@@ -402,6 +423,22 @@
       .groups = "drop"
     ) %>%
     dplyr::arrange(dyad_id)
+
+  tier3_other <- tier3_raw %>%
+    dplyr::filter(.data$base_name != "theta") %>%
+    dplyr::group_by(.data$base_name) %>%
+    dplyr::summarise(
+      n = dplyr::n(),
+      n_rhat_above = sum(.data$rhat_flag, na.rm = TRUE),
+      n_ess_below = sum(.data$ess_flag, na.rm = TRUE),
+      max_rhat = max(.data$rhat, na.rm = TRUE),
+      min_ess_bulk = min(.data$ess_bulk, na.rm = TRUE),
+      min_ess_tail = min(.data$ess_tail, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(.data$base_name)
+
+  list(tier3 = tier3, tier3_other = tier3_other)
 }
 
 #' Assemble a `bilatr_diagnostics` object from a tier-classified summary
@@ -448,7 +485,9 @@
   }
   tier2_result <- if (2L %in% tiers) .compute_tier2(summ, n_dt_tbl) else NULL
   tier2 <- tier2_result$tier2
-  tier3 <- if (3L %in% tiers) .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold) else NULL
+  tier3_result <- if (3L %in% tiers) .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold) else NULL
+  tier3 <- tier3_result$tier3
+  tier3_other <- tier3_result$tier3_other
 
   summary_info <- list(
     tiers_computed = tiers,
@@ -466,12 +505,18 @@
     } else {
       NA_integer_
     },
+    n_tier3_other_groups = if (!is.null(tier3_other)) nrow(tier3_other) else NA_integer_,
+    n_tier3_other_rhat_above = if (!is.null(tier3_other)) sum(tier3_other$n_rhat_above, na.rm = TRUE) else NA_integer_,
+    n_tier3_other_ess_below = if (!is.null(tier3_other)) sum(tier3_other$n_ess_below, na.rm = TRUE) else NA_integer_,
     rhat_threshold = rhat_threshold,
     ess_threshold = ess_threshold
   )
 
   structure(
-    list(tier1 = tier1, gamma = gamma_diag, tier2 = tier2, tier3 = tier3, summary = summary_info),
+    list(
+      tier1 = tier1, gamma = gamma_diag, tier2 = tier2, tier3 = tier3,
+      tier3_other = tier3_other, summary = summary_info
+    ),
     class = "bilatr_diagnostics"
   )
 }
@@ -613,21 +658,22 @@
 #' `n_cores = 2` through `24` -- that assumption was never measured
 #' against a real fork and was wrong).
 #'
-#' **PENDING RE-FIT (0.4.2), NOT YET DONE**: the measurement below sums
-#' RSS across the fork tree, which double-counts copy-on-write shared
-#' pages a SLURM cgroup only charges once -- `dev/bench_memory.R` was
-#' corrected (0.4.2) to poll summed Pss and the cgroup's own peak-usage
-#' counter instead (see that file's header), and a small Linux
-#' measurement using the corrected poller found roughly 3.8x `raw_mb` at
-#' the first extra worker and ~2.6x `raw_mb` per worker after that --
-#' both LOWER than the 4.5/2.5 below, consistent with this constant
-#' being ~1.5-2x conservative in the `n_cores > 1` range. This value has
-#' NOT yet been updated to reflect that: doing so needs a full
-#' Linux-sourced run of the corrected benchmark (this constant's own
-#' derivation below is macOS sum-RSS, and the jobs it sizes run on
-#' Linux/SLURM), which had not happened as of 0.4.2's release. Treat the
-#' current 4.5 as a documented-conservative placeholder, not a
-#' recalibrated figure, until that run happens.
+#' **Conservative by design, pending a Linux re-fit (0.10.2):** the
+#' measurement below sums RSS across the fork tree on macOS, which
+#' double-counts copy-on-write shared pages a SLURM cgroup only charges
+#' once -- `dev/bench_memory.R` was corrected (0.4.2) to poll summed Pss
+#' and the cgroup's own peak-usage counter instead (see that file's
+#' header), and a small Linux measurement using the corrected poller
+#' found roughly 3.8x `raw_mb` at the first extra worker and ~2.6x
+#' `raw_mb` per worker after that -- both lower than the 4.5/2.5 below,
+#' consistent with this constant being ~1.5-2x conservative in the
+#' `n_cores > 1` range. The value here is left as that conservative
+#' macOS-sourced figure rather than the smaller Linux one: the jobs it
+#' sizes run on Linux/SLURM, and a job-sizing floor is more useful too
+#' large than too small. A full Linux-sourced re-fit is planned together
+#' with the chunk-size/cores vignette (see the package audit's future-
+#' work notes); until then, treat 4.5 as deliberately conservative, not
+#' as the tightest possible estimate.
 #' @keywords internal
 .BILATR_CHUNK_CORES_STEP_FACTOR <- 4.5
 
@@ -661,12 +707,12 @@
 #' range -- validate with `dev/bench_memory.R` at your actual `n_cores`
 #' before trusting the estimate for a real SLURM allocation that large.
 #'
-#' **PENDING RE-FIT (0.4.2), NOT YET DONE**: see
+#' **Conservative by design, pending a Linux re-fit (0.10.2):** see
 #' [.BILATR_CHUNK_CORES_STEP_FACTOR]'s docs -- the corrected (Pss/cgroup)
-#' benchmark suggests ~2.6 here, consistent with this constant's 2.5
-#' within measurement noise (unlike the step term, which moved more).
-#' Still pending a full Linux-sourced re-fit before treating either as
-#' recalibrated rather than the pre-correction placeholder.
+#' Linux benchmark suggests ~2.6 here, consistent with this constant's
+#' 2.5 within measurement noise (unlike the step term, which moved
+#' more). The same Linux re-fit planned for the step term (alongside the
+#' chunk-size/cores vignette) will settle this one too.
 #' @keywords internal
 .BILATR_CHUNK_CORES_PER_CORE_FACTOR <- 2.5
 
@@ -1241,11 +1287,25 @@
 #'       the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 #'       and a `worse_than_expected` column; `NULL` if `2` was not in
 #'       `tiers`.}
-#'     \item{tier3}{Tibble with one row per dyad summarizing its
+#'     \item{tier3}{Tibble with one row per dyad summarizing `theta`'s
 #'       per-dyad-period latent-state diagnostics (min ESS, share of
-#'       entries breaching thresholds); `NULL` if `3` was not in `tiers`.}
+#'       entries breaching thresholds); `NULL` if `3` was not in `tiers`.
+#'       Holds `theta` only (0.10.2, B4) -- `theta_filtered`/
+#'       `theta_filtered_sd`/`log_lik` moved to `tier3_other` below, since
+#'       grouping them here by their first index as `dyad_id` mis-joined
+#'       `theta_filtered*` whenever `filter_dyads` narrowed the dyad set
+#'       (see [.compute_tier3()]).}
+#'     \item{tier3_other}{(0.10.2) Tibble with one row per Tier 3 base
+#'       name other than `theta` (e.g. `theta_filtered`,
+#'       `theta_filtered_sd`, `log_lik`, whichever are present): `n`,
+#'       `n_rhat_above`, `n_ess_below`, `max_rhat`, `min_ess_bulk`,
+#'       `min_ess_tail`. No per-dyad breakdown, so no `filter_dyads`
+#'       index-translation is needed. `NULL` if `3` was not in `tiers`;
+#'       zero rows (not `NULL`) if `3` was computed but the fit has no
+#'       Tier 3 quantity besides `theta`.}
 #'     \item{summary}{A short named list of headline counts (see
-#'       [print.bilatr_diagnostics]).}
+#'       [print.bilatr_diagnostics]), including `n_tier3_other_groups`,
+#'       `n_tier3_other_rhat_above`, `n_tier3_other_ess_below` (0.10.2).}
 #'   }
 #' @examples
 #' \dontrun{
@@ -1407,7 +1467,7 @@ print.bilatr_diagnostics <- function(x, n_tier2 = 20, n_gamma = 10, ...) {
     }, error = function(e) NA_real_)
 
     cat(sprintf(
-      "== Tier 3: per-dyad-period latent states (aggregated; %d dyads) ==\n",
+      "== Tier 3: per-dyad-period latent states (theta, aggregated; %d dyads) ==\n",
       x$summary$n_dyads_tier3
     ))
     cat(sprintf(
@@ -1415,11 +1475,22 @@ print.bilatr_diagnostics <- function(x, n_tier2 = 20, n_gamma = 10, ...) {
       100 * share_below,
       x$summary$ess_threshold,
       if (!is.na(low_n_dt_share)) {
-        sprintf(", concentrated around dyads with n_dt <= %.0f", low_n_dt_share)
+        sprintf(", median n_dt among them: %.0f", low_n_dt_share)
       } else {
         ""
       }
     ))
+
+    if (!is.null(x$tier3_other) && nrow(x$tier3_other) > 0) {
+      for (i in seq_len(nrow(x$tier3_other))) {
+        row <- x$tier3_other[i, ]
+        cat(sprintf(
+          "  %s: %d entries, %d above Rhat threshold, %d below ESS threshold (max Rhat %.3f, min ESS bulk/tail %.0f/%.0f).\n",
+          row$base_name, row$n, row$n_rhat_above, row$n_ess_below,
+          row$max_rhat, row$min_ess_bulk, row$min_ess_tail
+        ))
+      }
+    }
   }
 
   invisible(x)

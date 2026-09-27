@@ -168,6 +168,27 @@ test_that("diagnose_and_extract_bilatr() attaches event_class labels the same as
   )
 })
 
+test_that("diagnose_and_extract_bilatr(class_labels =) overrides the event_class_labels(stan_data) default (0.10.2, B0a)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture()
+  event_classes <- c("2", "5", "18", "163")
+  class_labels <- c("2" = "a", "5" = "b", "18" = "c", "163" = "d")
+
+  fused <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(
+    fx$csv_files, fx$stan_data, n_dt = fx$n_dt, chunk_size = 3,
+    event_classes = event_classes, class_labels = class_labels
+  )))
+
+  expect_equal(
+    dplyr::arrange(fused$alpha, action_index)$class_label,
+    class_labels[as.character(dplyr::arrange(fused$alpha, action_index)$event_class)],
+    ignore_attr = TRUE
+  )
+})
+
 test_that("diagnose_and_extract_bilatr() rejects an in-memory fit", {
   skip_if_no_cmdstan()
   skip_on_cran()

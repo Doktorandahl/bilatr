@@ -86,6 +86,25 @@ test_that("theta_range resolution: explicit range takes precedence, then theta_s
   )
 })
 
+test_that("icc_curves()'s dyad-subsample fallback does not disturb the caller's global RNG stream (0.10.2, B2)", {
+  fx <- .make_icc_fixture(D = 8, Tn = 3)
+
+  runif(1) # ensure .Random.seed exists before capturing it
+  old_seed <- get(".Random.seed", envir = .GlobalEnv)
+
+  r1 <- suppressMessages(icc_curves(
+    fx$fit, stan_data = fx$truth$stan_data, n_grid = 3, n_dyads_fallback = 5, seed = 2
+  ))
+  expect_identical(get(".Random.seed", envir = .GlobalEnv), old_seed)
+
+  # same seed -> same theta_range as before this change (the seeded
+  # subsample itself is unaffected by no longer calling set.seed() bare)
+  r2 <- suppressMessages(icc_curves(
+    fx$fit, stan_data = fx$truth$stan_data, n_grid = 3, n_dyads_fallback = 5, seed = 2
+  ))
+  expect_equal(attr(r1, "theta_range"), attr(r2, "theta_range"))
+})
+
 test_that("categories subsets the output to just the requested action classes", {
   fx <- .make_icc_fixture(A = 6)
   res <- icc_curves(fx$fit, theta_range = c(-1, 1), n_grid = 5, categories = c("2", "4"))

@@ -51,7 +51,9 @@ representative figure, not a per-dyad-period computation).}
 
 \item{probs}{Posterior interval bounds to report alongside the mean
 (first and last are used as the interval; a third, e.g. the median,
-is ignored for \code{pairwise}/\code{ladder} but not \code{categories}).}
+is ignored for \code{pairwise}/\code{ladder} but not \code{categories}). Stored on
+the returned object (0.10.2, B3) so \code{\link[=merge_cost]{merge_cost()}} reuses the same
+outer bounds rather than a hard-coded \code{c(0.05, 0.5, 0.95)}.}
 }
 \value{
 A \code{bilatr_category_merges} object: \code{categories} (one row per
@@ -62,8 +64,9 @@ class: \code{action_index}, \code{event_class}, \code{class_label}, \code{post_m
 path from \code{A} down to 2 -- \strong{read this one}: it gives the whole
 curve so a knee can be picked rather than pricing one grouping at a
 time; greedy is not guaranteed globally optimal for a fixed target
-\code{A}, standard for agglomerative methods), and \code{summary} (scalars for
-\code{print()}).
+\code{A}, standard for agglomerative methods), \code{summary} (scalars for
+\code{print()}), and \code{probs} (this call's \code{probs}, as used by
+\code{\link[=merge_cost]{merge_cost()}}).
 }
 \description{
 Two categories are redundant \emph{for the latent scale} exactly when their

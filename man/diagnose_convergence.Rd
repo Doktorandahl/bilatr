@@ -156,11 +156,25 @@ empty tibble) -- see \code{.bilatr_model_has_gamma()}. \code{summary}'s
 the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 and a \code{worse_than_expected} column; \code{NULL} if \code{2} was not in
 \code{tiers}.}
-\item{tier3}{Tibble with one row per dyad summarizing its
+\item{tier3}{Tibble with one row per dyad summarizing \code{theta}'s
 per-dyad-period latent-state diagnostics (min ESS, share of
-entries breaching thresholds); \code{NULL} if \code{3} was not in \code{tiers}.}
+entries breaching thresholds); \code{NULL} if \code{3} was not in \code{tiers}.
+Holds \code{theta} only (0.10.2, B4) -- \code{theta_filtered}/
+\code{theta_filtered_sd}/\code{log_lik} moved to \code{tier3_other} below, since
+grouping them here by their first index as \code{dyad_id} mis-joined
+\verb{theta_filtered*} whenever \code{filter_dyads} narrowed the dyad set
+(see \code{\link[=.compute_tier3]{.compute_tier3()}}).}
+\item{tier3_other}{(0.10.2) Tibble with one row per Tier 3 base
+name other than \code{theta} (e.g. \code{theta_filtered},
+\code{theta_filtered_sd}, \code{log_lik}, whichever are present): \code{n},
+\code{n_rhat_above}, \code{n_ess_below}, \code{max_rhat}, \code{min_ess_bulk},
+\code{min_ess_tail}. No per-dyad breakdown, so no \code{filter_dyads}
+index-translation is needed. \code{NULL} if \code{3} was not in \code{tiers};
+zero rows (not \code{NULL}) if \code{3} was computed but the fit has no
+Tier 3 quantity besides \code{theta}.}
 \item{summary}{A short named list of headline counts (see
-\link{print.bilatr_diagnostics}).}
+\link{print.bilatr_diagnostics}), including \code{n_tier3_other_groups},
+\code{n_tier3_other_rhat_above}, \code{n_tier3_other_ess_below} (0.10.2).}
 }
 }
 \description{

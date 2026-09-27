@@ -23,8 +23,9 @@ when \code{stan_data} is \code{NULL} (possible for \code{\link[=icc_curves]{icc_
 lacks a usable \code{"event_classes"} attribute (e.g. a hand-built
 \code{stan_data} list in a test or a pre-0.9.0 \code{stan_data.rds}) --
 \code{class_labels}/\code{event_classes} are the caller-supplied fallback for
-exactly that case, so a \code{stan_data} that can't answer
-\code{\link[=event_class_labels]{event_class_labels()}} on its own is not a hard error here.}
+exactly that case. Only the missing-attribute case is treated this
+way; a genuine error raised by \code{\link[=event_class_labels]{event_class_labels()}} itself (once
+the attribute is present) is not caught here and propagates.}
 }
 \value{
 Character vector, \code{length(event_classes)}, in \code{event_classes}

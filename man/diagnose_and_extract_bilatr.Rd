@@ -14,6 +14,7 @@ diagnose_and_extract_bilatr(
   ess_threshold = 400,
   tiers = 1:3,
   event_classes = attr(stan_data, "event_classes"),
+  class_labels = NULL,
   max_memory_mb = 8192,
   chunk_size = NULL,
   n_cores = 1L
@@ -58,8 +59,12 @@ passed through to the \code{alpha}/\code{mu_intercept} outputs exactly as in
 \code{\link[=extract_alpha]{extract_alpha()}}. Defaults to \code{stan_data}'s \code{"event_classes"}
 attribute, if present. When supplied, \code{alpha}/\code{mu_intercept} also get
 a \code{class_label} column (0.10.1), from \code{event_class_labels(stan_data)}
-(see \code{\link[=event_class_labels]{event_class_labels()}}) -- unlike \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}}, there is no
-\code{class_labels} argument here to override that default.}
+(see \code{\link[=event_class_labels]{event_class_labels()}}) unless overridden by \code{class_labels}.}
+
+\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Ignored
+when \code{event_classes} is \code{NULL} (nothing to key labels by). Defaults
+to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}).}
 
 \item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
 includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory per

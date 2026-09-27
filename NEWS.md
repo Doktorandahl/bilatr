@@ -1,3 +1,107 @@
+# bilatr 0.10.2
+
+The remaining audit bugs (see `dev/audit_2026-09-23.md` §3, B1-B4/B10),
+plus a `diagnose_and_extract_bilatr(class_labels =)` gap and a
+`.resolve_class_labels()` error-swallowing gap carried over from the
+0.10.1 review, a zero-NOTE `devtools::check()`, and stale-documentation
+cleanup ahead of the planned software-journal submission. Verified via
+a temporary `git worktree` against 0.10.1 (`1c28f82`), on both `stable`
+(with `compute_theta_filtered`/`compute_log_lik` on and a `filter_dyads`
+subset) and `stable_gamma` fixtures, apart from the documented changes
+below. See `dev/claude_code_prompt_0.10.2_bugfixes.md`.
+
+## Bug fixes
+
+* B1: `.stratified_dyad_sample()` used `sample(idx, k)`/`sample(pool,
+  extra_n)`, which sample from `1:n` instead of returning `n` itself
+  when `idx`/`pool` has exactly one element (R's classic
+  `sample()`-on-a-single-number trap). This under-filled and mis-sampled
+  singleton strata -- only reachable when a volume stratum has one
+  dyad (`D < 2 * n_strata`), so production runs (`D` in the thousands)
+  were unaffected, but small panels and test fixtures were not. Fixed
+  with `idx[sample.int(length(idx), k)]`.
+* B2: no function may reset the caller's global RNG stream any more.
+  `check_compositional_residuals()`, `icc_curves()`'s dyad-subsample
+  fallback, and `alpha_prior_moments()` used to call `set.seed()`
+  directly, so calling any of them mid-session silently reset whatever
+  else was consuming randomness. A new internal `.with_seed()` saves,
+  seeds, evaluates, and restores `.Random.seed` (or removes it again if
+  it didn't exist), and is now used at all four sites instead. Also:
+  `alpha_prior_moments()` now defaults to `seed = 1L` (was `NULL`) and
+  is memoised only when `seed` is non-`NULL`, so its `contraction`/
+  `z_score`/`precision_gain` output (via `diagnose_category_merges()`)
+  no longer depends on whatever else ran earlier in the session; and its
+  simulation is now batched (10 batches), cutting `.simulate_alpha_prior()`'s
+  transient peak memory at `A = 18`, the default `n_sim = 2e6`, from
+  about 976 MB to about 168 MB. Because the batched simulation draws
+  from the same seeded stream in a different shape, `prior_mean`/
+  `prior_sd` (and downstream `contraction`/`z_score`/`precision_gain`)
+  move by up to ~0.002 at `A = 4, 10, 18` -- Monte Carlo noise, not a
+  correctness change.
+* B3: `merge_cost()` hard-coded `probs = c(0.05, 0.5, 0.95)` regardless
+  of what `probs` `diagnose_category_merges()` was actually called
+  with. `diagnose_category_merges()` now stores `probs` on the returned
+  object, and `merge_cost()` uses its first/last elements.
+* B4: Tier 3 diagnostics (`diagnose_convergence()`/
+  `diagnose_and_extract_bilatr()`) grouped every two-index quantity by
+  its first index as `dyad_id`, which is right for `theta[d, t]` but
+  wrong for `theta_filtered[k, t]`/`theta_filtered_sd[k, t]` (`k` is the
+  position within `filter_dyads`, not `dyad_id`, whenever `filter_dyads`
+  narrowed the dyad set) and for `log_lik[d, t]` (folded into `theta`'s
+  own `min_ess`/`max_rhat`, and `n_theta` counted all of them despite
+  its name). `tier3` is now `theta` only; every other Tier 3 base name
+  (`theta_filtered`, `theta_filtered_sd`, `log_lik`, whichever are
+  present) gets one row in a new `tier3_other` element instead --
+  `n`/`n_rhat_above`/`n_ess_below`/`max_rhat`/`min_ess_bulk`/
+  `min_ess_tail`, no per-dyad breakdown, so no index translation is
+  needed. **Production diagnostics tables change**: any run with
+  `compute_theta_filtered = 1` (the production runscripts' default) had
+  `theta_filtered*` mixed into `tier3`'s per-dyad `min_ess`/`max_rhat`;
+  it no longer is. `tier3` is unchanged for a fit with no Tier 3
+  quantity besides `theta`.
+* B10: `print.bilatr_diagnostics()` said flagged dyads are "concentrated
+  around dyads with n_dt <= X", where `X` is the *median* `n_dt` among
+  them, not an upper bound -- reworded to "median n_dt among them: X".
+* `diagnose_and_extract_bilatr()` gains a `class_labels` argument (same
+  semantics as `extract_gamma()`/`diagnose_category_merges()`/
+  `icc_curves()`/`check_compositional_residuals()`), so a `stan_data`
+  whose `grouping_var` isn't a scheme `event_class_labels()` recognizes
+  (e.g. `"ERC16NZ"`) no longer needs the caller to overwrite
+  `alpha`/`mu_intercept`'s `class_label` column after the call. The
+  three production runscripts now pass `class_labels =` directly and
+  drop that post-hoc overwrite.
+* `.resolve_class_labels()` used `tryCatch(event_class_labels(stan_data),
+  error = function(e) NULL)` as a soft fallback for a `stan_data` with
+  no usable `"event_classes"` attribute -- which also silently caught a
+  genuine bug inside `event_class_labels()` once the attribute exists.
+  It now checks for the attribute directly and calls
+  `event_class_labels()` unguarded otherwise.
+
+## Internal
+
+* `devtools::check()` is clean: 0 errors, 0 warnings, 0 notes. The
+  remaining NOTE (bare column names in dplyr/tidyr NSE calls) is
+  resolved via `.data$`/`.env$` in code touched this release and a new
+  `R/globals.R` (`utils::globalVariables()`) for the rest.
+* Stale documentation swept for references to functions/arguments
+  retired in earlier 0.9.x/0.10.x releases (`scratch_dir`, `weighted`,
+  `parallel`/`n_workers`, `class_label_fn`, `fit_panel_dev`/
+  `fit_dyad_ts_dev`, `bilatr_orient`, the soft-anchor stack, the retired
+  CAMEO scheme functions, `ingest_icews`, the old GDELT functions,
+  `bilatr_class`/`erc16nz`). Every hit found is already either inside
+  `.stan` file comments (out of scope: no Stan program changes this
+  release), a retirement note clearly framed as history (e.g.
+  `R/model_registry.R`'s registry log, `R/sign_ambiguity.R`), or a false
+  match unrelated to the retired name (e.g. "weighted mean" in prose).
+  Nothing needed changing.
+* The `.BILATR_CHUNK_CORES_STEP_FACTOR`/`.BILATR_CHUNK_CORES_PER_CORE_FACTOR`
+  memory-model constants' roxygen no longer says "PENDING RE-FIT (0.4.2),
+  NOT YET DONE" -- reworded to state plainly that they are conservative
+  macOS-sourced figures, with a corrected Linux measurement suggesting
+  roughly 1.5-2x headroom, and that the Linux re-fit is planned together
+  with the chunk-size/cores vignette. The values themselves (4.5/2.5)
+  are unchanged.
+
 # bilatr 0.10.1
 
 Public API cleanup (see `dev/claude_code_prompt_0.10.1_api_cleanup.md`;

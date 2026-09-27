@@ -33,6 +33,62 @@ test_that("alpha_prior_moments() is memoised: repeated calls with the same argum
   expect_identical(a, b)
 })
 
+test_that("alpha_prior_moments() defaults to a fixed seed, so two fresh calls with no seed argument are identical (0.10.2, B10)", {
+  a <- alpha_prior_moments(6, n_sim = 1e4)
+  b <- alpha_prior_moments(6, n_sim = 1e4)
+  expect_identical(a, b)
+})
+
+test_that("alpha_prior_moments(seed = NULL) is never cached: two unseeded calls are not forced identical (0.10.2, B10)", {
+  a <- alpha_prior_moments(6, n_sim = 1e4, seed = NULL)
+  b <- alpha_prior_moments(6, n_sim = 1e4, seed = NULL)
+  # Monte Carlo noise from two different draws -- not identical, but both
+  # close to the same underlying prior.
+  expect_false(isTRUE(all.equal(a$prior_mean, b$prior_mean, tolerance = 0)))
+  expect_lt(max(abs(a$prior_mean - b$prior_mean)), 0.05)
+})
+
+test_that("alpha_prior_moments() does not disturb the caller's global RNG stream (0.10.2, B2)", {
+  runif(1) # ensure .Random.seed exists before capturing it
+  old_seed <- get(".Random.seed", envir = .GlobalEnv)
+
+  alpha_prior_moments(6, n_sim = 1e4, seed = 3)
+  expect_identical(get(".Random.seed", envir = .GlobalEnv), old_seed)
+
+  # an unseeded call still draws from (and advances) the ambient stream,
+  # like any other random-number-consuming function -- only a supplied
+  # seed is required not to reset it
+  alpha_prior_moments(6, n_sim = 1e4, seed = NULL)
+  expect_false(identical(get(".Random.seed", envir = .GlobalEnv), old_seed))
+})
+
+test_that(".alpha_prior_batch_sizes() splits n_sim into batches summing back to n_sim, remainder folded into the last one", {
+  expect_equal(sum(.alpha_prior_batch_sizes(100, 10)), 100)
+  expect_equal(.alpha_prior_batch_sizes(100, 10), rep(10L, 10))
+  expect_equal(sum(.alpha_prior_batch_sizes(103, 10)), 103)
+  expect_equal(length(.alpha_prior_batch_sizes(103, 10)), 10)
+  # fewer draws than batches: no zero-size batches, remainder still
+  # folds entirely into the (only non-empty) last one
+  expect_equal(.alpha_prior_batch_sizes(3, 10), 3L)
+  expect_equal(sum(.alpha_prior_batch_sizes(3, 10)), 3)
+})
+
+test_that(".batched_alpha_prior_sums()'s moments (within Monte Carlo tolerance) don't depend on how many batches the same total n_sim is split into", {
+  A <- 8
+  n_sim <- 2e5
+  sums_1 <- .with_seed(5, .batched_alpha_prior_sums(A, n_sim, TRUE, 1L))
+  sums_20 <- .with_seed(5, .batched_alpha_prior_sums(A, n_sim, TRUE, 20L))
+
+  moments <- function(sums) {
+    mean_vec <- sums$sum / sums$n
+    list(mean = mean_vec, sd = sqrt((sums$sumsq - sums$n * mean_vec^2) / (sums$n - 1)))
+  }
+  m1 <- moments(sums_1)
+  m20 <- moments(sums_20)
+  expect_lt(max(abs(m1$mean - m20$mean)), 0.01)
+  expect_lt(max(abs(m1$sd - m20$sd)), 0.01)
+})
+
 test_that(".simulate_alpha_prior() satisfies the exact per-draw sum-to-zero identity, not just in expectation", {
   # alpha sums to exactly 0 in every draw (fold multiplies ALL coordinates
   # by the same sign, so it never breaks this), hence
@@ -259,6 +315,45 @@ test_that("merge_cost() on an explicit grouping matches the ladder's cumulative 
   priced <- merge_cost(res, groups)
 
   expect_equal(priced$pct_info_lost, step1$loss_mean, tolerance = 1e-8)
+})
+
+test_that("merge_cost() uses x$probs' outer bounds, not a hard-coded c(0.05, 0.5, 0.95) (0.10.2, B3)", {
+  set.seed(9)
+  D <- 4
+  Tn <- 3
+  A <- 4
+  Y <- array(sample(0:6, D * Tn * A, replace = TRUE), dim = c(D, Tn, A))
+  is_obs <- matrix(1L, D, Tn)
+  stan_data <- list(D = D, T = Tn, A = A, Y = Y, is_obs = is_obs)
+  attr(stan_data, "event_classes") <- as.character(seq_len(A))
+
+  alpha_draws <- matrix(rnorm(500 * A), 500, A)
+  colnames(alpha_draws) <- paste0("alpha[", seq_len(A), "]")
+  fake_fit <- list(draws = function(variables) {
+    posterior::as_draws_array(array(alpha_draws, dim = c(500, 1, A),
+      dimnames = list(NULL, NULL, colnames(alpha_draws))))
+  })
+
+  custom_probs <- c(0.1, 0.5, 0.9)
+  res <- diagnose_category_merges(fake_fit, stan_data, phi = 1, probs = custom_probs)
+  expect_equal(res$probs, custom_probs)
+
+  groups <- list(c("1", "2"))
+  priced <- merge_cost(res, groups)
+
+  # recompute the interval directly at the object's own probs, mirroring
+  # merge_cost()'s internals, to check it actually used 0.1/0.9 (not
+  # 0.05/0.95)
+  alpha_mat <- res$alpha_draws
+  shares <- res$shares
+  vp <- bilatr:::.var_pi_alpha(alpha_mat, shares)
+  cols <- match(groups[[1]], res$event_classes)
+  loss <- bilatr:::.group_merge_loss(alpha_mat, shares, vp$alpha_bar, cols)
+  pct_loss <- loss / vp$var_pi
+  q <- stats::quantile(pct_loss, probs = custom_probs[c(1, 3)])
+
+  expect_equal(priced$pct_info_lost_lower, unname(q[1]))
+  expect_equal(priced$pct_info_lost_upper, unname(q[2]))
 })
 
 test_that("a prior_only = 1 short fit reproduces alpha_prior_moments() within MCMC error", {

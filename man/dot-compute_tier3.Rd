@@ -2,11 +2,25 @@
 % Please edit documentation in R/diagnose_convergence.R
 \name{.compute_tier3}
 \alias{.compute_tier3}
-\title{Compute the Tier 3 (per-dyad-period latent state) diagnostics tibble}
+\title{Compute the Tier 3 (per-dyad-period latent state) diagnostics tibbles}
 \usage{
 .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold)
 }
 \description{
-Compute the Tier 3 (per-dyad-period latent state) diagnostics tibble
+Tier 3 is matched structurally by index count (see
+\code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}}), so it can hold more than \code{theta[d, t]}:
+\code{theta_filtered[k, t]}/\code{theta_filtered_sd[k, t]} (0.5.0+, \code{k} is the
+\emph{position within} \code{filter_dyads}, not \code{dyad_id}) and \code{log_lik[d, t]}
+(\code{compute_log_lik = 1}) also land here. Grouping every Tier 3 base
+name by its first index as \code{dyad_id}, as this function did through
+0.10.1, mis-joins \verb{theta_filtered*} onto the wrong dyads whenever
+\code{filter_dyads} narrows the dyad set, folds \code{log_lik} into \code{theta}'s own
+\code{min_ess}/\code{max_rhat}, and inflates \code{n_theta} to count all of them
+despite its name (0.10.2, B4). This now splits Tier 3 in two: \code{tier3}
+aggregates \code{base_name == "theta"} only (matching its name and the
+per-dyad \code{dyad_id}/\code{time_index} semantics the rest of the package
+assumes), and every other Tier 3 base name gets one row in
+\code{tier3_other} -- no per-dyad breakdown, so no \code{filter_dyads}
+index-translation is needed there either.
 }
 \keyword{internal}

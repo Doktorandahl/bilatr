@@ -210,6 +210,9 @@ test_that("diagnose_convergence() Tier 3 is aggregated per dyad, not per dyad-pe
 
   expect_equal(nrow(diag$tier3), 4L) # 4 dyads with theta[d,t], not 8 dyad-periods
   expect_true(all(c("min_ess_bulk", "min_ess_tail", "share_ess_below_threshold") %in% names(diag$tier3)))
+  # 0.10.2, B4: make_fake_draws() has no Tier 3 quantity besides theta, so
+  # tier3_other is a zero-row tibble, not NULL (3 was in tiers).
+  expect_equal(nrow(diag$tier3_other), 0L)
 })
 
 # --- class and print method ------------------------------------------------
@@ -220,7 +223,7 @@ test_that("diagnose_convergence() returns a bilatr_diagnostics object", {
   # 0.7.1: always carries a `gamma` element (NULL unless `stan_model` has
   # one -- default .BILATR_DEFAULT_MODEL here does not; see
   # .assemble_bilatr_diagnostics()/.bilatr_model_has_gamma()).
-  expect_named(diag, c("tier1", "gamma", "tier2", "tier3", "summary"))
+  expect_named(diag, c("tier1", "gamma", "tier2", "tier3", "tier3_other", "summary"))
   expect_null(diag$gamma)
 })
 
@@ -241,6 +244,7 @@ test_that("diagnose_convergence(tiers = 1) computes only Tier 1 and needs no n_d
   expect_false(is.null(diag$tier1))
   expect_null(diag$tier2)
   expect_null(diag$tier3)
+  expect_null(diag$tier3_other)
   expect_equal(diag$summary$tiers_computed, 1L)
   expect_true("mu_theta0" %in% diag$tier1$variable[diag$tier1$flagged])
 })
@@ -262,6 +266,7 @@ test_that("diagnose_convergence(tiers = 2) computes only Tier 2", {
   expect_null(diag$tier1)
   expect_false(is.null(diag$tier2))
   expect_null(diag$tier3)
+  expect_null(diag$tier3_other)
   expect_equal(diag$summary$tiers_computed, 2L)
   expect_true(all(c("phi_ess_bulk", "worse_than_expected") %in% names(diag$tier2)))
 })
@@ -273,6 +278,7 @@ test_that("diagnose_convergence(tiers = c(2, 3)) matches the Tier 2/3 output of 
   expect_null(partial$tier1)
   expect_equal(partial$tier2, full$tier2)
   expect_equal(partial$tier3, full$tier3)
+  expect_equal(partial$tier3_other, full$tier3_other)
 })
 
 test_that("print.bilatr_diagnostics() only prints sections for computed tiers", {
@@ -282,6 +288,58 @@ test_that("print.bilatr_diagnostics() only prints sections for computed tiers", 
   expect_true(any(grepl("Tier 1", out)))
   expect_false(any(grepl("Tier 2", out)))
   expect_false(any(grepl("Tier 3", out)))
+})
+
+test_that("print.bilatr_diagnostics() reports flagged dyads' median n_dt, not a bound (B10)", {
+  set.seed(1)
+  n_iter <- 600
+  n_chain <- 4
+  variables <- c("alpha[1]", "alpha[2]", "theta[1,1]", "theta[1,2]", "theta[2,1]", "theta[2,2]")
+  arr <- array(
+    stats::rnorm(n_iter * n_chain * length(variables)),
+    dim = c(n_iter, n_chain, length(variables)),
+    dimnames = list(NULL, NULL, variables)
+  )
+  # dyad 1's theta: random-walk -> low ESS, so dyad 1 gets flagged; dyad 2
+  # stays iid with plenty of draws (comfortably above the 400 ESS
+  # threshold), so the flagged set is exactly {dyad 1}.
+  for (ch in seq_len(n_chain)) {
+    arr[, ch, "theta[1,1]"] <- cumsum(arr[, ch, "theta[1,1]"])
+    arr[, ch, "theta[1,2]"] <- cumsum(arr[, ch, "theta[1,2]"])
+  }
+  draws <- posterior::as_draws_array(arr)
+  n_dt <- tibble::tibble(dyad_id = c(1, 2), n_dt = c(50, 500))
+
+  diag <- suppressWarnings(diagnose_convergence(draws, n_dt = n_dt))
+  flagged <- diag$tier3$min_ess_bulk < 400 | diag$tier3$min_ess_tail < 400
+  expect_equal(diag$tier3$dyad_id[flagged], 1L)
+
+  out <- capture.output(print(diag))
+  expect_true(any(grepl("median n_dt among them: 50", out, fixed = TRUE)))
+  expect_false(any(grepl("concentrated around", out)))
+})
+
+test_that("print.bilatr_diagnostics() prints one line per tier3_other base name (B4)", {
+  set.seed(1)
+  n_iter <- 100
+  n_chain <- 2
+  variables <- c(
+    "alpha[1]", "alpha[2]", "theta[1,1]", "theta[1,2]", "theta[2,1]", "theta[2,2]",
+    "log_lik[1,1]", "log_lik[1,2]", "log_lik[2,1]", "log_lik[2,2]"
+  )
+  arr <- array(
+    stats::rnorm(n_iter * n_chain * length(variables)),
+    dim = c(n_iter, n_chain, length(variables)),
+    dimnames = list(NULL, NULL, variables)
+  )
+  draws <- posterior::as_draws_array(arr)
+  n_dt <- tibble::tibble(dyad_id = c(1, 2), n_dt = c(50, 500))
+
+  diag <- diagnose_convergence(draws, n_dt = n_dt)
+  expect_equal(diag$tier3_other$base_name, "log_lik")
+
+  out <- capture.output(print(diag))
+  expect_true(any(grepl("log_lik:", out, fixed = TRUE)))
 })
 
 test_that("print.bilatr_diagnostics() always prints flagged Tier 1 rows in full", {
@@ -462,6 +520,7 @@ test_that("diagnose_convergence() from CSV files matches the in-memory path exac
   expect_equal(dplyr::arrange(diag_mem$tier1, variable), dplyr::arrange(diag_csv_chunked$tier1, variable))
   expect_equal(dplyr::arrange(diag_mem$tier2, dyad_id), dplyr::arrange(diag_csv_chunked$tier2, dyad_id))
   expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_chunked$tier3, dyad_id))
+  expect_equal(diag_mem$tier3_other, diag_csv_chunked$tier3_other)
 
   # default max_memory_mb -> Tier 3 fits in one chunk for this tiny
   # fixture, so this also exercises .read_diagnostics_summary_from_csv()'s
@@ -471,6 +530,7 @@ test_that("diagnose_convergence() from CSV files matches the in-memory path exac
   expect_equal(dplyr::arrange(diag_mem$tier1, variable), dplyr::arrange(diag_csv_unchunked$tier1, variable))
   expect_equal(dplyr::arrange(diag_mem$tier2, dyad_id), dplyr::arrange(diag_csv_unchunked$tier2, dyad_id))
   expect_equal(dplyr::arrange(diag_mem$tier3, dyad_id), dplyr::arrange(diag_csv_unchunked$tier3, dyad_id))
+  expect_equal(diag_mem$tier3_other, diag_csv_unchunked$tier3_other)
 
   # tier labels survive chunking: same dyads, same columns as the in-memory path
   expect_equal(sort(diag_csv_chunked$tier2$dyad_id), sort(diag_mem$tier2$dyad_id))
@@ -496,6 +556,7 @@ test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requeste
   )
   expect_null(diag_tier1_only$tier2)
   expect_null(diag_tier1_only$tier3)
+  expect_null(diag_tier1_only$tier3_other)
 
   # the read really was narrowed to Tier 1's own variable set (derived
   # from $metadata()$variables, never touching a draw) rather than
@@ -523,6 +584,7 @@ test_that("diagnose_convergence() from CSV files: parallel and sequential chunk 
   )))
 
   expect_equal(dplyr::arrange(diag_seq$tier3, dyad_id), dplyr::arrange(diag_par$tier3, dyad_id))
+  expect_equal(diag_seq$tier3_other, diag_par$tier3_other)
 })
 
 test_that("diagnose_convergence() from CSV files respects tiers = 1 (no n_dt, no Tier 3 read at all)", {
@@ -536,6 +598,45 @@ test_that("diagnose_convergence() from CSV files respects tiers = 1 (no n_dt, no
   expect_false(is.null(diag$tier1))
   expect_null(diag$tier2)
   expect_null(diag$tier3)
+  expect_null(diag$tier3_other)
+})
+
+test_that("diagnose_convergence() Tier 3 is theta-only; theta_filtered/theta_filtered_sd land in tier3_other, not mis-joined by filter position (B4)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture(extra_data = list(
+    compute_theta_filtered = 1, n_filter_dyads = 2L, filter_dyads = c(3L, 5L)
+  ))
+  diag <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, tiers = 1:3))
+
+  # D = 6, T = 4 (make_csv_diagnostics_fixture()): tier3 holds exactly one
+  # row per dyad, n_theta == T for every dyad -- not inflated by the two
+  # filtered-dyad quantities folded in under the pre-0.10.2 mis-join.
+  expect_equal(nrow(diag$tier3), 6L)
+  expect_true(all(diag$tier3$n_theta == 4L))
+
+  expect_true(all(c("theta_filtered", "theta_filtered_sd") %in% diag$tier3_other$base_name))
+  n_filter_dyads <- 2L
+  tf_rows <- diag$tier3_other[diag$tier3_other$base_name %in% c("theta_filtered", "theta_filtered_sd"), ]
+  expect_true(all(tf_rows$n == n_filter_dyads * 4L))
+  expect_equal(diag$summary$n_tier3_other_groups, 2L)
+})
+
+test_that("diagnose_convergence() gives log_lik its own tier3_other row when compute_log_lik = 1 (B4)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_on_ci()
+
+  fx <- make_csv_diagnostics_fixture(extra_data = list(compute_log_lik = 1))
+  diag <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, tiers = 1:3))
+
+  expect_equal(nrow(diag$tier3), 6L)
+  expect_true(all(diag$tier3$n_theta == 4L))
+  expect_true("log_lik" %in% diag$tier3_other$base_name)
+  log_lik_row <- diag$tier3_other[diag$tier3_other$base_name == "log_lik", ]
+  expect_equal(log_lik_row$n, 6L * 4L)
 })
 
 test_that("diagnose_convergence() from CSV files messages about the max_memory_mb default only when it's left unset", {

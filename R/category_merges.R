@@ -246,7 +246,9 @@
 #'   representative figure, not a per-dyad-period computation).
 #' @param probs Posterior interval bounds to report alongside the mean
 #'   (first and last are used as the interval; a third, e.g. the median,
-#'   is ignored for `pairwise`/`ladder` but not `categories`).
+#'   is ignored for `pairwise`/`ladder` but not `categories`). Stored on
+#'   the returned object (0.10.2, B3) so [merge_cost()] reuses the same
+#'   outer bounds rather than a hard-coded `c(0.05, 0.5, 0.95)`.
 #' @return A `bilatr_category_merges` object: `categories` (one row per
 #'   class: `action_index`, `event_class`, `class_label`, `post_mean`,
 #'   `post_sd`, `share`, `info_share`, `contraction`, `z_score`,
@@ -255,8 +257,9 @@
 #'   path from `A` down to 2 -- **read this one**: it gives the whole
 #'   curve so a knee can be picked rather than pricing one grouping at a
 #'   time; greedy is not guaranteed globally optimal for a fixed target
-#'   `A`, standard for agglomerative methods), and `summary` (scalars for
-#'   `print()`).
+#'   `A`, standard for agglomerative methods), `summary` (scalars for
+#'   `print()`), and `probs` (this call's `probs`, as used by
+#'   [merge_cost()]).
 #' @export
 diagnose_category_merges <- function(
   fit,
@@ -381,7 +384,8 @@ diagnose_category_merges <- function(
       alpha_draws = alpha_mat,
       shares = shares_used,
       event_classes = event_classes,
-      class_labels = labels
+      class_labels = labels,
+      probs = probs
     ),
     class = "bilatr_category_merges"
   )
@@ -425,12 +429,13 @@ merge_cost <- function(x, groups) {
     .group_merge_loss(alpha_mat, shares, vp$alpha_bar, cols)
   }))
   pct_loss <- total_loss / vp$var_pi
-  q <- stats::quantile(pct_loss, probs = c(0.05, 0.5, 0.95))
+  probs_used <- x$probs[c(1, length(x$probs))]
+  q <- stats::quantile(pct_loss, probs = probs_used)
 
   tibble::tibble(
     pct_info_lost = mean(pct_loss),
     pct_info_lost_lower = unname(q[1]),
-    pct_info_lost_upper = unname(q[3])
+    pct_info_lost_upper = unname(q[2])
   )
 }
 

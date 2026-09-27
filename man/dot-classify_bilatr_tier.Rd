@@ -10,10 +10,12 @@
 \item{variable}{Character vector of \code{summarise_draws()} variable names.}
 }
 \value{
-A tibble with columns \code{variable}, \code{tier} (\code{1L}, \code{2L}, \code{3L}, or
-\code{NA} for excluded sign-ambiguous raw parameters), \code{dyad_id} (the
-first index, \code{NA} outside Tier 2/3), and \code{time_index} (the second
-index, \code{NA} outside Tier 3).
+A tibble with columns \code{variable}, \code{base_name} (0.10.2: kept so
+downstream Tier 3 code -- \code{\link[=.compute_tier3]{.compute_tier3()}} -- can split by base
+name without re-deriving it), \code{tier} (\code{1L}, \code{2L}, \code{3L}, or \code{NA} for
+excluded sign-ambiguous raw parameters), \code{dyad_id} (the first index,
+\code{NA} outside Tier 2/3), and \code{time_index} (the second index, \code{NA}
+outside Tier 3).
 }
 \description{
 Sign-ambiguous raw parameters (see \code{\link[=.bilatr_sign_ambiguous_raw_names]{.bilatr_sign_ambiguous_raw_names()}}:

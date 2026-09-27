@@ -235,3 +235,26 @@ test_that("assign_modified_root_code() reproduces its pre-0.10.1 snapshot exactl
   snapshot <- readRDS(testthat::test_path("fixtures", "modified_root_code_snapshot.rds"))
   expect_equal(assign_modified_root_code(snapshot$code), snapshot$modified_root_code)
 })
+
+test_that(".resolve_class_labels() falls back to raw event_classes when stan_data has no \"event_classes\" attribute (0.10.2, B0b)", {
+  event_classes <- c("2", "5", "18")
+  stan_data <- list() # no "event_classes" attribute at all
+  expect_equal(.resolve_class_labels(NULL, event_classes, stan_data = stan_data), event_classes)
+  expect_equal(.resolve_class_labels(NULL, event_classes, stan_data = NULL), event_classes)
+})
+
+test_that(".resolve_class_labels() calls event_class_labels() (not a swallowed fallback) whenever stan_data has an \"event_classes\" attribute (0.10.2, B0b)", {
+  # 0.10.1 wrapped this call in tryCatch(..., error = function(e) NULL),
+  # which would also swallow a genuine bug inside event_class_labels()
+  # once the attribute exists, not just the "no attribute" case it was
+  # meant to catch. 0.10.2 tests for the attribute directly instead, so
+  # the only case that can produce this function's `NULL`-then-fallback
+  # path is the attribute being genuinely absent (tested above); once it
+  # is present, event_class_labels()'s own return value -- success or a
+  # real error -- is what callers see.
+  stan_data <- structure(list(), event_classes = c("2", "5", "18"), grouping_var = "ModifiedRootCode")
+  expect_equal(
+    .resolve_class_labels(NULL, c("2", "5", "18"), stan_data = stan_data),
+    unname(event_class_labels(stan_data))
+  )
+})

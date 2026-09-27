@@ -34,15 +34,16 @@ anywhere else in \code{\link[=.classify_bilatr_tier]{.classify_bilatr_tier()}}: 
 structurally, by bracket-index count (\code{n_index >= 2}, see that
 function), not by name, so a \code{theta_filtered[d, t]}/
 \code{theta_filtered_sd[d, t]} variable lands there automatically, the same
-way \code{log_lik[d, t]} already does. One caveat: when
-\code{assemble_stan_data()}'s \code{filter_dyads} narrows the dyad set, the
-\code{dyad_id}/\code{index_1} these two variables get in Tier 3 output is the
-\emph{position within the filtered subset} (\verb{1..n_filter_dyads}), not the
-true \code{D}-space \code{dyad_id} -- there is no translation layer back to the
-true \code{dyad_id} here (out of scope for 0.5.0); joining these two
-variables' Tier 3 rows to \code{dyad_ids}/other per-dyad metadata by
-\code{dyad_id} is only valid when \code{filter_dyads} was \code{NULL} (i.e. every
-dyad was filtered, in \code{Y}'s original order).
+way \code{log_lik[d, t]} already does. Through 0.10.1, \code{\link[=.compute_tier3]{.compute_tier3()}}
+grouped every Tier 3 base name by its first index as \code{dyad_id}, which
+was wrong for these two: that index is the \emph{position within}
+\code{filter_dyads}, not the true \code{D}-space \code{dyad_id}, so their rows were
+mis-joined into other dyads' \code{min_ess}/\code{max_rhat} whenever
+\code{filter_dyads} narrowed the dyad set. 0.10.2 (B4) fixes this by giving
+every Tier 3 base name other than \code{theta} its own row in a separate
+\code{tier3_other} table (one row per base name, no per-dyad breakdown, so
+no index translation is needed) -- see \code{\link[=.compute_tier3]{.compute_tier3()}} and
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \verb{@return}.
 \code{gamma} (0.7.0, \code{stable_gamma} only: \verb{A x n_countries}) is listed here
 too, for the same by-name reason as \code{alpha}: it has two \verb{[...]}
 indices (action, country), which the structural

@@ -4,7 +4,7 @@
 \alias{alpha_prior_moments}
 \title{Prior mean/sd of \code{alpha}, per action index}
 \usage{
-alpha_prior_moments(A, n_sim = 2e+06, fold = TRUE, seed = NULL)
+alpha_prior_moments(A, n_sim = 2e+06, fold = TRUE, seed = 1L)
 }
 \arguments{
 \item{A}{Number of action classes.}
@@ -15,7 +15,8 @@ alpha_prior_moments(A, n_sim = 2e+06, fold = TRUE, seed = NULL)
 apply to \code{alpha} (see \code{orientation_sign()}); if \code{FALSE}, return the
 unfolded (exchangeable) prior.}
 
-\item{seed}{Optional seed for reproducibility.}
+\item{seed}{Seed for reproducibility, or \code{NULL} for an unseeded,
+uncached draw. Defaults to \code{1L}.}
 }
 \value{
 A tibble with columns \code{action_index}, \code{prior_mean}, \code{prior_sd}.
@@ -37,9 +38,21 @@ this function's output instead wherever a per-class prior sd/mean is
 needed (see \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}).
 }
 \details{
-Computed by Monte Carlo (see \code{\link[=.simulate_alpha_prior]{.simulate_alpha_prior()}}) rather than a
-closed form, so it stays correct if the underlying Stan construction
-ever changes; results are memoised per \verb{(A, n_sim, fold, seed)}.
+Computed by Monte Carlo (see \code{\link[=.simulate_alpha_prior]{.simulate_alpha_prior()}}, via the batched
+\code{\link[=.batched_alpha_prior_sums]{.batched_alpha_prior_sums()}}, 0.10.2) rather than a closed form, so it
+stays correct if the underlying Stan construction ever changes.
+
+\code{seed} defaults to \code{1L} (0.10.2, B10): earlier versions defaulted to
+\code{NULL} and memoised under a cache key that included the seed, so the
+\emph{first} unseeded call in a session -- effectively seeded by whatever
+state the RNG happened to be in -- got cached and silently reused for
+every later unseeded call, making \code{contraction}/\code{z_score}/
+\code{precision_gain} (via \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}) differ between
+sessions at Monte Carlo precision. Pass \code{seed = NULL} explicitly to
+opt back into that unseeded behaviour; it is never cached, so repeat
+unseeded calls draw fresh Monte Carlo noise each time. Any non-\code{NULL}
+seed (including the \code{1L} default) is memoised per \verb{(A, n_sim, fold, seed)}, via \code{\link[=.with_seed]{.with_seed()}}, so it never disturbs the caller's own
+global RNG stream (0.10.2, B2).
 }
 \examples{
 alpha_prior_moments(4)

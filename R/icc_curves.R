@@ -35,8 +35,7 @@
   D <- stan_data$D
   Tn <- stan_data$T
   n_sample <- min(n_dyads_fallback, D)
-  set.seed(seed)
-  sampled_d <- sort(sample(D, n_sample))
+  sampled_d <- .with_seed(seed, sort(sample(D, n_sample)))
   theta_vars <- unlist(lapply(sampled_d, function(d) paste0("theta[", d, ",", seq_len(Tn), "]")))
 
   draws <- .get_draws(fit, theta_vars)

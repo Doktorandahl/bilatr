@@ -39,11 +39,11 @@ range -- validate with \code{dev/bench_memory.R} at your actual \code{n_cores}
 before trusting the estimate for a real SLURM allocation that large.
 }
 \details{
-\strong{PENDING RE-FIT (0.4.2), NOT YET DONE}: see
+\strong{Conservative by design, pending a Linux re-fit (0.10.2):} see
 \link{.BILATR_CHUNK_CORES_STEP_FACTOR}'s docs -- the corrected (Pss/cgroup)
-benchmark suggests ~2.6 here, consistent with this constant's 2.5
-within measurement noise (unlike the step term, which moved more).
-Still pending a full Linux-sourced re-fit before treating either as
-recalibrated rather than the pre-correction placeholder.
+Linux benchmark suggests ~2.6 here, consistent with this constant's
+2.5 within measurement noise (unlike the step term, which moved
+more). The same Linux re-fit planned for the step term (alongside the
+chunk-size/cores vignette) will settle this one too.
 }
 \keyword{internal}

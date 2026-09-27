@@ -15,7 +15,12 @@
 apply to \code{alpha} (see \code{orientation_sign()}); if \code{FALSE}, return the
 unfolded (exchangeable) prior.}
 
-\item{seed}{Optional seed for reproducibility.}
+\item{seed}{Optional seed for reproducibility. When supplied, uses
+\code{\link[=.with_seed]{.with_seed()}} (0.10.2, B2), so this never disturbs the caller's own
+global RNG stream; when \code{NULL}, draws are taken from whatever stream
+is already running (used internally by \code{\link[=alpha_prior_moments]{alpha_prior_moments()}}'s own
+batched simulation, which seeds once around the whole batch loop
+rather than once per batch).}
 }
 \value{
 An \verb{n_sim x A} numeric matrix of simulated \code{alpha} draws.

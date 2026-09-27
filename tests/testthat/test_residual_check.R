@@ -89,6 +89,30 @@ test_that(".stratified_dyad_sample() returns the target size, spans strata, and 
   expect_equal(length(s3), 10)
 })
 
+test_that(".stratified_dyad_sample() returns every element when a stratum is a singleton (B1)", {
+  # sample(idx, k) on a length-1 idx samples from 1:idx instead of
+  # returning that element (R's classic sample()-on-a-single-number
+  # trap) -- needs D < 2 * n_strata so at least one stratum has exactly
+  # one member. Reproduced pre-fix: 4-8 of the 10 dyads returned across
+  # 200 seeds, never all 10.
+  n_d <- 1:10
+  for (seed in 1:200) {
+    s <- bilatr:::.stratified_dyad_sample(n_d, n_target = 10, n_strata = 8, seed = seed)
+    expect_identical(s, 1:10)
+  }
+})
+
+test_that(".stratified_dyad_sample() draws a sub-D sample, one per stratum's range, even with singleton strata (B1)", {
+  n_d <- 1:10
+  strat <- dplyr::ntile(n_d, 8)
+  for (seed in 1:50) {
+    s <- bilatr:::.stratified_dyad_sample(n_d, n_target = 6, n_strata = 8, seed = seed)
+    expect_equal(length(s), 6)
+    expect_equal(length(unique(s)), 6)
+    expect_true(all(s %in% seq_along(n_d)))
+  }
+})
+
 test_that(".rmultinom_rows()/.dirichlet_multinomial_rows() produce correctly-summed, roughly-centred draws", {
   set.seed(4)
   n_draws <- 2000
@@ -314,4 +338,23 @@ test_that("check_compositional_residuals() runs end to end on a real CmdStan fix
   write_residual_check(res, outdir)
   expect_true(file.exists(file.path(outdir, "residual_check_dyads.csv")))
   expect_true(file.exists(file.path(outdir, "residual_check_perp_vs_n.png")))
+})
+
+test_that("check_compositional_residuals() does not disturb the caller's global RNG stream (0.10.2, B2)", {
+  skip_if_no_cmdstan()
+  fx <- make_csv_diagnostics_fixture()
+
+  runif(1) # ensure .Random.seed exists before capturing it
+  old_seed <- get(".Random.seed", envir = .GlobalEnv)
+
+  res1 <- check_compositional_residuals(
+    fx$fit, fx$stan_data, n_dyads = 6, n_strata = 2, n_draws = 20, seed = 1
+  )
+  expect_identical(get(".Random.seed", envir = .GlobalEnv), old_seed)
+
+  # same seed -> same sampled dyads/draws as before this change
+  res2 <- check_compositional_residuals(
+    fx$fit, fx$stan_data, n_dyads = 6, n_strata = 2, n_draws = 20, seed = 1
+  )
+  expect_equal(res1$dyads, res2$dyads)
 })

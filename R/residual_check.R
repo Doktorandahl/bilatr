@@ -261,21 +261,26 @@
   n_strata <- max(1L, min(n_strata, D))
   strat <- dplyr::ntile(n_d, n_strata)
 
-  set.seed(seed)
-  per_stratum <- floor(n_target / n_strata)
-  remainder <- n_target - per_stratum * n_strata
-  sampled <- integer(0)
-  for (s in seq_len(n_strata)) {
-    idx <- which(strat == s)
-    k <- min(per_stratum + as.integer(s <= remainder), length(idx))
-    if (k > 0) sampled <- c(sampled, sample(idx, k))
-  }
-  if (length(sampled) < n_target) {
-    pool <- setdiff(seq_len(D), sampled)
-    extra_n <- min(n_target - length(sampled), length(pool))
-    if (extra_n > 0) sampled <- c(sampled, sample(pool, extra_n))
-  }
-  sort(unique(sampled))
+  .with_seed(seed, {
+    per_stratum <- floor(n_target / n_strata)
+    remainder <- n_target - per_stratum * n_strata
+    sampled <- integer(0)
+    for (s in seq_len(n_strata)) {
+      idx <- which(strat == s)
+      k <- min(per_stratum + as.integer(s <= remainder), length(idx))
+      # idx[sample.int(length(idx), k)], NOT sample(idx, k): when idx has
+      # length 1, sample(idx, k) samples from 1:idx instead of returning
+      # that one element (R's classic sample()-on-a-single-number trap;
+      # 0.10.2, B1) -- wrong dyads, and fewer than k after unique().
+      if (k > 0) sampled <- c(sampled, idx[sample.int(length(idx), k)])
+    }
+    if (length(sampled) < n_target) {
+      pool <- setdiff(seq_len(D), sampled)
+      extra_n <- min(n_target - length(sampled), length(pool))
+      if (extra_n > 0) sampled <- c(sampled, pool[sample.int(length(pool), extra_n)])
+    }
+    sort(unique(sampled))
+  })
 }
 
 #' Posterior predictive check for a missing dyad-level compositional
@@ -494,237 +499,252 @@ check_compositional_residuals <- function(
   am_mat <- posterior::as_draws_matrix(am_draws)
   total_draws <- nrow(am_mat)
   n_draws_used <- min(n_draws, total_draws)
-  set.seed(seed + 1L)
-  draw_idx <- sort(sample(total_draws, n_draws_used))
 
-  alpha_mat <- .as_plain_matrix(am_mat[draw_idx, alpha_vars, drop = FALSE])
-  mu_mat <- .as_plain_matrix(am_mat[draw_idx, mu_vars, drop = FALSE])
+  # Everything from here on, through the function's return value, must
+  # run under one seeded RNG stream (0.10.2, B2): draw_idx itself, and
+  # every yrep_d ~ DirMult(conc) draw the per-dyad loop below takes via
+  # .dirichlet_multinomial_rows() (unseeded rgamma()/runif()/rbinom()
+  # calls with no set.seed() of their own). Pre-0.10.2, the bare
+  # set.seed(seed + 1L) that used to sit where the .with_seed() call now
+  # opens had exactly this effect as a side effect -- it reset the global
+  # stream once, and nothing downstream called set.seed() again, so the
+  # yrep draws rode the same seeded sequence. Wrapping only the draw_idx
+  # line (this function's own local, restorable seed) would keep that
+  # line reproducible but decouple the yrep simulation from `seed`
+  # entirely, breaking this function's documented "same seed -> same
+  # result" contract. So the whole tail is one .with_seed() block.
+  .with_seed(seed + 1L, {
+    draw_idx <- sort(sample(total_draws, n_draws_used))
 
-  # --- 2b. read gamma too, for stable_gamma fits (Tier 1, cheap: A x
-  # n_countries). gamma is orientation-FREE by construction (see
-  # inst/stan/bilatr_alphanorm_gamma.stan's header). Row i of `gamma_mat`
-  # corresponds to the SAME posterior draw as row i of
-  # `alpha_mat`/`mu_mat` (draw_idx, already determined above, is reused
-  # rather than re-derived -- same reasoning the module's existing
-  # comment gives for phi/theta below).
-  gamma_col <- NULL
-  if (has_gamma) {
-    gamma_draws <- .get_draws(fit, "gamma")
-    gamma_mat_full <- posterior::as_draws_matrix(gamma_draws)
-    gamma_mat <- .as_plain_matrix(gamma_mat_full[draw_idx, , drop = FALSE])
-    gamma_col <- function(c) gamma_mat[, paste0("gamma[", seq_len(A), ",", c, "]"), drop = FALSE]
-  }
+    alpha_mat <- .as_plain_matrix(am_mat[draw_idx, alpha_vars, drop = FALSE])
+    mu_mat <- .as_plain_matrix(am_mat[draw_idx, mu_vars, drop = FALSE])
 
-  # --- 3. read phi for the sampled dyads only ---
-  phi_vars <- paste0("phi[", sampled_dyad_ids, "]")
-  phi_draws <- .get_draws(fit, phi_vars)
-  phi_mat_full <- posterior::as_draws_matrix(phi_draws)[, phi_vars, drop = FALSE]
-  phi_mat <- .as_plain_matrix(phi_mat_full[draw_idx, , drop = FALSE])
-
-  # --- 4. read theta[d, t] for the sampled dyads' OBSERVED periods only
-  # (1d: never all of Tier 3) ---
-  obs_list <- lapply(sampled_dyad_ids, function(d) which(is_obs[d, ] == 1))
-  n_obs_t <- vapply(obs_list, length, integer(1))
-  keep <- n_obs_t > 0
-  if (!all(keep)) {
-    sampled_dyad_ids <- sampled_dyad_ids[keep]
-    obs_list <- obs_list[keep]
-    n_obs_t <- n_obs_t[keep]
-    phi_mat <- phi_mat[, keep, drop = FALSE]
-  }
-  D_sample <- length(sampled_dyad_ids)
-
-  theta_vars <- unlist(purrr::map2(sampled_dyad_ids, obs_list, function(d, ts) paste0("theta[", d, ",", ts, "]")))
-  theta_draws <- .get_draws(fit, theta_vars)
-  # Row i of every matrix read above corresponds to the same posterior
-  # draw: posterior::as_draws_matrix() flattens chains/iterations in a
-  # fixed, deterministic order given the same underlying fit, whether
-  # read from an in-memory CmdStanMCMC or from raw CSVs via the same
-  # `fit` value -- so draw_idx (computed once, from the alpha/mu read)
-  # is valid to reuse for phi and theta without re-deriving it.
-  theta_mat_full <- posterior::as_draws_matrix(theta_draws)[, theta_vars, drop = FALSE]
-  theta_mat <- .as_plain_matrix(theta_mat_full[draw_idx, , drop = FALSE])
-
-  # --- 5. per-dyad loop: pbar_d, y_d, yrep_d, then eps-cheap
-  # r/along/perp at eps and eps_sensitivity ---
-  alpha_c <- alpha_mat - rowMeans(alpha_mat) # defensive; a no-op here since alpha sums to zero exactly by construction (sum_to_zero_vector in every registered model) -- keep for a future model that does not
-  alpha_c_ss <- rowSums(alpha_c^2)
-
-  eps_all <- c(eps, setdiff(eps_sensitivity, eps))
-  n_eps <- length(eps_all)
-
-  T_obs_acc <- matrix(0, n_draws_used, n_eps)
-  T_rep_acc <- matrix(0, n_draws_used, n_eps)
-  sum_theta_bar_sq <- numeric(n_draws_used)
-  sum_theta_sq <- numeric(n_draws_used)
-  n_dt_total <- 0L
-  cat_contrib_obs <- matrix(0, A, n_draws_used)
-  cat_contrib_rep <- matrix(0, A, n_draws_used)
-  dyad_rows <- vector("list", D_sample)
-
-  col_offset <- 0L
-  for (i in seq_len(D_sample)) {
-    d <- sampled_dyad_ids[i]
-    ts <- obs_list[[i]]
-    k_t <- length(ts)
-    cols <- (col_offset + 1L):(col_offset + k_t)
-    col_offset <- col_offset + k_t
-    theta_d <- theta_mat[, cols, drop = FALSE] # n_draws_used x k_t
-
-    Y_d <- Y[d, , ]
-    Y_d_obs <- Y_d[ts, , drop = FALSE] # k_t x A
-    n_dt_vec <- rowSums(Y_d_obs)
-    y_d <- colSums(Y_d_obs)
-    n_d <- sum(n_dt_vec)
-
-    theta_bar_d <- rowMeans(theta_d)
-    sum_theta_bar_sq <- sum_theta_bar_sq + theta_bar_d^2
-    sum_theta_sq <- sum_theta_sq + rowSums(theta_d^2)
-    n_dt_total <- n_dt_total + k_t
-
-    pbar_num <- matrix(0, n_draws_used, A)
-    pbar_den <- 0
-    yrep_d <- matrix(0, n_draws_used, A)
-    phi_vec_d <- phi_mat[, i]
-
-    # g_d, once per dyad (reused across every observed period below), not
-    # once per dyad-period -- matching stable_gamma's own Stan likelihood
-    # (see inst/stan/include/partial_log_lik.stanfunctions'
-    # partial_log_lik_offset(), which builds g the same way, once per
-    # dyad, outside its own t loop).
-    g_d <- if (has_gamma) {
-      ca <- stan_data$ctry_a[d]
-      cb <- stan_data$ctry_b[d]
-      wsend <- stan_data$w_send[d]
-      if (wsend == 1) gamma_col(ca) else wsend * gamma_col(ca) + (1 - wsend) * gamma_col(cb)
-    } else {
-      0
+    # --- 2b. read gamma too, for stable_gamma fits (Tier 1, cheap: A x
+    # n_countries). gamma is orientation-FREE by construction (see
+    # inst/stan/bilatr_alphanorm_gamma.stan's header). Row i of `gamma_mat`
+    # corresponds to the SAME posterior draw as row i of
+    # `alpha_mat`/`mu_mat` (draw_idx, already determined above, is reused
+    # rather than re-derived -- same reasoning the module's existing
+    # comment gives for phi/theta below).
+    gamma_col <- NULL
+    if (has_gamma) {
+      gamma_draws <- .get_draws(fit, "gamma")
+      gamma_mat_full <- posterior::as_draws_matrix(gamma_draws)
+      gamma_mat <- .as_plain_matrix(gamma_mat_full[draw_idx, , drop = FALSE])
+      gamma_col <- function(c) gamma_mat[, paste0("gamma[", seq_len(A), ",", c, "]"), drop = FALSE]
     }
 
-    for (j in seq_len(k_t)) {
-      theta_dt <- theta_d[, j]
-      eta <- alpha_mat * theta_dt - mu_mat - g_d
-      p_dt <- .softmax_rows(eta)
-      n_dt <- n_dt_vec[j]
-      pbar_num <- pbar_num + n_dt * p_dt
-      pbar_den <- pbar_den + n_dt
-      conc <- phi_vec_d * p_dt
-      yrep_d <- yrep_d + .dirichlet_multinomial_rows(n_dt, conc)
+    # --- 3. read phi for the sampled dyads only ---
+    phi_vars <- paste0("phi[", sampled_dyad_ids, "]")
+    phi_draws <- .get_draws(fit, phi_vars)
+    phi_mat_full <- posterior::as_draws_matrix(phi_draws)[, phi_vars, drop = FALSE]
+    phi_mat <- .as_plain_matrix(phi_mat_full[draw_idx, , drop = FALSE])
+
+    # --- 4. read theta[d, t] for the sampled dyads' OBSERVED periods only
+    # (1d: never all of Tier 3) ---
+    obs_list <- lapply(sampled_dyad_ids, function(d) which(is_obs[d, ] == 1))
+    n_obs_t <- vapply(obs_list, length, integer(1))
+    keep <- n_obs_t > 0
+    if (!all(keep)) {
+      sampled_dyad_ids <- sampled_dyad_ids[keep]
+      obs_list <- obs_list[keep]
+      n_obs_t <- n_obs_t[keep]
+      phi_mat <- phi_mat[, keep, drop = FALSE]
     }
-    pbar_d <- pbar_num / pbar_den
-    clr_pbar <- .clr(pbar_d)
+    D_sample <- length(sampled_dyad_ids)
 
-    along_default <- NULL
-    ppp_dyad <- NA_real_
-    perp_norm2_mean <- NA_real_
+    theta_vars <- unlist(purrr::map2(sampled_dyad_ids, obs_list, function(d, ts) paste0("theta[", d, ",", ts, "]")))
+    theta_draws <- .get_draws(fit, theta_vars)
+    # Row i of every matrix read above corresponds to the same posterior
+    # draw: posterior::as_draws_matrix() flattens chains/iterations in a
+    # fixed, deterministic order given the same underlying fit, whether
+    # read from an in-memory CmdStanMCMC or from raw CSVs via the same
+    # `fit` value -- so draw_idx (computed once, from the alpha/mu read)
+    # is valid to reuse for phi and theta without re-deriving it.
+    theta_mat_full <- posterior::as_draws_matrix(theta_draws)[, theta_vars, drop = FALSE]
+    theta_mat <- .as_plain_matrix(theta_mat_full[draw_idx, , drop = FALSE])
 
-    for (e_idx in seq_len(n_eps)) {
-      e <- eps_all[e_idx]
-      r_obs <- .broadcast_rows(.clr(y_d + e), n_draws_used) - clr_pbar
-      r_rep <- .clr(yrep_d + e) - clr_pbar
-      along_obs <- rowSums(r_obs * alpha_c) / alpha_c_ss
-      along_rep <- rowSums(r_rep * alpha_c) / alpha_c_ss
-      perp_obs <- r_obs - along_obs * alpha_c
-      perp_rep <- r_rep - along_rep * alpha_c
-      perp_obs_norm2 <- rowSums(perp_obs^2)
-      perp_rep_norm2 <- rowSums(perp_rep^2)
+    # --- 5. per-dyad loop: pbar_d, y_d, yrep_d, then eps-cheap
+    # r/along/perp at eps and eps_sensitivity ---
+    alpha_c <- alpha_mat - rowMeans(alpha_mat) # defensive; a no-op here since alpha sums to zero exactly by construction (sum_to_zero_vector in every registered model) -- keep for a future model that does not
+    alpha_c_ss <- rowSums(alpha_c^2)
 
-      T_obs_acc[, e_idx] <- T_obs_acc[, e_idx] + perp_obs_norm2
-      T_rep_acc[, e_idx] <- T_rep_acc[, e_idx] + perp_rep_norm2
+    eps_all <- c(eps, setdiff(eps_sensitivity, eps))
+    n_eps <- length(eps_all)
 
-      if (e_idx == 1L) {
-        cat_contrib_obs <- cat_contrib_obs + t(perp_obs^2)
-        cat_contrib_rep <- cat_contrib_rep + t(perp_rep^2)
-        along_default <- along_obs
-        ppp_dyad <- mean(perp_rep_norm2 >= perp_obs_norm2)
-        perp_norm2_mean <- mean(perp_obs_norm2)
+    T_obs_acc <- matrix(0, n_draws_used, n_eps)
+    T_rep_acc <- matrix(0, n_draws_used, n_eps)
+    sum_theta_bar_sq <- numeric(n_draws_used)
+    sum_theta_sq <- numeric(n_draws_used)
+    n_dt_total <- 0L
+    cat_contrib_obs <- matrix(0, A, n_draws_used)
+    cat_contrib_rep <- matrix(0, A, n_draws_used)
+    dyad_rows <- vector("list", D_sample)
+
+    col_offset <- 0L
+    for (i in seq_len(D_sample)) {
+      d <- sampled_dyad_ids[i]
+      ts <- obs_list[[i]]
+      k_t <- length(ts)
+      cols <- (col_offset + 1L):(col_offset + k_t)
+      col_offset <- col_offset + k_t
+      theta_d <- theta_mat[, cols, drop = FALSE] # n_draws_used x k_t
+
+      Y_d <- Y[d, , ]
+      Y_d_obs <- Y_d[ts, , drop = FALSE] # k_t x A
+      n_dt_vec <- rowSums(Y_d_obs)
+      y_d <- colSums(Y_d_obs)
+      n_d <- sum(n_dt_vec)
+
+      theta_bar_d <- rowMeans(theta_d)
+      sum_theta_bar_sq <- sum_theta_bar_sq + theta_bar_d^2
+      sum_theta_sq <- sum_theta_sq + rowSums(theta_d^2)
+      n_dt_total <- n_dt_total + k_t
+
+      pbar_num <- matrix(0, n_draws_used, A)
+      pbar_den <- 0
+      yrep_d <- matrix(0, n_draws_used, A)
+      phi_vec_d <- phi_mat[, i]
+
+      # g_d, once per dyad (reused across every observed period below), not
+      # once per dyad-period -- matching stable_gamma's own Stan likelihood
+      # (see inst/stan/include/partial_log_lik.stanfunctions'
+      # partial_log_lik_offset(), which builds g the same way, once per
+      # dyad, outside its own t loop).
+      g_d <- if (has_gamma) {
+        ca <- stan_data$ctry_a[d]
+        cb <- stan_data$ctry_b[d]
+        wsend <- stan_data$w_send[d]
+        if (wsend == 1) gamma_col(ca) else wsend * gamma_col(ca) + (1 - wsend) * gamma_col(cb)
+      } else {
+        0
       }
+
+      for (j in seq_len(k_t)) {
+        theta_dt <- theta_d[, j]
+        eta <- alpha_mat * theta_dt - mu_mat - g_d
+        p_dt <- .softmax_rows(eta)
+        n_dt <- n_dt_vec[j]
+        pbar_num <- pbar_num + n_dt * p_dt
+        pbar_den <- pbar_den + n_dt
+        conc <- phi_vec_d * p_dt
+        yrep_d <- yrep_d + .dirichlet_multinomial_rows(n_dt, conc)
+      }
+      pbar_d <- pbar_num / pbar_den
+      clr_pbar <- .clr(pbar_d)
+
+      along_default <- NULL
+      ppp_dyad <- NA_real_
+      perp_norm2_mean <- NA_real_
+
+      for (e_idx in seq_len(n_eps)) {
+        e <- eps_all[e_idx]
+        r_obs <- .broadcast_rows(.clr(y_d + e), n_draws_used) - clr_pbar
+        r_rep <- .clr(yrep_d + e) - clr_pbar
+        along_obs <- rowSums(r_obs * alpha_c) / alpha_c_ss
+        along_rep <- rowSums(r_rep * alpha_c) / alpha_c_ss
+        perp_obs <- r_obs - along_obs * alpha_c
+        perp_rep <- r_rep - along_rep * alpha_c
+        perp_obs_norm2 <- rowSums(perp_obs^2)
+        perp_rep_norm2 <- rowSums(perp_rep^2)
+
+        T_obs_acc[, e_idx] <- T_obs_acc[, e_idx] + perp_obs_norm2
+        T_rep_acc[, e_idx] <- T_rep_acc[, e_idx] + perp_rep_norm2
+
+        if (e_idx == 1L) {
+          cat_contrib_obs <- cat_contrib_obs + t(perp_obs^2)
+          cat_contrib_rep <- cat_contrib_rep + t(perp_rep^2)
+          along_default <- along_obs
+          ppp_dyad <- mean(perp_rep_norm2 >= perp_obs_norm2)
+          perp_norm2_mean <- mean(perp_obs_norm2)
+        }
+      }
+
+      along_q <- stats::quantile(along_default, probs = probs)
+      dyad_rows[[i]] <- tibble::tibble(
+        dyad_id = d, n_d = n_d, n_obs_t = k_t,
+        along_mean = mean(along_default),
+        along_lower = unname(along_q[1]), along_upper = unname(along_q[length(along_q)]),
+        perp_norm2_mean = perp_norm2_mean,
+        ppp_dyad = ppp_dyad,
+        phi_min = min(phi_vec_d)
+      )
     }
 
-    along_q <- stats::quantile(along_default, probs = probs)
-    dyad_rows[[i]] <- tibble::tibble(
-      dyad_id = d, n_d = n_d, n_obs_t = k_t,
-      along_mean = mean(along_default),
-      along_lower = unname(along_q[1]), along_upper = unname(along_q[length(along_q)]),
-      perp_norm2_mean = perp_norm2_mean,
-      ppp_dyad = ppp_dyad,
-      phi_min = min(phi_vec_d)
+    dyads <- dplyr::bind_rows(dyad_rows) %>%
+      dplyr::left_join(dplyr::distinct(dyad_ids, dyad_id, dyad, dyad2), by = "dyad_id")
+
+    # --- 6. drop any draws with non-finite accumulators, then summarize
+    # (a backstop, not the expected path -- see .drop_nonfinite_draws()) ---
+    dropped <- .drop_nonfinite_draws(
+      T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
     )
-  }
+    T_obs_acc <- dropped$T_obs_acc
+    T_rep_acc <- dropped$T_rep_acc
+    cat_contrib_obs <- dropped$cat_contrib_obs
+    cat_contrib_rep <- dropped$cat_contrib_rep
+    sum_theta_bar_sq <- dropped$sum_theta_bar_sq
+    sum_theta_sq <- dropped$sum_theta_sq
+    n_draws_dropped <- dropped$n_draws_dropped
 
-  dyads <- dplyr::bind_rows(dyad_rows) %>%
-    dplyr::left_join(dplyr::distinct(dyad_ids, dyad_id, dyad, dyad2), by = "dyad_id")
+    theta_between_rms <- mean(sqrt(sum_theta_bar_sq / D_sample))
+    theta_total_rms <- mean(sqrt(sum_theta_sq / n_dt_total))
 
-  # --- 6. drop any draws with non-finite accumulators, then summarize
-  # (a backstop, not the expected path -- see .drop_nonfinite_draws()) ---
-  dropped <- .drop_nonfinite_draws(
-    T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
-  )
-  T_obs_acc <- dropped$T_obs_acc
-  T_rep_acc <- dropped$T_rep_acc
-  cat_contrib_obs <- dropped$cat_contrib_obs
-  cat_contrib_rep <- dropped$cat_contrib_rep
-  sum_theta_bar_sq <- dropped$sum_theta_bar_sq
-  sum_theta_sq <- dropped$sum_theta_sq
-  n_draws_dropped <- dropped$n_draws_dropped
+    T_obs_mean <- colMeans(T_obs_acc)
+    T_rep_mean <- colMeans(T_rep_acc)
+    pooled_ppp <- colMeans(T_rep_acc >= T_obs_acc)
+    implied_beta_rms <- sqrt(pmax(0, (T_obs_mean - T_rep_mean) / D_sample) / A)
+    eps_sensitivity_tbl <- tibble::tibble(eps = eps_all, pooled_ppp = pooled_ppp, implied_beta_rms = implied_beta_rms)
 
-  theta_between_rms <- mean(sqrt(sum_theta_bar_sq / D_sample))
-  theta_total_rms <- mean(sqrt(sum_theta_sq / n_dt_total))
+    if (is.null(event_classes)) event_classes <- as.character(seq_len(A))
+    labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
 
-  T_obs_mean <- colMeans(T_obs_acc)
-  T_rep_mean <- colMeans(T_rep_acc)
-  pooled_ppp <- colMeans(T_rep_acc >= T_obs_acc)
-  implied_beta_rms <- sqrt(pmax(0, (T_obs_mean - T_rep_mean) / D_sample) / A)
-  eps_sensitivity_tbl <- tibble::tibble(eps = eps_all, pooled_ppp = pooled_ppp, implied_beta_rms = implied_beta_rms)
+    cat_obs_mean <- rowMeans(cat_contrib_obs)
+    cat_rep_mean <- rowMeans(cat_contrib_rep)
+    cat_obs_q <- t(apply(cat_contrib_obs, 1, stats::quantile, probs = probs))
+    cat_rep_q <- t(apply(cat_contrib_rep, 1, stats::quantile, probs = probs))
 
-  if (is.null(event_classes)) event_classes <- as.character(seq_len(A))
-  labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
+    categories <- tibble::tibble(
+      action_index = seq_len(A),
+      event_class = event_classes,
+      class_label = labels,
+      contribution_obs = cat_obs_mean,
+      contribution_obs_lower = cat_obs_q[, 1], contribution_obs_upper = cat_obs_q[, ncol(cat_obs_q)],
+      contribution_rep = cat_rep_mean,
+      contribution_rep_lower = cat_rep_q[, 1], contribution_rep_upper = cat_rep_q[, ncol(cat_rep_q)],
+      contribution_ratio = contribution_obs / contribution_rep
+    ) %>%
+      dplyr::arrange(dplyr::desc(contribution_obs))
 
-  cat_obs_mean <- rowMeans(cat_contrib_obs)
-  cat_rep_mean <- rowMeans(cat_contrib_rep)
-  cat_obs_q <- t(apply(cat_contrib_obs, 1, stats::quantile, probs = probs))
-  cat_rep_q <- t(apply(cat_contrib_rep, 1, stats::quantile, probs = probs))
+    global <- list(
+      pooled_ppp = pooled_ppp[1],
+      T_obs_mean = T_obs_mean[1],
+      T_rep_mean = T_rep_mean[1],
+      implied_beta_rms = implied_beta_rms[1],
+      theta_between_rms = theta_between_rms,
+      theta_total_rms = theta_total_rms,
+      beta_signal_ratio = implied_beta_rms[1] / theta_between_rms,
+      eps_sensitivity = eps_sensitivity_tbl,
+      D_sample = D_sample,
+      n_draws_used = n_draws_used,
+      n_draws_dropped = n_draws_dropped,
+      phi_min = min(dyads$phi_min)
+    )
 
-  categories <- tibble::tibble(
-    action_index = seq_len(A),
-    event_class = event_classes,
-    class_label = labels,
-    contribution_obs = cat_obs_mean,
-    contribution_obs_lower = cat_obs_q[, 1], contribution_obs_upper = cat_obs_q[, ncol(cat_obs_q)],
-    contribution_rep = cat_rep_mean,
-    contribution_rep_lower = cat_rep_q[, 1], contribution_rep_upper = cat_rep_q[, ncol(cat_rep_q)],
-    contribution_ratio = contribution_obs / contribution_rep
-  ) %>%
-    dplyr::arrange(dplyr::desc(contribution_obs))
+    settings <- list(
+      seed = seed, n_dyads_requested = n_dyads, n_strata = n_strata,
+      n_draws_requested = n_draws, n_draws_used = n_draws_used,
+      n_draws_dropped = n_draws_dropped,
+      eps = eps, eps_sensitivity = eps_sensitivity, probs = probs,
+      stan_model = stan_model, D_sample = D_sample,
+      sampled_dyad_ids = sampled_dyad_ids
+    )
 
-  global <- list(
-    pooled_ppp = pooled_ppp[1],
-    T_obs_mean = T_obs_mean[1],
-    T_rep_mean = T_rep_mean[1],
-    implied_beta_rms = implied_beta_rms[1],
-    theta_between_rms = theta_between_rms,
-    theta_total_rms = theta_total_rms,
-    beta_signal_ratio = implied_beta_rms[1] / theta_between_rms,
-    eps_sensitivity = eps_sensitivity_tbl,
-    D_sample = D_sample,
-    n_draws_used = n_draws_used,
-    n_draws_dropped = n_draws_dropped,
-    phi_min = min(dyads$phi_min)
-  )
-
-  settings <- list(
-    seed = seed, n_dyads_requested = n_dyads, n_strata = n_strata,
-    n_draws_requested = n_draws, n_draws_used = n_draws_used,
-    n_draws_dropped = n_draws_dropped,
-    eps = eps, eps_sensitivity = eps_sensitivity, probs = probs,
-    stan_model = stan_model, D_sample = D_sample,
-    sampled_dyad_ids = sampled_dyad_ids
-  )
-
-  structure(
-    list(dyads = dyads, categories = categories, global = global, settings = settings),
-    class = "bilatr_residual_check"
-  )
+    structure(
+      list(dyads = dyads, categories = categories, global = global, settings = settings),
+      class = "bilatr_residual_check"
+    )
+  })
 }
 
 #' Print a `bilatr_residual_check` object
