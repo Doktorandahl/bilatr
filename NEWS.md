@@ -1,3 +1,20 @@
+# bilatr 0.11.0
+
+## New features
+
+* The package now ships two datasets of estimated bilateral-relations
+  trajectories, `theta_directed` (16,750 directed dyads, 355,821
+  dyad-years) and `theta_undirected` (9,139 undirected dyads, 195,106
+  dyad-years), covering 189 countries, 1991-2025 (see
+  `?theta_trajectories`). Each gives the smoothed theta (posterior mean,
+  5% and 95%) and the forward-filtered theta (mean, 5% and 95%) per
+  dyad-year, from each dyad's first recorded event onward, from the
+  `bilatr_16cat_directed`/`bilatr_16cat_undirected` `stable_gamma` fits
+  (`ModifiedRootCode`, reference category 5, yearly; bilatr 0.10.2).
+  Saved as xz level-9 `.rda` files (3.6 MB together) by
+  `data-raw/theta_trajectories.R`; `LazyDataCompression: xz` is now set
+  in `DESCRIPTION` so lazy-loading keeps that compression.
+
 # bilatr 0.10.2
 
 The remaining audit bugs (see `dev/audit_2026-09-23.md` §3, B1-B4/B10),
