@@ -20,7 +20,10 @@ the \code{NULL} default).
 \description{
 \code{NULL} first looks for an \code{action_cols} attribute on \code{data} (set by
 \code{\link[=aggregate_events]{aggregate_events()}}): if it names only columns still present in
-\code{data}, it is used silently. Otherwise \code{NULL} selects every column of
+\code{data}, it is used. That is silent unless \code{data} has other whole-number
+columns (outside \code{role_cols}) that the attribute does not name, e.g. a
+category merged with \code{mutate()} after aggregation; then a \code{message()}
+names them and says to set \code{action_cols} explicitly. Otherwise \code{NULL} selects every column of
 \code{data} not in \code{role_cols}, with a \code{warning()} listing them. Anything else goes through
 \code{\link[tidyselect:eval_select]{tidyselect::eval_select()}}; a bare symbol that is not a column of
 \code{data} but names a character vector in the calling environment is

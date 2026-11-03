@@ -135,6 +135,23 @@ make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
   events[events$Actor1CountryCode != events$Actor2CountryCode, ]
 }
 
+# Event data -> Stan data through the 0.12.0 path: aggregate_events() then
+# prepare_stan_data() (`...`). Replaces the assemble_stan_data(events,
+# years = a:b, ...) calls these tests used before 0.12.0: pass
+# start = "a-01-01", end = "b-12-31". Messages are suppressed; tests about
+# messages call the two functions directly.
+events_to_stan_data <- function(events, grouping_var, start = NULL, end = NULL,
+                                resolution = "yearly", directed = TRUE, ...,
+                                actor1 = "Actor1CountryCode", actor2 = "Actor2CountryCode",
+                                date = "SQLDATE") {
+  agg <- suppressMessages(aggregate_events(
+    events, grouping_var,
+    resolution = resolution, directed = directed, start = start, end = end,
+    actor1 = actor1, actor2 = actor2, date = date
+  ))
+  suppressMessages(prepare_stan_data(agg, ...))
+}
+
 # --- fixture for CSV-file-path branches (diagnose_convergence(),
 # extract_theta()/extract_alpha()/extract_mu_intercept()): a real, tiny
 # multi-chain CmdStan run, since read_cmdstan_csv() needs real CmdStan CSV
@@ -150,7 +167,7 @@ make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
 # ORIENTATION FOLD"), so there is no basin to land in regardless of which
 # one is fit. `compute_log_lik`/`rho_prior_a`/`rho_prior_b` (needed by one
 # or more registered models) default to the same values
-# [assemble_stan_data()] does; pass `extra_data` to override them.
+# [prepare_stan_data()] does; pass `extra_data` to override them.
 make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, extra_data = list(), ...) {
   set.seed(1)
   D <- 6
@@ -179,9 +196,9 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
   fit <- suppressWarnings(do.call(mod$sample, sample_args))
 
   # a stan_data-shaped list with a manually-built dyad_ids attribute,
-  # matching assemble_stan_data()'s output shape, for extract_theta()'s
+  # matching prepare_stan_data()'s output shape, for extract_theta()'s
   # dyad/dyad2/year join -- built directly rather than via
-  # assemble_stan_data() so this fixture's D/T/A stay exactly controlled
+  # prepare_stan_data() so this fixture's D/T/A stay exactly controlled
   # and independent of make_fake_events()'s randomness.
   stan_data <- data_list
   attr(stan_data, "dyad_ids") <- tibble::tibble(

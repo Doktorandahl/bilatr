@@ -33,11 +33,8 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
 
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  stan_data <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  stan_data <- events_to_stan_data(
+    events, "PentaClass", "2015-01-01", "2019-12-31",
     reference_category = 0,
     min_n_events = 1
   )
@@ -47,6 +44,9 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
   ))
   expect_gt(length(experimental_models), 0)
 
+  # Its own directory: fit_panel() writes a bilatr_stan_data.rds sidecar
+  # into output_dir, and tempdir() is shared by every test file.
+  out_dir <- withr::local_tempdir()
   for (name in experimental_models) {
     fit <- suppressWarnings(fit_panel(
       stan_data,
@@ -57,7 +57,7 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
       iter_sampling = 5,
       seed = 1,
       opt_level = 1,
-      output_dir = tempdir(),
+      output_dir = out_dir,
       stan_model = name,
       refresh = 0,
       show_messages = FALSE

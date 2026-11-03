@@ -1,12 +1,15 @@
-test_that("assemble_stan_data produces correctly shaped D x T x A arrays", {
+# Stan data built from event data: aggregate_events() then
+# prepare_stan_data() (events_to_stan_data() in helper_fixtures.R). Ported
+# in 0.12.0 from the assemble_stan_data() tests; the windowing errors moved
+# to aggregate_events(), which now owns the window.
+
+test_that("event data gives correctly shaped D x T x A arrays", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass",
+    start = "2015-01-01", end = "2019-12-31",
     reference_category = 0,
     min_n_events = 1
   )
@@ -17,15 +20,13 @@ test_that("assemble_stan_data produces correctly shaped D x T x A arrays", {
   expect_equal(attr(sd, "event_classes"), as.character(0:4))
 })
 
-test_that("assemble_stan_data() defaults rho_prior_a/b and compute_log_lik, reproducing current behaviour when unset", {
+test_that("rho_prior_a/b and compute_log_lik have their defaults when unset, and pass through when set", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd_default <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd_default <- events_to_stan_data(
+    events, "PentaClass",
+    start = "2015-01-01", end = "2019-12-31",
     reference_category = 0,
     min_n_events = 1
   )
@@ -33,11 +34,9 @@ test_that("assemble_stan_data() defaults rho_prior_a/b and compute_log_lik, repr
   expect_equal(sd_default$rho_prior_b, 2)
   expect_equal(sd_default$compute_log_lik, 0)
 
-  sd_custom <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd_custom <- events_to_stan_data(
+    events, "PentaClass",
+    start = "2015-01-01", end = "2019-12-31",
     reference_category = 0,
     min_n_events = 1,
     rho_prior_a = 3,
@@ -53,11 +52,9 @@ test_that("reference_category is reordered to action_index 1 (alpha[1] is the an
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass",
+    start = "2015-01-01", end = "2019-12-31",
     reference_category = 2,
     min_n_events = 1
   )
@@ -67,11 +64,9 @@ test_that("reference_category is reordered to action_index 1 (alpha[1] is the an
 test_that("is_obs matches whether any events were observed in that dyad-period", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  sd <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass",
+    start = "2015-01-01", end = "2019-12-31",
     min_n_events = 1
   )
   totals <- apply(sd$Y, c(1, 2), sum)
@@ -81,32 +76,32 @@ test_that("is_obs matches whether any events were observed in that dyad-period",
 test_that("directed = FALSE yields fewer or equal dyads than directed = TRUE", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  sd_directed <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass")
-  sd_undirected <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE)
+  sd_directed <- events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31")
+  sd_undirected <- events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31", directed = FALSE)
   expect_lte(sd_undirected$D, sd_directed$D)
 })
 
 test_that("min_n_events drops low-activity dyads, and errors clearly if it drops all of them", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  sd_all <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", min_n_events = 1)
+  sd_all <- events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31", min_n_events = 1)
   expect_gt(sd_all$D, 0L)
   expect_error(
-    assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass", min_n_events = 10000),
+    events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31", min_n_events = 10000),
     "No dyads"
   )
 })
 
-test_that("0e: an empty window gives a clear error naming the data's year range, not a min_n_events error", {
+test_that("0e: an empty window gives a clear error naming the data's date range, not a min_n_events error", {
   events <- make_fake_events(years = 2015:2019)
   events <- recode_cameo(events, code_col = "EventCode")
 
   err <- tryCatch(
-    assemble_stan_data(events, years = 2050, resolution = "yearly", grouping_var = "PentaClass"),
+    suppressMessages(aggregate_events(events, "PentaClass", start = "2050-01-01", end = "2050-12-31")),
     error = function(e) conditionMessage(e)
   )
   expect_match(err, "no events fall within")
-  expect_match(err, "2015-2019")
+  expect_match(err, "the data's dates span 2015-[0-9]{2}-[0-9]{2} to 2019-[0-9]{2}-[0-9]{2}")
   expect_false(grepl("No dyads", err))
 })
 
@@ -118,16 +113,17 @@ test_that("0e: an empty `data` errors clearly instead of via the min_n_events pa
     PentaClass = character(0)
   )
   err <- tryCatch(
-    assemble_stan_data(empty, years = 2020, resolution = "yearly", grouping_var = "PentaClass"),
+    aggregate_events(empty, "PentaClass", start = "2020-01-01", end = "2020-12-31"),
     error = function(e) conditionMessage(e)
   )
   expect_match(err, "`data` is empty")
+  expect_false(grepl("No dyads", err))
 })
 
 test_that("dyad_ids attribute reattaches dyad_id to the dyad string for every observed dyad", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  sd <- assemble_stan_data(events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass")
+  sd <- events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31")
   ids <- attr(sd, "dyad_ids")
   expect_equal(dplyr::n_distinct(ids$dyad_id), sd$D)
   expect_equal(max(ids$time_index), sd$T)

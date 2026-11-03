@@ -1,15 +1,59 @@
-# bilatr 0.12.0 (in development)
+# bilatr 0.12.0
 
-Step 1 of 3 (0.12.0a) of the source-agnostic dyad-period interface (see
-`dev/plan_0.12.0_dyad_period_interface.md`). The new data path is added
-*alongside* the old one: `assemble_stan_data()` and
-`grouped_events_to_dyad_period()` are unchanged, and are the in-tree
-reference the new path is tested against.
+A source-agnostic data interface. `fit_panel()`/`fit_dyad_ts()` now take an
+already aggregated dyad x time-period table of action counts, from any
+source, and build the Stan data themselves. Event data goes through the
+new `aggregate_events()` first. `assemble_stan_data()` and
+`grouped_events_to_dyad_period()` are removed.
 
-Step 2 of 3 (0.12.0b): `fit_dyad_ts()`/`fit_panel()` take the
-dyad-period table directly, and the Stan data travels with the fit.
-Calls that pass a prepared `stan_data` list keep working unchanged.
-The runscripts are ported, and the old functions removed, in 0.12.0c.
+## Breaking changes
+
+* **`assemble_stan_data()` and `grouped_events_to_dyad_period()` are
+  removed** (no deprecation period). Replace
+  `assemble_stan_data(events, years = a:b, resolution, grouping_var,
+  directed, reference_category, min_n_events, ...)` with
+  `aggregate_events(events, grouping_var, resolution, directed,
+  start = "a-01-01", end = "b-12-31")`, then either
+  `prepare_stan_data(agg, reference_category, min_n_events, ...)` or
+  `fit_panel(agg, reference_category = , min_n_events = , ...)` directly.
+  `grouped_events_to_dyad_period()`'s role (and the skeleton fill) is
+  `aggregate_events()`'s; its `w_send` attribute is now a `w_send` column.
+* **`years` is replaced by `start`/`end` dates**, so the window is always
+  one contiguous range: non-contiguous years (`years = c(2000, 2005)`,
+  which gave `T = 2`) can no longer be expressed. Filter the dyad-period
+  table and pass `time_range`, or build the table yourself, if you need
+  something else.
+* **Class columns are named by their raw label**, without the
+  `EventClass_` prefix (`"5"`, not `"EventClass_5"`), and there is no
+  `total_events` column. `event_classes` attributes are unchanged.
+* **Time columns are absolute period IDs.** Monthly time is
+  `month_id = year * 12 + month - 1` (calendar `year`/`month` labels go
+  in the `time_labels` attribute and from there into `dyad_ids`). Weekly
+  (`week_id`) and daily (`day_id`) resolutions are new, counted from
+  1946-01-01, or from 1 January of an earlier start year, with a warning.
+* **`dyad_ids` uses `actor1`/`actor2`** instead of `actor_a`/`actor_b`.
+  Code that reads `attr(stan_data, "dyad_ids")$actor_a` must accept
+  either name for Stan data saved by 0.11.0 and earlier.
+* **`fit_panel()`/`fit_dyad_ts()`'s first argument is `data`**, followed
+  by the data-preparation arguments, so sampler arguments passed by
+  *position* no longer work: `fit_panel(stan_data, 1)` now sets
+  `time = 1` and errors. Name them (`fit_panel(stan_data, chains = 1)`),
+  as every documented example does.
+* **`event_classes = NULL` now means "use the classes attached to the
+  Stan data"** in `extract_gamma()`, `check_compositional_residuals()`
+  and `diagnose_and_extract_bilatr()`; an explicit `NULL` no longer
+  suppresses the class-label columns.
+
+## Unchanged
+
+* Stan data saved by bilatr 0.11.0 and earlier (by `assemble_stan_data()`,
+  with `actor_a`/`actor_b` in `dyad_ids` and none of the new attributes)
+  is accepted everywhere: by `fit_*()` as-is, and by every extractor and
+  check.
+* For event data, the Stan input is unchanged: the replication input
+  built with 0.12.0 is `identical()` to 0.10.2's/0.11.0's (see
+  "Equivalence with 0.11.0" below; reports `data-raw/equivalence/equivalence_0.12.0a.md`
+  and `data-raw/equivalence/equivalence_0.12.0c.md`).
 
 ## New features
 
@@ -56,8 +100,8 @@ The runscripts are ported, and the old functions removed, in 0.12.0c.
   `reference_category`, `min_n_events`, `time_range`, `chunk_size`,
   `rho_prior_a`, `rho_prior_b`, `compute_log_lik`, `prior_only`,
   `compute_theta_filtered`, `filter_dyads`), or a Stan data list from
-  `prepare_stan_data()` (or `assemble_stan_data()`, including lists saved
-  by 0.11.0 and earlier), which is used as-is. Supplying any
+  `prepare_stan_data()` (including lists saved by 0.11.0 and earlier),
+  which is used as-is. Supplying any
   data-preparation argument with a prepared list is an error naming it.
   `action_cols` accepts tidyselect expressions through `fit_*()`.
 * Checks that run before compiling: the D check (now reporting the dyad
@@ -104,18 +148,32 @@ The runscripts are ported, and the old functions removed, in 0.12.0c.
   gains a section, "Using your own aggregated data".
 * Error and help text that pointed to `assemble_stan_data()` now points
   to `prepare_stan_data()` and the fit's attached Stan data.
+* `prepare_stan_data()`/`fit_*()` with `action_cols = NULL`, on a table
+  carrying `aggregate_events()`'s `action_cols` attribute, now say so with
+  a `message()` when the table has other whole-number columns the
+  attribute leaves out (e.g. a category merged with `mutate()` after
+  `diagnose_category_merges()`): the message names them and says to set
+  `action_cols` to include them. Previously they were ignored without a
+  word, because dplyr's `mutate()` keeps the attribute.
 
 ## Equivalence with 0.11.0
 
 `prepare_stan_data(aggregate_events(events, ...), ...)` gives a Stan data
-list identical (`identical()`, every field) to `assemble_stan_data(events,
-...)`, and identical `event_classes`/`country_codes`/`grouping_var`/
-`dyad_ids` attributes (up to the `actor_a`/`actor_b` rename and the new
-`month_id` column). This is tested in-tree
-(`tests/testthat/test_prepare_stan_data_equivalence.R`) and on the
-production 16cat inputs, directed and undirected, against a 0.10.2
-worktree (`dev/equivalence_0.12.0a.R`, report in
-`dev/equivalence_0.12.0a.md`).
+list identical (`identical()`, every field) to 0.11.0's
+`assemble_stan_data(events, ...)`, and identical `event_classes`/
+`country_codes`/`grouping_var`/`dyad_ids` attributes (up to the
+`actor_a`/`actor_b` rename and the new `month_id` column).
+
+* On the production 16cat inputs, directed and undirected, against a
+  0.10.2 worktree: `data-raw/equivalence/equivalence_0.12.0a.md`
+  (`data-raw/equivalence/equivalence_0.12.0a.R`), and again through the ported replication
+  scripts' own `build_stan_data()`: `data-raw/equivalence/equivalence_0.12.0c.md`
+  (`data-raw/equivalence/equivalence_0.12.0c.R`).
+* In-tree, `tests/testthat/test_prepare_stan_data_equivalence.R` keeps
+  this as a regression test now that `assemble_stan_data()` is gone: it
+  compares against 74 reference outputs of the old function, frozen in
+  `tests/testthat/fixtures/assemble_stan_data_0.11.0_reference.rds` by
+  `data-raw/make_equivalence_reference.R` (run against the 0.12.0b tree).
 
 # bilatr 0.11.0
 

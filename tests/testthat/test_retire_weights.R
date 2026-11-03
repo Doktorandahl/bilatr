@@ -1,17 +1,16 @@
-test_that("assemble_stan_data()'s output at weighted = FALSE differs from before 0.4.6 by exactly the three dropped weight fields", {
+test_that("Stan data from events has no weight fields: exactly the pre-0.4.6 fields minus the three dropped ones", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
-  sd <- assemble_stan_data(
-    events,
-    years = 2015:2019,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass", "2015-01-01", "2019-12-31",
     reference_category = 0,
     min_n_events = 1
   )
-  # pre-0.4.6, this same call additionally returned dyad_weight/
+  # pre-0.4.6, the Stan data additionally carried dyad_weight/
   # period_weight/action_weight (all vectors of 1s); every other field
-  # (and every value of every other field) is unchanged.
+  # (and every value of every other field) is unchanged. Built with
+  # aggregate_events()/prepare_stan_data() since 0.12.0, which give the
+  # same list as assemble_stan_data() did (test_prepare_stan_data_equivalence.R).
   expect_false(any(c("dyad_weight", "period_weight", "action_weight") %in% names(sd)))
   expect_setequal(
     names(sd),

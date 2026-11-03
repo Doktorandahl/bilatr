@@ -344,7 +344,7 @@ test_that("filter_dyads narrowing produces the same theta_filtered values as fil
   }
 })
 
-test_that("assemble_stan_data()'s filter_dyads column-count arithmetic matches production scale", {
+test_that("the filter_dyads column-count arithmetic matches production scale", {
   # Not an actual fit at production scale -- just the arithmetic the
   # roxygen states: 2 * D * T extra columns when compute_theta_filtered
   # is on (theta_filtered + theta_filtered_sd), 0 when off.

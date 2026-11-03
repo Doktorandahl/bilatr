@@ -443,10 +443,10 @@ test_that("count_gdelt_actor_types() counts combinations over all three type slo
 })
 
 # ---------------------------------------------------------------------------
-# 7. End-to-end: read_gdelt() -> recode_cameo() -> validate/assemble
+# 7. End-to-end: read_gdelt() -> recode_cameo() -> validate/aggregate/prepare
 # ---------------------------------------------------------------------------
 
-test_that("read_gdelt() output passes validate_bilatr_events() after recode_cameo(), and assembles", {
+test_that("read_gdelt() output passes validate_bilatr_events() after recode_cameo(), and aggregates and prepares", {
   fx <- .build_gdelt_fixtures()
   f <- file.path(fx$dir, fx$daily_file)
 
@@ -456,9 +456,8 @@ test_that("read_gdelt() output passes validate_bilatr_events() after recode_came
 
   expect_silent(validate_bilatr_events(events, grouping_var = "PentaClass"))
 
-  sd <- assemble_stan_data(
-    events,
-    years = 2020, resolution = "yearly", grouping_var = "PentaClass", min_n_events = 1
-  )
+  agg <- aggregate_events(events, "PentaClass", start = "2020-01-01", end = "2020-12-31")
+  expect_silent(validate_bilatr_dyad_period(agg, time = "year"))
+  sd <- suppressMessages(prepare_stan_data(agg, min_n_events = 1))
   expect_gt(sd$D, 0L)
 })

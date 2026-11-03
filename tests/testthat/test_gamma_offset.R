@@ -205,23 +205,18 @@ test_that("w_send is exactly 1 for directed dyads, and the observed sender share
     PentaClass = c(0, 1, 0, 1, 0)
   )
 
-  directed <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = TRUE
-  )
-  w_send_directed <- attr(directed, "w_send")
-  expect_true(all(w_send_directed$w_send == 1))
+  directed <- aggregate_events(events, "PentaClass", directed = TRUE)
+  expect_true(all(directed$w_send == 1))
 
-  undirected <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
-  )
-  w_send_undirected <- attr(undirected, "w_send")
+  undirected <- aggregate_events(events, "PentaClass", directed = FALSE)
+  w_send_undirected <- dplyr::distinct(undirected, dyad, actor1, actor2, w_send)
   # USA/RUS pair (rows 1-3): C-locale radix order puts "RUS" before "USA",
   # so RUS is side A. 2 of the 3 events have USA (side B) as Actor1, 1 has
   # RUS (side A) as Actor1 -- an asymmetric pair, share strictly between
   # 0 and 1.
   usa_rus <- dplyr::filter(w_send_undirected, dyad == "RUS_USA")
-  expect_equal(usa_rus$actor_a, "RUS")
-  expect_equal(usa_rus$actor_b, "USA")
+  expect_equal(usa_rus$actor1, "RUS")
+  expect_equal(usa_rus$actor2, "USA")
   expect_equal(usa_rus$w_send, 1 / 3)
 
   # CHN/USA pair (rows 4-5): "CHN" sorts before "USA", so CHN is side A.
@@ -229,7 +224,7 @@ test_that("w_send is exactly 1 for directed dyads, and the observed sender share
   # exactly 1 (not 0 or 1 by coincidence: every event in this pair goes
   # the same way).
   chn_usa <- dplyr::filter(w_send_undirected, dyad == "CHN_USA")
-  expect_equal(chn_usa$actor_a, "CHN")
+  expect_equal(chn_usa$actor1, "CHN")
   expect_equal(chn_usa$w_send, 1)
 })
 
@@ -248,16 +243,18 @@ test_that("gamma/gamma_z are classified correctly by .classify_bilatr_tier() (Ti
   expect_true(all(is.na(tiers$dyad_id[grepl("^gamma", tiers$variable)])))
 })
 
-test_that("assemble_stan_data() attaches n_countries/ctry_a/ctry_b/w_send unconditionally, and is deterministic", {
+test_that("event data gets n_countries/ctry_a/ctry_b/w_send for every model, deterministically", {
+  # aggregate_events() always carries actor1/actor2, so prepare_stan_data()
+  # always builds the country fields for event data, whatever model is fit.
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd1 <- assemble_stan_data(
-    events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
+  sd1 <- events_to_stan_data(
+    events, "PentaClass", "2015-01-01", "2019-12-31",
     reference_category = 0, min_n_events = 1
   )
-  sd2 <- assemble_stan_data(
-    events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
+  sd2 <- events_to_stan_data(
+    events, "PentaClass", "2015-01-01", "2019-12-31",
     reference_category = 0, min_n_events = 1
   )
 
@@ -278,7 +275,7 @@ test_that("assemble_stan_data() attaches n_countries/ctry_a/ctry_b/w_send uncond
   expect_identical(attr(sd1, "country_codes"), attr(sd2, "country_codes"))
 })
 
-test_that("assemble_stan_data()'s n_countries excludes countries only present in dropped dyads", {
+test_that("n_countries excludes countries only present in dropped dyads", {
   # A country ("ISO") that appears in exactly one low-volume dyad should
   # not consume a country index once min_n_events drops that dyad.
   events <- tibble::tibble(
@@ -289,11 +286,13 @@ test_that("assemble_stan_data()'s n_countries excludes countries only present in
   )
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd <- assemble_stan_data(
-    events, years = 2018, resolution = "yearly", grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass", "2018-01-01", "2018-12-31",
     reference_category = 0, min_n_events = 5
   )
   expect_false("ISO" %in% attr(sd, "country_codes"))
+  expect_identical(attr(sd, "country_codes"), c("RUS", "USA"))
+  expect_identical(sd$n_countries, 2L)
 })
 
 test_that("stable_gamma recovers a known country-level gamma from simulated data", {
@@ -473,7 +472,7 @@ test_that("check_compositional_residuals()'s implied_beta_rms is materially smal
   expect_gte(without_structure$gamma, without_structure$stable * 0.7)
 })
 
-test_that("w_send is pooled over the `years` window, not every year in `data` (0.7.1)", {
+test_that("w_send is pooled over the start/end window, not every year in `data` (0.7.1)", {
   # RUS_USA's mix differs between the out-of-window years (1985-1986,
   # entirely RUS-as-sender) and the in-window year (2018, entirely
   # USA-as-sender): the unrestricted call must pool both eras, the
@@ -485,43 +484,41 @@ test_that("w_send is pooled over the `years` window, not every year in `data` (0
     PentaClass = c(0, 1, 0, 1, 0)
   )
 
-  unrestricted <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
-  )
-  w_send_unrestricted <- attr(unrestricted, "w_send")
-  rus_usa_unrestricted <- dplyr::filter(w_send_unrestricted, dyad == "RUS_USA")
+  unrestricted <- aggregate_events(events, "PentaClass", directed = FALSE)
+  rus_usa_unrestricted <- dplyr::distinct(dplyr::filter(unrestricted, dyad == "RUS_USA"), w_send)
   expect_equal(rus_usa_unrestricted$w_send, 3 / 5) # 3 of 5 events have RUS (side A) as Actor1
 
-  restricted <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE,
-    years = 2018
-  )
-  w_send_restricted <- attr(restricted, "w_send")
-  rus_usa_restricted <- dplyr::filter(w_send_restricted, dyad == "RUS_USA")
+  restricted <- suppressMessages(aggregate_events(
+    events, "PentaClass", directed = FALSE, start = "2018-01-01", end = "2018-12-31"
+  ))
+  rus_usa_restricted <- dplyr::distinct(dplyr::filter(restricted, dyad == "RUS_USA"), w_send)
   expect_equal(rus_usa_restricted$w_send, 0) # both 2018 events have USA (side B) as Actor1
 
   expect_false(isTRUE(all.equal(rus_usa_unrestricted$w_send, rus_usa_restricted$w_send)))
 })
 
-test_that("assemble_stan_data() passes `years` through to window w_send", {
+test_that("the windowed w_send reaches stan_data unchanged", {
   events <- make_fake_events(n = 800, years = 2010:2019)
   events <- recode_cameo(events, code_col = "EventCode")
 
-  sd_full <- assemble_stan_data(
-    events, years = 2010:2019, resolution = "yearly", grouping_var = "PentaClass",
-    reference_category = 0, min_n_events = 1
-  )
-  sd_window <- assemble_stan_data(
-    events, years = 2015:2019, resolution = "yearly", grouping_var = "PentaClass",
-    reference_category = 0, min_n_events = 1
-  )
-  # not asserting a specific relationship (both are legitimate w_send
-  # vectors for different windows) -- just that assemble_stan_data()'s
-  # own `years` reaches grouped_events_to_dyad_period() at all, i.e. the
-  # two windows are free to differ (the fixture's random event mix makes
-  # them differ with overwhelming probability; if they were IDENTICAL
-  # that would mean `years` never reached the w_send computation).
+  agg_full <- suppressMessages(aggregate_events(events, "PentaClass", directed = FALSE))
+  agg_window <- suppressMessages(aggregate_events(
+    events, "PentaClass", directed = FALSE, start = "2015-01-01", end = "2019-12-31"
+  ))
+  sd_full <- suppressMessages(prepare_stan_data(agg_full, reference_category = 0))
+  sd_window <- suppressMessages(prepare_stan_data(agg_window, reference_category = 0))
   expect_true(sd_full$D > 0 && sd_window$D > 0)
+
+  # stan_data's per-dyad w_send is the table's, in dyad_id order
+  per_dyad <- function(agg, sd) {
+    w <- dplyr::distinct(agg, dyad, w_send)
+    w$w_send[match(unique(attr(sd, "dyad_ids")$dyad), w$dyad)]
+  }
+  expect_identical(sd_full$w_send, per_dyad(agg_full, sd_full))
+  expect_identical(sd_window$w_send, per_dyad(agg_window, sd_window))
+  # the fixture's random event mix makes the two windows' shares differ
+  # (if they were identical, the window never reached w_send)
+  expect_false(identical(sd_full$w_send, sd_window$w_send))
 })
 
 test_that("a row with NA Actor1CountryCode is a validate_bilatr_events() error (0.9.0; was a warning + drop)", {
@@ -533,9 +530,7 @@ test_that("a row with NA Actor1CountryCode is a validate_bilatr_events() error (
   )
 
   expect_error(
-    grouped_events_to_dyad_period(
-      events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
-    ),
+    aggregate_events(events, "PentaClass", directed = FALSE),
     "missing \\(NA\\)"
   )
 })

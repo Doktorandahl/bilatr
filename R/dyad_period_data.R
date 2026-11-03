@@ -23,7 +23,10 @@
 #' (e.g. `c(coop, conflict)`, `starts_with("n_")`). If it is not given
 #' and `data` carries an `action_cols` attribute (as [aggregate_events()]
 #' output does) naming only columns still present, those columns are
-#' used silently. Otherwise every column except the dyad, actor, time
+#' used. This is silent unless `data` also has whole-number columns the
+#' attribute does not name (say, a category merged with `mutate()` after
+#' aggregation): those are left out, with a `message()` naming them, so set
+#' `action_cols` explicitly to include them. Otherwise every column except the dyad, actor, time
 #' and `w_send` columns is used,
 #' with a warning naming the columns chosen; a column picked up this way
 #' that is not a non-negative whole-number count is an error. When
@@ -292,7 +295,10 @@ validate_bilatr_dyad_period <- function(
 #'
 #' `NULL` first looks for an `action_cols` attribute on `data` (set by
 #' [aggregate_events()]): if it names only columns still present in
-#' `data`, it is used silently. Otherwise `NULL` selects every column of
+#' `data`, it is used. That is silent unless `data` has other whole-number
+#' columns (outside `role_cols`) that the attribute does not name, e.g. a
+#' category merged with `mutate()` after aggregation; then a `message()`
+#' names them and says to set `action_cols` explicitly. Otherwise `NULL` selects every column of
 #' `data` not in `role_cols`, with a `warning()` listing them. Anything else goes through
 #' [tidyselect::eval_select()]; a bare symbol that is not a column of
 #' `data` but names a character vector in the calling environment is
@@ -309,6 +315,19 @@ validate_bilatr_dyad_period <- function(
   if (rlang::quo_is_null(action_quo)) {
     from_attr <- attr(data, "action_cols")
     if (is.character(from_attr) && length(from_attr) > 0 && all(from_attr %in% names(data))) {
+      # dplyr keeps the attribute through mutate(), so a column added after
+      # aggregate_events() (e.g. a merged category) would otherwise be
+      # left out without a word.
+      others <- setdiff(names(data), c(role_cols, from_attr))
+      extra <- others[purrr::map_lgl(data[others], .is_whole_number_col)]
+      if (length(extra) > 0) {
+        message(
+          "`action_cols` not set; using the `action_cols` attribute from aggregate_events() (",
+          paste(from_attr, collapse = ", "), "). Whole-number column(s) not in it are ",
+          "ignored: ", paste(extra, collapse = ", "),
+          ". Set `action_cols` explicitly to include them."
+        )
+      }
       return(list(cols = from_attr, default = FALSE))
     }
     cols <- setdiff(names(data), role_cols)
@@ -329,6 +348,22 @@ validate_bilatr_dyad_period <- function(
   }
   pos <- tidyselect::eval_select(action_quo, data, allow_rename = FALSE)
   list(cols = names(data)[pos], default = FALSE)
+}
+
+#' Is a column a whole-number numeric column?
+#'
+#' `TRUE` for a numeric column whose non-missing values are all whole
+#' numbers (see [.is_whole_number()]), and that has at least one.
+#'
+#' @param x A column.
+#' @return A single logical.
+#' @keywords internal
+.is_whole_number_col <- function(x) {
+  if (!is.numeric(x)) {
+    return(FALSE)
+  }
+  x <- x[!is.na(x)]
+  length(x) > 0 && all(.is_whole_number(x))
 }
 
 #' Whole-number test for a numeric vector

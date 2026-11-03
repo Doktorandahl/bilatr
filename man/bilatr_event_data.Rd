@@ -4,10 +4,12 @@
 \alias{bilatr_event_data}
 \title{The bilatr event-data contract}
 \description{
-Every function in this package that consumes event-level data (
-\code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}, \code{\link[=assemble_stan_data]{assemble_stan_data()}}) expects a
-data frame in the format documented here, and validates it with
-\code{\link[=validate_bilatr_events]{validate_bilatr_events()}} before doing anything else. This topic is the
+\code{\link[=aggregate_events]{aggregate_events()}}, the function in this package that consumes
+event-level data, expects a data frame in the format documented here,
+and validates it with \code{\link[=validate_bilatr_events]{validate_bilatr_events()}} before doing anything
+else. It turns events into the dyad-period table described at
+\code{?bilatr_dyad_period_data}, which \code{\link[=prepare_stan_data]{prepare_stan_data()}} and
+\code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} take. This topic is the
 single place the contract is spelled out; every other function's
 \verb{@param data} links here instead of repeating it.
 }
@@ -24,15 +26,15 @@ single place the contract is spelled out; every other function's
 Actor codes may have any length and any characters apart from \code{"_"}:
 ISO3 (\code{"USA"}), ISO2 (\code{"US"}), COW numeric codes (\code{"2"}, \code{"365"}), and
 free-text actor labels all work. Every column not named above is
-ignored by these functions and never modified -- in particular, a
-user's own \code{dyad}/\code{date}/\code{year}/\code{month}/\code{event_type} columns (if
-present) are left exactly as they are; the internal aggregate these
-functions build uses its own column names.
+ignored and never modified -- in particular, a user's own
+\code{dyad}/\code{date}/\code{year}/\code{month}/\code{event_type} columns (if present) are left
+exactly as they are and never reach the output; the internal aggregate
+uses its own column names.
 
 \code{\link[=validate_bilatr_events]{validate_bilatr_events()}} runs against \strong{every} row of \code{data}, including
-rows outside the analysis \code{years} window (see \code{\link[=assemble_stan_data]{assemble_stan_data()}}) --
-so a data problem in an out-of-window row (e.g. an unparseable date) is
-still caught. Windowing happens afterwards: rows outside \code{years} are
+rows outside the analysis window (\code{start}/\code{end} in \code{\link[=aggregate_events]{aggregate_events()}})
+-- so a data problem in an out-of-window row (e.g. an unparseable date) is
+still caught. Windowing happens afterwards: rows outside the window are
 dropped before the set of observed event classes is determined, and a
 \code{message()} reports how many rows were dropped.
 
@@ -52,14 +54,16 @@ events <- tibble::tibble(
   action = c(1, 1, 2, 2, 3, 3, 4, 4, 1, 2)
 )
 
-stan_data <- assemble_stan_data(
+agg <- aggregate_events(
   events,
-  years = 2020,
-  resolution = "monthly",
   grouping_var = "action",
+  resolution = "monthly",
+  start = "2020-01-01",
+  end = "2020-12-31",
   actor1 = "sender",
   actor2 = "target",
   date = "when"
 )
+stan_data <- prepare_stan_data(agg)
 
 }

@@ -31,5 +31,5 @@ Checks \code{data} against every rule in \code{?bilatr_event_data}, collecting
 every broken rule rather than stopping at the first, and \code{stop()}s once
 with a bulleted message naming each broken rule, the number of
 offending rows, and up to five example row numbers. Called first thing
-by \code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}} and \code{\link[=assemble_stan_data]{assemble_stan_data()}}.
+by \code{\link[=aggregate_events]{aggregate_events()}}.
 }

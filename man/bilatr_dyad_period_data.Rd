@@ -30,7 +30,10 @@ an error, never summed.
 (e.g. \code{c(coop, conflict)}, \code{starts_with("n_")}). If it is not given
 and \code{data} carries an \code{action_cols} attribute (as \code{\link[=aggregate_events]{aggregate_events()}}
 output does) naming only columns still present, those columns are
-used silently. Otherwise every column except the dyad, actor, time
+used. This is silent unless \code{data} also has whole-number columns the
+attribute does not name (say, a category merged with \code{mutate()} after
+aggregation): those are left out, with a \code{message()} naming them, so set
+\code{action_cols} explicitly to include them. Otherwise every column except the dyad, actor, time
 and \code{w_send} columns is used,
 with a warning naming the columns chosen; a column picked up this way
 that is not a non-negative whole-number count is an error. When

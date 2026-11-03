@@ -2,32 +2,37 @@
 % Please edit documentation in R/dyad_period.R
 \name{make_dyad_ids}
 \alias{make_dyad_ids}
-\title{Reattach dyad string identifiers to a fitted model's integer dyad index}
+\title{Build the \code{dyad_ids} attribute for \code{\link[=prepare_stan_data]{prepare_stan_data()}}}
 \usage{
-make_dyad_ids(data)
+make_dyad_ids(dyads, actor1, actor2, time_values, time_col, time_labels = NULL)
 }
 \arguments{
-\item{data}{Output of \code{\link[=fill_dyad_period_skeleton]{fill_dyad_period_skeleton()}} after
-\code{min_n_events} filtering (carrying \code{dyad}, \code{actor_a}, \code{actor_b},
-\code{year}, and \code{month} if monthly).}
+\item{dyads}{Character vector of retained dyads, in \code{dyad_id} order.}
+
+\item{actor1, actor2}{Character vectors of each dyad's actors (aligned
+with \code{dyads}), or \code{NULL} when the data has no actor columns.}
+
+\item{time_values}{Integer vector of the time-column values, \code{T} long.}
+
+\item{time_col}{Name of the time column.}
+
+\item{time_labels}{Optional data frame keyed by \code{time_col}; its other
+columns are left-joined on.}
 }
 \value{
-A data frame with \code{dyad_id}, \code{time_index}, \code{dyad}, \code{dyad2}
-(undirected dyad key), \code{actor_a}, \code{actor_b}, \code{year}, and (if
-monthly) \code{month}.
+A tibble with \code{dyad_id}, \code{time_index}, \code{dyad}, \code{dyad2}
+(the undirected dyad key), \code{actor1}, \code{actor2} (\code{dyad2}/\code{actor1}/
+\code{actor2} are \code{NA} when \code{actor1} is \code{NULL}), the time column, and any
+\code{time_labels} columns.
 }
 \description{
-\code{\link[=assemble_stan_data]{assemble_stan_data()}} indexes dyads by an integer \code{dyad_id} (1..D) in
-row order. This recovers the \code{dyad_id} <-> \code{dyad} (and undirected
-\code{dyad2}) mapping, so posterior draws indexed by \code{dyad_id} can be joined
-back to human-readable identifiers. See \code{\link[=extract_theta]{extract_theta()}}.
-}
-\details{
-A pure function of the already-assembled table: \code{data} must already be
-skeleton-filled (\code{\link[=fill_dyad_period_skeleton]{fill_dyad_period_skeleton()}}) and \code{min_n_events}-
-filtered, exactly as \code{\link[=assemble_stan_data]{assemble_stan_data()}} passes it -- this function
-does not re-fill or re-filter (0.9.0; previously it duplicated
-\code{\link[=assemble_stan_data]{assemble_stan_data()}}'s own fill/filter on top of the "agg" table it
-was already given, one of which was redundant).
+Recovers the \code{dyad_id} <-> \code{dyad} (and undirected \code{dyad2}) mapping, so
+posterior draws indexed by \code{dyad_id} can be joined back to readable
+identifiers (see \code{\link[=extract_theta]{extract_theta()}}). Builds the table directly from the
+(already sorted, already \code{min_n_events}-filtered) dyads and the full
+time range, so its rows are in the same order as \code{Y}'s: dyad
+(\code{dyad_id}), then time. Until 0.12.0 this was \code{.make_dyad_ids_generic()};
+the \code{make_dyad_ids()} of bilatr 0.11.0 and earlier built the old
+\code{actor_a}/\code{actor_b} table.
 }
 \keyword{internal}

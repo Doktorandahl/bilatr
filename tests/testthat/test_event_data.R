@@ -1,7 +1,9 @@
 # Tests for the 0.9.0 event-data contract: ?bilatr_event_data,
 # validate_bilatr_events(), and the D1-D4 fixes in
 # dev/audit_2026-09-23.md / dev/claude_code_prompt_0.9.0_data_contract.md.
-# No CmdStan needed.
+# No CmdStan needed. The aggregation blocks were ported in 0.12.0 from
+# grouped_events_to_dyad_period()/assemble_stan_data() to
+# aggregate_events()/prepare_stan_data().
 
 test_that("D1: non-3-letter actor codes work for directed and undirected data (COW numeric codes)", {
   # Before 0.9.0: directed data with non-3-letter codes errored
@@ -16,15 +18,11 @@ test_that("D1: non-3-letter actor codes work for directed and undirected data (C
     PentaClass = c(0, 1, 2, 3, 4)
   )
 
-  directed <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = TRUE
-  )
-  expect_equal(attr(directed, "w_send")$w_send, rep(1, 5))
+  directed <- aggregate_events(events, "PentaClass", "yearly", directed = TRUE)
+  expect_equal(directed$w_send, rep(1, 5))
 
-  undirected <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
-  )
-  w_send <- attr(undirected, "w_send")
+  undirected <- aggregate_events(events, "PentaClass", "yearly", directed = FALSE)
+  w_send <- dplyr::distinct(undirected, dyad, actor1, actor2, w_send)
   expect_setequal(w_send$dyad, c("2_365", "2_710", "365_710"))
   # hand count: "2_365" pools event 1 (actor1 = "2" = side A) and event 3
   # (actor1 = "365" = side B) -> 1 of 2 as sender.
@@ -35,19 +33,18 @@ test_that("D1: non-3-letter actor codes work for directed and undirected data (C
   # "365_710" is only event 5, actor1 = "710" = side B -> 0 of 1.
   expect_equal(w_send$w_send[w_send$dyad == "365_710"], 0)
 
-  sd <- assemble_stan_data(
-    events,
-    years = 2020, resolution = "yearly", grouping_var = "PentaClass",
+  sd <- events_to_stan_data(
+    events, "PentaClass", "2020-01-01", "2020-12-31",
     reference_category = 0, min_n_events = 1
   )
   expect_setequal(attr(sd, "country_codes"), c("2", "365", "710"))
   expect_true(all(sd$w_send == 1))
 
   dyad_ids <- attr(sd, "dyad_ids")
-  expect_true(all(c("actor_a", "actor_b") %in% names(dyad_ids)))
-  by_dyad <- dplyr::distinct(dyad_ids, dyad, dyad2, actor_a, actor_b)
-  expect_equal(by_dyad$actor_a[by_dyad$dyad == "2_365"], "2")
-  expect_equal(by_dyad$actor_b[by_dyad$dyad == "2_365"], "365")
+  expect_true(all(c("actor1", "actor2") %in% names(dyad_ids)))
+  by_dyad <- dplyr::distinct(dyad_ids, dyad, dyad2, actor1, actor2)
+  expect_equal(by_dyad$actor1[by_dyad$dyad == "2_365"], "2")
+  expect_equal(by_dyad$actor2[by_dyad$dyad == "2_365"], "365")
   # dyad "365_2" (row 3's directed key) carries the same undirected dyad2
   # as "2_365" -- the reverse-direction event of the same pair.
   expect_equal(by_dyad$dyad2[by_dyad$dyad == "365_2"], "2_365")
@@ -61,15 +58,11 @@ test_that("D1: ISO2 and mixed-length actor labels work, directed and undirected"
     PentaClass = c(0, 1, 2)
   )
 
-  directed <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = TRUE
-  )
+  directed <- aggregate_events(events, "PentaClass", "yearly", directed = TRUE)
   expect_setequal(directed$dyad, c("US_CN", "US_Freedonia", "Freedonia_CN"))
-  expect_equal(attr(directed, "w_send")$w_send, c(1, 1, 1))
+  expect_equal(directed$w_send, c(1, 1, 1))
 
-  undirected <- grouped_events_to_dyad_period(
-    events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE
-  )
+  undirected <- aggregate_events(events, "PentaClass", "yearly", directed = FALSE)
   expect_setequal(undirected$dyad, c("CN_US", "Freedonia_US", "CN_Freedonia"))
 })
 
@@ -85,15 +78,13 @@ test_that("custom actor1/actor2/date column names and a Date column give the sam
     dplyr::mutate(when = as.Date(as.character(SQLDATE), format = "%Y%m%d")) %>%
     dplyr::select(-SQLDATE)
 
-  sd_default <- assemble_stan_data(
-    base,
-    years = 2020, resolution = "monthly", grouping_var = "PentaClass",
-    reference_category = 0, min_n_events = 1
+  sd_default <- events_to_stan_data(
+    base, "PentaClass", "2020-01-01", "2020-12-31",
+    resolution = "monthly", reference_category = 0, min_n_events = 1
   )
-  sd_custom <- assemble_stan_data(
-    renamed,
-    years = 2020, resolution = "monthly", grouping_var = "action",
-    reference_category = 0, min_n_events = 1,
+  sd_custom <- events_to_stan_data(
+    renamed, "action", "2020-01-01", "2020-12-31",
+    resolution = "monthly", reference_category = 0, min_n_events = 1,
     actor1 = "sender", actor2 = "target", date = "when"
   )
 
@@ -118,15 +109,18 @@ test_that("a user's own year/date/dyad/event_type columns are never read or over
       event_type = "not-a-class"
     )
 
+  # the user's columns don't reach the dyad-period table
+  agg_plain <- aggregate_events(base, "PentaClass")
+  agg_clobber_prone <- aggregate_events(clobber_prone, "PentaClass")
+  expect_identical(agg_clobber_prone, agg_plain)
+
   compare_fields <- c("D", "T", "A", "Y", "is_obs", "ctry_a", "ctry_b", "w_send")
-  sd_plain <- assemble_stan_data(
-    base,
-    years = 2020, resolution = "yearly", grouping_var = "PentaClass",
+  sd_plain <- events_to_stan_data(
+    base, "PentaClass", "2020-01-01", "2020-12-31",
     reference_category = 0, min_n_events = 1
   )
-  sd_clobber_prone <- assemble_stan_data(
-    clobber_prone,
-    years = 2020, resolution = "yearly", grouping_var = "PentaClass",
+  sd_clobber_prone <- events_to_stan_data(
+    clobber_prone, "PentaClass", "2020-01-01", "2020-12-31",
     reference_category = 0, min_n_events = 1
   )
 
@@ -165,16 +159,16 @@ test_that("D2: an NA grouping_var value errors, naming the count (bare ModifiedR
   expect_true(is.na(events$ModifiedRootCode[1]))
 
   expect_error(
-    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "ModifiedRootCode"),
+    aggregate_events(events, "ModifiedRootCode"),
     "1 row"
   )
   expect_error(
-    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "ModifiedRootCode"),
+    aggregate_events(events, "ModifiedRootCode"),
     "ModifiedRootCode"
   )
 })
 
-test_that("D3: a class present only outside `years` is absent from event_classes/Y, and named in the message", {
+test_that("D3: a class present only outside the window is absent from event_classes/Y, and named in the message", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -184,9 +178,9 @@ test_that("D3: a class present only outside `years` is absent from event_classes
 
   msgs <- character(0)
   sd <- withCallingHandlers(
-    assemble_stan_data(
-      events,
-      years = 2020, resolution = "yearly", grouping_var = "PentaClass", min_n_events = 1
+    prepare_stan_data(
+      aggregate_events(events, "PentaClass", start = "2020-01-01", end = "2020-12-31"),
+      min_n_events = 1
     ),
     message = function(m) {
       msgs <<- c(msgs, conditionMessage(m))
@@ -195,7 +189,8 @@ test_that("D3: a class present only outside `years` is absent from event_classes
   )
 
   expect_false("9" %in% attr(sd, "event_classes"))
-  expect_true(any(grepl("9", msgs, fixed = TRUE)))
+  expect_equal(sd$A, 2L)
+  expect_true(any(grepl("zero in-window events and get no column: 9", msgs, fixed = TRUE)))
 })
 
 test_that("D4: a reference_category absent from the in-window data errors (present only outside the window too, D3+D4)", {
@@ -208,20 +203,18 @@ test_that("D4: a reference_category absent from the in-window data errors (prese
 
   # never present at all
   expect_error(
-    suppressMessages(assemble_stan_data(
-      events,
-      years = 2020, resolution = "yearly", grouping_var = "PentaClass",
+    events_to_stan_data(
+      events, "PentaClass", "2020-01-01", "2020-12-31",
       reference_category = 42, min_n_events = 1
-    )),
+    ),
     "not present"
   )
   # present, but only outside the analysis window
   expect_error(
-    suppressMessages(assemble_stan_data(
-      events,
-      years = 2020, resolution = "yearly", grouping_var = "PentaClass",
+    events_to_stan_data(
+      events, "PentaClass", "2020-01-01", "2020-12-31",
       reference_category = 9, min_n_events = 1
-    )),
+    ),
     "not present"
   )
 })
@@ -271,8 +264,8 @@ test_that("0b: leading/trailing whitespace in an actor code is a validator error
   expect_match(err2, "whitespace")
 })
 
-test_that("0c: validate_bilatr_events() runs on every row, including rows outside `years`", {
-  # Reproduction: an NA class in a row outside `years` must still error,
+test_that("0c: validate_bilatr_events() runs on every row, including rows outside the window", {
+  # Reproduction: an NA class in a row outside the window must still error,
   # even though that row would be dropped by the window filter.
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA"),
@@ -281,11 +274,7 @@ test_that("0c: validate_bilatr_events() runs on every row, including rows outsid
     PentaClass = c(NA, 0)
   )
   expect_error(
-    assemble_stan_data(events, years = 2015:2016, resolution = "yearly", grouping_var = "PentaClass"),
-    "missing \\(NA\\)"
-  )
-  expect_error(
-    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", years = 2015:2016),
+    aggregate_events(events, "PentaClass", start = "2015-01-01", end = "2016-12-31"),
     "missing \\(NA\\)"
   )
 })

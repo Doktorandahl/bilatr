@@ -91,19 +91,18 @@ a random-walk \code{theta} with no persistence parameter. Default \verb{8, 2}
 (weighted toward strong persistence).}
 
 \item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed by
-both registered Stan model variants, gating a per-dyad-period
-\code{log_lik} in \verb{generated quantities}; left off by default since it is
-\verb{D x T x} draws and file size already scales with dyad count.}
+every registered Stan model, gating a per-dyad-period \code{log_lik} in
+\verb{generated quantities}; left off by default since it is \verb{D x T x}
+draws and file size already scales with dyad count.}
 
-\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by both
-registered Stan model variants, gating the \code{reduce_sum} likelihood
-call in \code{model} exactly as \code{compute_log_lik} gates its generated
-quantity -- \code{1} fits the prior alone, useful for prior-predictive
+\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by every
+registered Stan model, gating the \code{reduce_sum} likelihood call in
+\code{model} -- \code{1} fits the prior alone, useful for prior-predictive
 checks and for validating \code{\link[=alpha_prior_moments]{alpha_prior_moments()}} against an actual
 fit.}
 
 \item{compute_theta_filtered}{\code{0} (default) or \code{1}. Data flag consumed
-by both registered Stan model variants, gating
+by every registered Stan model, gating
 \code{theta_filtered}/\code{theta_filtered_sd} in \verb{generated quantities}: the
 forward-filtered state (conditional on each draw's hyperparameters,
 a West-Harrison/Fisher-scoring linear-Bayes update; see each \code{.stan}
@@ -115,11 +114,10 @@ order of a minute or two per chain for a full production-sized dyad
 set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
 
 \item{filter_dyads}{Optional character vector of dyad names (matched
-against the \code{dyad_ids} attribute's \code{dyad} column -- the directed
-\code{"AAA_BBB"} key, same as everywhere else in this package) naming
-which dyads to compute \code{theta_filtered} for. Ignored if
-\code{compute_theta_filtered} is \code{0}. \code{NULL} (default) means all dyads,
-once \code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
+against the \code{dyad_ids} attribute's \code{dyad} column) naming which dyads
+to compute \code{theta_filtered} for. Ignored if \code{compute_theta_filtered}
+is \code{0}. \code{NULL} (default) means all dyads, once
+\code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
 fifty dyads) to compute the filter cheaply for just those. Errors,
 listing the offending names, if any requested dyad was dropped by
 \code{min_n_events} or never existed.}

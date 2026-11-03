@@ -19,15 +19,13 @@ validate_reference_class(
 \item{arg_name}{Name of the argument, used in the error message.}
 
 \item{null_hint}{What \code{NULL} anchors on instead, for the error message.
-The default describes \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s behaviour;
-\code{\link[=prepare_stan_data]{prepare_stan_data()}} anchors on its first action column.}
+The default describes \code{\link[=order_event_classes]{order_event_classes()}}'s C-locale numeric
+sort; \code{\link[=prepare_stan_data]{prepare_stan_data()}} passes "the first action column".}
 }
 \value{
 \code{value} (coerced to character) if it is present in \code{classes}.
 \code{NULL} is returned as-is: the only way to say "no preference", which
-then anchors on the first class in \code{\link[=order_event_classes]{order_event_classes()}}'s
-C-locale numeric sort (or, in \code{\link[=prepare_stan_data]{prepare_stan_data()}}, on the first
-action column).
+in \code{\link[=prepare_stan_data]{prepare_stan_data()}} anchors on the first action column.
 }
 \description{
 Validate a reference-category argument against the observed classes

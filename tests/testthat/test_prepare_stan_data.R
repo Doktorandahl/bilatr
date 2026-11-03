@@ -1,5 +1,5 @@
 # Tests for prepare_stan_data() (0.12.0) on non-event data. Equivalence
-# with assemble_stan_data() on event data is in
+# with the 0.11.0 assemble_stan_data() output on event data is in
 # test_prepare_stan_data_equivalence.R. No CmdStan needed.
 
 # Arbitrary dyad labels, no actor columns, a week_id-style time index with
@@ -227,7 +227,7 @@ test_that("dyad_id order is C-locale for mixed-case and numeric labels, matching
   expect_identical(dyads, c("10", "2", "Abc", "B", "USA", "_x", "a", "abc", "usa"))
   expect_identical(dyads, sort(labels, method = "radix"))
 
-  # dplyr::group_by() (what make_dyad_ids() uses to number dyads) gives
+  # dplyr::group_by() (what bilatr <= 0.11.0 used to number dyads) gives
   # the same order under the default dplyr.legacy_locale = FALSE
   withr::local_options(dplyr.legacy_locale = NULL)
   grouped <- dplyr::group_by(tibble::tibble(dyad = labels), .data$dyad) %>%
@@ -284,6 +284,46 @@ test_that("a verb that drops the action_cols attribute brings the default warnin
     suppressMessages(prepare_stan_data(resummarised, time = "year")),
     "`action_cols` not set"
   )
+})
+
+test_that("a whole-number column added after aggregate_events() is named in a message (0.12.0c)", {
+  # Merging categories after diagnose_category_merges(), keeping the originals.
+  merged <- dplyr::mutate(agg_fixture(), coop = `1` + `3`)
+  expect_identical(attr(merged, "action_cols"), c("0", "1", "3"))
+  suppressMessages(expect_message(
+    sd <- prepare_stan_data(merged),
+    "Whole-number column\\(s\\) not in it are ignored: coop\\. Set `action_cols` explicitly"
+  ))
+  # the attribute still decides: coop is not used
+  expect_identical(attr(sd, "event_classes"), c("0", "1", "3"))
+  # set explicitly, it is used and the message is gone
+  suppressMessages(expect_no_message(
+    sd2 <- prepare_stan_data(merged, action_cols = c("0", "1", "3", "coop")),
+    message = "not in it are ignored"
+  ))
+  expect_identical(attr(sd2, "event_classes"), c("0", "1", "3", "coop"))
+  # a non-numeric or non-whole extra column is not mentioned
+  noise <- dplyr::mutate(agg_fixture(), note = "x", share = `1` / 2 + 0.25)
+  suppressMessages(
+    expect_no_message(prepare_stan_data(noise), message = "not in it are ignored")
+  )
+})
+
+test_that("the action_cols attribute stays silent when there is nothing extra (0.12.0c)", {
+  agg <- agg_fixture()
+  suppressMessages(
+    expect_no_message(prepare_stan_data(agg), message = "not in it are ignored")
+  )
+  expect_no_warning(suppressMessages(prepare_stan_data(agg)))
+})
+
+test_that("merging categories and dropping the originals falls back to the default warning (0.12.0c)", {
+  merged <- dplyr::mutate(agg_fixture(), coop = `1` + `3`) %>% dplyr::select(-"1", -"3")
+  expect_warning(
+    sd <- suppressMessages(prepare_stan_data(merged)),
+    "action counts: 0, coop"
+  )
+  expect_identical(attr(sd, "event_classes"), c("0", "coop"))
 })
 
 test_that("an action_cols attribute naming a missing column falls back to the default, with the warning (D16)", {

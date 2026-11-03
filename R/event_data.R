@@ -1,9 +1,11 @@
 #' The bilatr event-data contract
 #'
-#' Every function in this package that consumes event-level data (
-#' [grouped_events_to_dyad_period()], [assemble_stan_data()]) expects a
-#' data frame in the format documented here, and validates it with
-#' [validate_bilatr_events()] before doing anything else. This topic is the
+#' [aggregate_events()], the function in this package that consumes
+#' event-level data, expects a data frame in the format documented here,
+#' and validates it with [validate_bilatr_events()] before doing anything
+#' else. It turns events into the dyad-period table described at
+#' `?bilatr_dyad_period_data`, which [prepare_stan_data()] and
+#' [fit_panel()]/[fit_dyad_ts()] take. This topic is the
 #' single place the contract is spelled out; every other function's
 #' `@param data` links here instead of repeating it.
 #'
@@ -17,15 +19,15 @@
 #' Actor codes may have any length and any characters apart from `"_"`:
 #' ISO3 (`"USA"`), ISO2 (`"US"`), COW numeric codes (`"2"`, `"365"`), and
 #' free-text actor labels all work. Every column not named above is
-#' ignored by these functions and never modified -- in particular, a
-#' user's own `dyad`/`date`/`year`/`month`/`event_type` columns (if
-#' present) are left exactly as they are; the internal aggregate these
-#' functions build uses its own column names.
+#' ignored and never modified -- in particular, a user's own
+#' `dyad`/`date`/`year`/`month`/`event_type` columns (if present) are left
+#' exactly as they are and never reach the output; the internal aggregate
+#' uses its own column names.
 #'
 #' [validate_bilatr_events()] runs against **every** row of `data`, including
-#' rows outside the analysis `years` window (see [assemble_stan_data()]) --
-#' so a data problem in an out-of-window row (e.g. an unparseable date) is
-#' still caught. Windowing happens afterwards: rows outside `years` are
+#' rows outside the analysis window (`start`/`end` in [aggregate_events()])
+#' -- so a data problem in an out-of-window row (e.g. an unparseable date) is
+#' still caught. Windowing happens afterwards: rows outside the window are
 #' dropped before the set of observed event classes is determined, and a
 #' `message()` reports how many rows were dropped.
 #'
@@ -45,15 +47,17 @@
 #'   action = c(1, 1, 2, 2, 3, 3, 4, 4, 1, 2)
 #' )
 #'
-#' stan_data <- assemble_stan_data(
+#' agg <- aggregate_events(
 #'   events,
-#'   years = 2020,
-#'   resolution = "monthly",
 #'   grouping_var = "action",
+#'   resolution = "monthly",
+#'   start = "2020-01-01",
+#'   end = "2020-12-31",
 #'   actor1 = "sender",
 #'   actor2 = "target",
 #'   date = "when"
 #' )
+#' stan_data <- prepare_stan_data(agg)
 #'
 #' @name bilatr_event_data
 NULL
@@ -116,12 +120,9 @@ NULL
 
 #' Build the slim four-column working table from a validated event table
 #'
-#' Shared by [grouped_events_to_dyad_period()] and [assemble_stan_data()]
-#' so that, between the two of them, a `data` table is validated exactly
-#' once and its date column parsed exactly once per call (0.9.1, audit
-#' 0f) -- previously `assemble_stan_data()` validated `data` itself and
-#' then again inside [grouped_events_to_dyad_period()], and parsed dates
-#' up to four times. Callers must validate `data` (via
+#' Used by [aggregate_events()], so that a `data` table is validated
+#' exactly once and its date column parsed exactly once per call (0.9.1,
+#' audit 0f). Callers must validate `data` (via
 #' [validate_bilatr_events()]) before calling this; it does no validation
 #' of its own.
 #'
@@ -148,7 +149,7 @@ NULL
 #' Ranks `a`/`b` against a radix-sorted level set rather than comparing
 #' them directly with `pmin()`/`pmax()`/`<`, which are locale-dependent
 #' for character input (the same concern [order_event_classes()]'s
-#' `locale = "C"` and [assemble_stan_data()]'s country index address for
+#' `locale = "C"` and [prepare_stan_data()]'s country index address for
 #' the action-class and country indices). This is the single place an
 #' unordered actor pair is built, used both for undirected dyads'
 #' side A/B assignment and for the undirected dyad key `dyad2`.
@@ -172,7 +173,7 @@ NULL
 #' every broken rule rather than stopping at the first, and `stop()`s once
 #' with a bulleted message naming each broken rule, the number of
 #' offending rows, and up to five example row numbers. Called first thing
-#' by [grouped_events_to_dyad_period()] and [assemble_stan_data()].
+#' by [aggregate_events()].
 #'
 #' @param data A data frame to validate.
 #' @param grouping_var Name of the event-class column, or `NULL` to skip

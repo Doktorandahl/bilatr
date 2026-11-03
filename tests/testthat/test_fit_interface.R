@@ -363,9 +363,13 @@ test_that("downstream functions use the attached stan_data, and the sidecar next
 test_that("downstream functions error helpfully when no stan_data can be found", {
   skip_on_cran()
   skip_if_no_cmdstan()
-  # its own output_dir, with the sidecar removed: tempdir() (cmdstanr's
-  # default) may hold another test's sidecar
-  od <- withr::local_tempfile()
+  # Its own output_dir, with the sidecar removed, rather than cmdstanr's
+  # default tempdir(): no test writes a sidecar there any more, but
+  # tempdir() is shared by the whole R session (every test file under
+  # R CMD check, or an interactive session that ran fit_*(output_dir =
+  # tempdir())), so "no sidecar next to these CSVs" is only a fact in a
+  # directory the test owns.
+  od <- withr::local_tempdir()
   fit <- real_fit(fit_agg(), output_dir = od)
   unlink(file.path(od, "bilatr_stan_data.rds"))
   attr(fit, "stan_data") <- NULL

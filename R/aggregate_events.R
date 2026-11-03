@@ -141,7 +141,7 @@ aggregate_events <- function(
   start <- start %||% data_range[1]
   end <- end %||% data_range[2]
 
-  # Window first, as assemble_stan_data() does: the class set is built
+  # Window first, as bilatr <= 0.11.0 did: the class set is built
   # from in-window rows only, but the dropped-class message compares
   # against every class in `data`.
   all_classes <- unique(slim$.class)
@@ -193,7 +193,7 @@ aggregate_events <- function(
   slim$dyad <- paste(slim$actor1, slim$actor2, sep = "_")
 
   # Per-dyad actors and sender share, computed exactly as
-  # .dyad_period_from_slim() does (1 by construction when directed).
+  # bilatr <= 0.11.0 computed them (1 by construction when directed).
   dyad_info <- slim %>%
     dplyr::mutate(is_side_a_sender = .data$.actor1 == .data$actor1) %>%
     dplyr::group_by(.data$dyad) %>%

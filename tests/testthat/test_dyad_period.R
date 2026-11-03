@@ -16,23 +16,22 @@ test_that("validate_reference_class errors on a value absent from the data (0.9.
   expect_null(validate_reference_class(NULL, c("a", "b"), "reference_category"))
 })
 
-test_that("grouped_events_to_dyad_period produces one row per dyad-year with correctly ordered class columns", {
+# The blocks below were ported in 0.12.0 from grouped_events_to_dyad_period()
+# and fill_dyad_period_skeleton() to aggregate_events() (which now also
+# fills the skeleton) and prepare_stan_data() (which builds is_obs).
+
+test_that("aggregate_events() gives one row per dyad-year with C-locale numerically ordered class columns", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
 
-  agg <- grouped_events_to_dyad_period(
-    events,
-    resolution = "yearly",
-    grouping_var = "PentaClass",
-    directed = TRUE,
-    reference_category = 0
-  )
+  agg <- suppressMessages(aggregate_events(events, "PentaClass", "yearly", directed = TRUE))
 
-  expect_true(all(c("dyad", "year", "total_events") %in% names(agg)))
-  class_cols <- grep("^EventClass_", names(agg), value = TRUE)
-  expect_equal(class_cols, c("EventClass_0", "EventClass_1", "EventClass_2", "EventClass_3", "EventClass_4"))
+  class_cols <- attr(agg, "action_cols")
+  expect_equal(class_cols, c("0", "1", "2", "3", "4"))
+  expect_named(agg, c("dyad", "actor1", "actor2", "year", "w_send", class_cols))
   expect_equal(nrow(agg), dplyr::n_distinct(paste(agg$dyad, agg$year)))
-  expect_equal(rowSums(agg[class_cols]), agg$total_events)
+  # every event is counted exactly once
+  expect_equal(sum(as.matrix(agg[class_cols])), nrow(events))
 })
 
 test_that("directed = FALSE collapses ordered pairs to a single undirected dyad key", {
@@ -44,14 +43,14 @@ test_that("directed = FALSE collapses ordered pairs to a single undirected dyad 
   )
   events <- recode_cameo(events, code_col = "EventCode")
 
-  directed <- grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", directed = TRUE)
-  undirected <- grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", directed = FALSE)
+  directed <- aggregate_events(events, "PentaClass", "yearly", directed = TRUE)
+  undirected <- aggregate_events(events, "PentaClass", "yearly", directed = FALSE)
 
   expect_equal(dplyr::n_distinct(directed$dyad), 2L)
   expect_equal(dplyr::n_distinct(undirected$dyad), 1L)
 })
 
-test_that("0d: grouped_events_to_dyad_period(years =) reports how many rows it dropped", {
+test_that("0d: aggregate_events(start =, end =) reports how many rows it dropped", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -59,29 +58,30 @@ test_that("0d: grouped_events_to_dyad_period(years =) reports how many rows it d
     PentaClass = c(0, 1, 2)
   )
   expect_message(
-    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass", years = 2020),
+    aggregate_events(events, "PentaClass", "yearly", start = "2020-01-01", end = "2020-12-31"),
     "dropping 1 row"
   )
-  # no years supplied: no filtering, no message
-  expect_no_message(
-    grouped_events_to_dyad_period(events, resolution = "yearly", grouping_var = "PentaClass")
-  )
+  # no window: no filtering, no message
+  expect_no_message(aggregate_events(events, "PentaClass", "yearly"))
 })
 
-test_that("fill_dyad_period_skeleton fills gaps with zero counts and flags is_obs correctly", {
-  agg <- tibble::tibble(
-    dyad = "USA_CHN",
-    year = 2016,
-    actor_a = "USA",
-    actor_b = "CHN",
-    EventClass_0 = 3L,
-    total_events = 3L
+test_that("gaps in the window are filled with zero counts, and is_obs flags the observed periods", {
+  events <- tibble::tibble(
+    Actor1CountryCode = c("USA", "USA", "USA"),
+    Actor2CountryCode = c("CHN", "CHN", "CHN"),
+    SQLDATE = c(20160101L, 20160201L, 20160301L),
+    PentaClass = c(0, 0, 1)
   )
-  filled <- fill_dyad_period_skeleton(agg, years = 2015:2017, resolution = "yearly")
+  agg <- aggregate_events(events, "PentaClass", "yearly", start = "2015-01-01", end = "2017-12-31")
 
-  expect_equal(nrow(filled), 3L)
-  expect_equal(filled$is_obs, c(0L, 1L, 0L))
-  expect_equal(filled$total_events, c(0L, 3L, 0L))
-  expect_equal(filled$actor_a, rep("USA", 3L))
-  expect_equal(filled$actor_b, rep("CHN", 3L))
+  expect_equal(nrow(agg), 3L)
+  expect_equal(agg$year, 2015:2017)
+  expect_equal(agg$`0`, c(0L, 2L, 0L))
+  expect_equal(agg$`1`, c(0L, 1L, 0L))
+  expect_equal(agg$actor1, rep("USA", 3L))
+  expect_equal(agg$actor2, rep("CHN", 3L))
+
+  sd <- suppressMessages(prepare_stan_data(agg))
+  expect_equal(sd$is_obs, matrix(c(0L, 1L, 0L), nrow = 1))
+  expect_equal(sd$T, 3)
 })

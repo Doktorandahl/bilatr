@@ -17,12 +17,9 @@ A tibble with \code{.actor1}, \code{.actor2}, \code{.date} (parsed), \code{.clas
 (as character), \code{.year}, and \code{.month}.
 }
 \description{
-Shared by \code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}} and \code{\link[=assemble_stan_data]{assemble_stan_data()}}
-so that, between the two of them, a \code{data} table is validated exactly
-once and its date column parsed exactly once per call (0.9.1, audit
-0f) -- previously \code{assemble_stan_data()} validated \code{data} itself and
-then again inside \code{\link[=grouped_events_to_dyad_period]{grouped_events_to_dyad_period()}}, and parsed dates
-up to four times. Callers must validate \code{data} (via
+Used by \code{\link[=aggregate_events]{aggregate_events()}}, so that a \code{data} table is validated
+exactly once and its date column parsed exactly once per call (0.9.1,
+audit 0f). Callers must validate \code{data} (via
 \code{\link[=validate_bilatr_events]{validate_bilatr_events()}}) before calling this; it does no validation
 of its own.
 }

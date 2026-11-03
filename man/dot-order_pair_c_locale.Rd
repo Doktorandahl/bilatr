@@ -17,7 +17,7 @@ C-locale byte order, element-wise) and \code{actor_b} (the other).
 Ranks \code{a}/\code{b} against a radix-sorted level set rather than comparing
 them directly with \code{pmin()}/\code{pmax()}/\code{<}, which are locale-dependent
 for character input (the same concern \code{\link[=order_event_classes]{order_event_classes()}}'s
-\code{locale = "C"} and \code{\link[=assemble_stan_data]{assemble_stan_data()}}'s country index address for
+\code{locale = "C"} and \code{\link[=prepare_stan_data]{prepare_stan_data()}}'s country index address for
 the action-class and country indices). This is the single place an
 unordered actor pair is built, used both for undirected dyads'
 side A/B assignment and for the undirected dyad key \code{dyad2}.
