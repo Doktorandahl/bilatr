@@ -13,10 +13,12 @@ extract_mu_intercept(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
 (see Details).}
 
 \item{event_classes}{Optional character vector of event-class labels,
-in the same order used to build \code{stan_data} (i.e. the
-\code{"event_classes"} attribute attached by \code{\link[=assemble_stan_data]{assemble_stan_data()}}). If
-supplied, an \code{event_class} column is added alongside the raw action
-index.}
+in the same order used to build the Stan data (i.e. its
+\code{"event_classes"} attribute, from \code{\link[=prepare_stan_data]{prepare_stan_data()}}). If supplied,
+an \code{event_class} column is added alongside the raw action index.
+\code{NULL} (default) uses the \code{event_classes} of the Stan data attached to
+\code{fit} by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}, if any; otherwise the output
+is unlabelled.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
@@ -46,6 +48,6 @@ dyad-set size, so no chunking here either).
 }
 \examples{
 \dontrun{
-mu_intercept <- extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
+mu_intercept <- extract_mu_intercept(fit)
 }
 }

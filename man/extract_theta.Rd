@@ -6,7 +6,7 @@
 \usage{
 extract_theta(
   fit,
-  stan_data,
+  stan_data = NULL,
   probs = c(0.05, 0.5, 0.95),
   max_memory_mb = 8192,
   chunk_size = NULL,
@@ -18,9 +18,13 @@ extract_theta(
 \code{\link[=fit_panel]{fit_panel()}}, or a character vector of raw CmdStan CSV file paths
 (see Details).}
 
-\item{stan_data}{The Stan data list used to produce \code{fit}, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (must still carry its \code{dyad_ids}
-attribute).}
+\item{stan_data}{The Stan data list used to produce \code{fit}, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
+\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
+\code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
+errors if neither is found. Stan data saved by \code{assemble_stan_data()}
+(bilatr 0.11.0 and earlier) works too.
+It must carry its \code{dyad_ids} attribute.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
@@ -33,15 +37,18 @@ the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
-\code{time_index}, \code{dyad}, \code{dyad2}, \code{year} (and \code{month}, if applicable),
-the posterior \code{mean} of theta, and one column per requested quantile.
+\code{time_index}, the other \code{dyad_ids} columns (\code{dyad}, \code{dyad2}, \code{actor1},
+\code{actor2}, the time column and its labels; \code{actor_a}/\code{actor_b} and
+\code{year}/\code{month} for Stan data from before 0.12.0), the posterior \code{mean}
+of theta, and one column per requested quantile.
 }
 \description{
 Pulls posterior summaries of the latent conflict trajectory \code{theta}
 out of a fitted model, indexed by dyad and time period, and reattaches
 the human-readable dyad identifiers (\code{dyad}, the undirected \code{dyad2},
-\code{year}, and \code{month} if applicable) via the \code{dyad_ids} attribute that
-\code{\link[=assemble_stan_data]{assemble_stan_data()}} attaches to its output. Works the same way for
+the actors, the time column and any time labels such as \code{year}/\code{month})
+via the \code{dyad_ids} attribute that \code{\link[=prepare_stan_data]{prepare_stan_data()}} attaches to its
+output. Works the same way for
 single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=fit_panel]{fit_panel()}}) fits.
 }
 \details{
@@ -72,10 +79,11 @@ in-memory \code{fit} if you need other quantiles.
 }
 \examples{
 \dontrun{
-theta <- extract_theta(fit, stan_data)
+theta <- extract_theta(fit)
 
-# a completed SLURM run, never read into this R session
+# a completed SLURM run, never read into this R session; the
+# *_stan_data.rds that fit_panel() wrote next to the CSVs is found
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-theta <- extract_theta(csv_files, stan_data, max_memory_mb = 16384)
+theta <- extract_theta(csv_files, max_memory_mb = 16384)
 }
 }

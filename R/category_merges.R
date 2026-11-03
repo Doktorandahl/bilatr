@@ -218,12 +218,18 @@
 #'
 #' @param fit A `CmdStanMCMC`-like fit object, or a character vector of
 #'   CmdStan CSV file paths (see [.get_draws()]).
-#' @param stan_data The Stan data list used to produce `fit`, as returned
-#'   by [assemble_stan_data()] (used for the default empirical `shares`
-#'   and the `effective_info` figure's mean event count).
+#' @param stan_data The Stan data list used to produce `fit`, from
+#'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
+#'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
+#'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
+#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
+#'   (bilatr 0.11.0 and earlier) works too.
+#'   Used for the default empirical `shares` and the `effective_info`
+#'   figure's mean event count.
 #' @param event_classes Character vector of event-class labels, length
 #'   `A`, in the same order as `stan_data`'s `"event_classes"` attribute.
-#'   Defaults to that attribute if present, else `"1", "2", ...`.
+#'   `NULL` (default) uses that attribute if present, else `"1", "2", ...`;
+#'   an explicit value wins.
 #' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
 #'   to `NULL`, which uses `event_class_labels(stan_data)` (see
 #'   [event_class_labels()]; falling back
@@ -263,13 +269,14 @@
 #' @export
 diagnose_category_merges <- function(
   fit,
-  stan_data,
+  stan_data = NULL,
   event_classes = NULL,
   class_labels = NULL,
   shares = NULL,
   phi = NULL,
   probs = c(0.05, 0.5, 0.95)
 ) {
+  stan_data <- .stan_data_from_fit(fit, stan_data, "diagnose_category_merges()")
   need_theta0 <- identical(shares, "theta0")
   need_phi_draws <- is.null(phi)
   vars <- c("alpha", if (need_theta0) "mu_intercept", if (need_phi_draws) "phi")

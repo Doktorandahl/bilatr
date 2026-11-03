@@ -53,39 +53,41 @@ events <- tibble::tibble(
 events <- recode_cameo(events, code_col = "EventCode")
 ```
 
-## 2. Assemble Stan data
+## 2. Aggregate to a dyad-period table
 
-The call is identical in shape to the single-dyad case; `D` will simply
-be greater than 1 because the input spans multiple dyads. Panel-sized
-data is where `reduce_sum` chunking matters: `chunk_size` sets how many
-dyads' worth of likelihood evaluation each `reduce_sum` task covers.
-This project's own benchmarking found `chunk_size = 600` with 16 threads
-Pareto-optimal for panel-sized data; for a small illustrative panel like
-this one, a small `chunk_size` (or even 1) is fine.
+The call is identical in shape to the single-dyad case; the table
+simply holds more than one dyad.
 
 ```{r}
-stan_data <- assemble_stan_data(
+agg <- aggregate_events(
   events,
-  years = 2015:2019,
-  resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  min_n_events = 1,
-  chunk_size = 4
+  resolution = "yearly",
+  start = "2015-01-01",
+  end = "2019-12-31"
 )
-stan_data$D # multiple dyads
+count(agg, dyad) # multiple dyads
 ```
 
 ## 3. Fit
 
-[fit_panel()] checks that `stan_data$D >= 2` and defaults
-`threads_per_chain = 16` (tune this and `chunk_size` together for your
-hardware; see [fit_panel()]'s documentation). As in the single-dyad
-vignette, this example uses a short run to build quickly.
+[fit_panel()] builds the Stan data from the table, checks that there
+are at least two dyads, and defaults `threads_per_chain = 16`.
+Panel-sized data is where `reduce_sum` chunking matters: `chunk_size`
+sets how many dyads' worth of likelihood evaluation each `reduce_sum`
+task covers. This project's own benchmarking found `chunk_size = 600`
+with 16 threads Pareto-optimal for panel-sized data (tune the two
+together for your hardware; see [fit_panel()]'s documentation); for a
+small illustrative panel like this one, a small `chunk_size` (or even 1)
+is fine. As in the single-dyad vignette, this example uses a short run
+to build quickly.
 
 ```{r, results = "hide"}
 fit <- fit_panel(
-  stan_data,
+  agg,
+  reference_category = "0",
+  min_n_events = 1,
+  chunk_size = 4,
   chains = 2,
   parallel_chains = 2,
   threads_per_chain = 2,
@@ -94,6 +96,8 @@ fit <- fit_panel(
   seed = 1,
   opt_level = 1
 )
+stan_data <- attr(fit, "stan_data") # the Stan data the model was fit to
+stan_data$D
 ```
 
 ## 4. Extract
@@ -102,10 +106,10 @@ The extraction functions work identically to the single-dyad case, now
 returning one trajectory per dyad:
 
 ```{r}
-theta <- extract_theta(fit, stan_data)
+theta <- extract_theta(fit)
 theta %>% count(dyad) # one row per dyad-period, D dyads
 
-extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
+extract_alpha(fit)
 ```
 
 The hierarchical pooling shows up in the dyad-level parameters, e.g.
@@ -144,3 +148,49 @@ closer inspection of their raw event counts before trusting their
 `theta` trajectory. Any Tier 1 issue, by contrast, is a global problem
 and should be investigated regardless of any individual dyad's
 sparsity.
+
+## 6. Using your own aggregated data
+
+Nothing above depends on GDELT or CAMEO. [fit_panel()] and
+[fit_dyad_ts()] take any dyad-period table of action counts in the
+format documented at `?bilatr_dyad_period_data`: one row per dyad and
+period, an integer period index (gaps are allowed and become unobserved
+periods), and two or more count columns.
+
+```{r, eval = FALSE}
+my_counts <- tibble::tibble(
+  dyad = rep(c("A-B", "A-C", "B-C"), each = 4),
+  week_id = rep(c(1L, 2L, 3L, 5L), times = 3), # week 4 unobserved
+  meetings = c(3, 1, 0, 2, 4, 4, 2, 1, 0, 1, 1, 0),
+  protests = c(0, 1, 2, 0, 1, 0, 0, 3, 2, 2, 0, 1),
+  sanctions = c(0, 0, 1, 1, 0, 0, 0, 1, 3, 1, 2, 2)
+)
+
+fit_own <- fit_panel(
+  my_counts,
+  time = "week_id",
+  action_cols = c(meetings, protests, sanctions), # or c("meetings", ...)
+  reference_category = "meetings",
+  chunk_size = 1,
+  chains = 2, threads_per_chain = 1
+)
+extract_theta(fit_own)
+```
+
+`time` names the period column and `action_cols` the count columns (a
+character vector or a tidyselect expression such as
+`starts_with("n_")`). `time_range = c(min, max)` pins the periods
+covered, and so `T`; by default it is the data's own range. The Stan
+data's `Y` is a dense dyads x periods x action types array, so very
+fine periods (e.g. days) are only practical for few dyads or short
+windows; see `?prepare_stan_data`.
+
+The country-offset model `stan_model = "stable_gamma"` needs to know
+which two actors make up each dyad: add `actor1` and `actor2` columns
+(the dyad column can then be left out, and is built as
+`actor1_actor2`). Without them `stable_gamma` errors before compiling;
+`stable` and `ou` don't need them. For undirected data, pass
+`directed = FALSE` and, if you can, a `w_send` column with the share of
+each dyad's events sent by `actor1`. Without `w_send`, `stable_gamma`
+assumes 0.5 for every dyad and warns. [aggregate_events()] computes
+`w_send` from event data.

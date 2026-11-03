@@ -75,35 +75,42 @@ events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
 # built-in lookup table (no external CAMEO reference package needed):
 events <- recode_cameo(events)
 
-# --- 2. Assemble Stan data ---------------------------------------------
-# actor1/actor2/date name your event table's columns (defaults shown
-# here match GDELT's own column names, so they can be omitted for GDELT
-# data). reference_category anchors the model's scale/sign reference;
-# every other action class's discrimination (alpha[2:A]) is freely
-# estimated.
-stan_data <- assemble_stan_data(
+# --- 2. Aggregate to a dyad-period table ---------------------------------
+# actor1/actor2/date name your event table's columns (the defaults match
+# GDELT's own column names, so they can be omitted for GDELT data).
+# The result has one row per dyad and year, and one count column per
+# event class (see ?bilatr_dyad_period_data). Any other source of
+# already aggregated dyad-period counts can be used in its place.
+agg <- aggregate_events(
   events,
-  years = 2015:2020,
-  resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0, # verbal cooperation
-  min_n_events = 10,
-  actor1 = "Actor1CountryCode",
-  actor2 = "Actor2CountryCode",
-  date = "SQLDATE"
+  resolution = "yearly",
+  start = "2015-01-01",
+  end = "2020-12-31"
 )
 
 # --- 3. Fit --------------------------------------------------------------
-# One dyad at a time (D == 1):
-fit <- fit_dyad_ts(stan_data, chains = 4, iter_warmup = 1000, iter_sampling = 1000)
+# reference_category anchors the model's scale/sign reference; every
+# other action class's discrimination (alpha[2:A]) is freely estimated.
+# A full panel (D > 1), with hierarchical pooling on theta0/phi/process noise:
+fit <- fit_panel(
+  agg,
+  reference_category = "0", # verbal cooperation
+  min_n_events = 10,
+  chunk_size = 600,
+  chains = 4, threads_per_chain = 16, iter_warmup = 1000, iter_sampling = 1000
+)
 
-# Or a full panel (D > 1), with hierarchical pooling on theta0/phi/process noise:
-# fit <- fit_panel(stan_data, chains = 4, threads_per_chain = 16, iter_warmup = 1000, iter_sampling = 1000)
+# Or one dyad at a time (D == 1):
+# usa_chn <- filter(agg, dyad == "USA_CHN")
+# fit <- fit_dyad_ts(usa_chn, reference_category = "0", chains = 4)
 
 # --- 4. Extract ------------------------------------------------------------
-theta <- extract_theta(fit, stan_data)          # latent trajectories, with dyad IDs reattached
-alpha <- extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
-mu_intercept <- extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
+# The fit carries the Stan data it was fit to (attr(fit, "stan_data")),
+# so the extractors need nothing else.
+theta <- extract_theta(fit)            # latent trajectories, with dyad IDs reattached
+alpha <- extract_alpha(fit)            # labelled with the event classes
+mu_intercept <- extract_mu_intercept(fit)
 
 # --- 5. Diagnose -----------------------------------------------------------
 fit$summary(variables = c("alpha", "mu_intercept", "phi"))  # includes rhat, ess_bulk, ess_tail
@@ -144,16 +151,20 @@ by default.
 Two other Stan programs are registered as experimental variants: `ou`
 (an Ornstein-Uhlenbeck `theta` with mean reversion instead of a pure
 random walk) and `stable_gamma` (adds a country-level category-offset
-`gamma` on top of `stable`'s likelihood). See `R/model_registry.R` and
-[`assemble_stan_data()`] for details.
+`gamma` on top of `stable`'s likelihood; it needs actor columns in the
+dyad-period table). See `R/model_registry.R` and `?prepare_stan_data`
+for details.
 
 ## Performance notes
 
-- `assemble_stan_data()`'s `chunk_size` argument sets the `reduce_sum`
+- The `chunk_size` argument of `fit_panel()`/`prepare_stan_data()` sets the `reduce_sum`
   grainsize used to chunk the likelihood across dyads. 16 threads with
   `chunk_size = 600` was Pareto-optimal in this project's own
   benchmarking for panel-sized data; tune both together for your data
   size and hardware.
+- The Stan data's count array `Y` is dense, dyads x periods x action
+  types (about `D * T * A * 4` bytes), so very fine time resolutions
+  (e.g. daily) are only practical for few dyads or short windows.
 - `compile_bilatr_model()`'s `opt_level` argument controls the C++
   compiler optimization level. The `reduce_sum`-based likelihood
   generates a lot of template code, and compiling at the default

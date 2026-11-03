@@ -67,45 +67,50 @@ events <- recode_cameo(events, code_col = "EventCode")
 `PentaClass_modified` from the package's built-in [cameo_lookup] table
 (no external CAMEO reference package required).
 
-## 2. Assemble Stan data
+## 2. Aggregate to a dyad-period table
 
-[assemble_stan_data()] aggregates events to dyad-period action-class
-counts and packages them for the model. `reference_category` should be a
-low-conflict/neutral action class; here we use PentaClass 0 (verbal
-cooperation). It becomes `alpha[1]`, the discrimination parameter the
-model always reports as positive via an orientation fold (see `inst/stan/
-bilatr_alphanorm.stan`'s header, "IDENTIFICATION: ORIENTATION FOLD"), so
-that higher `theta` always means better relations. Every other action
-class's discrimination is freely estimated subject to `alpha` summing to
-exactly 0 across all classes (RMS normalized to 1) -- there is no single
-fixed-at-1 element.
+[aggregate_events()] collapses events to one row per dyad and period,
+with one count column per event class (the format documented at
+`?bilatr_dyad_period_data`). Any other source of already aggregated
+dyad-period counts can be used instead; see `vignette("panel_model")`,
+"Using your own aggregated data".
 
 ```{r}
-stan_data <- assemble_stan_data(
+agg <- aggregate_events(
   events,
-  years = 2015:2019,
-  resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  min_n_events = 1
+  resolution = "yearly",
+  start = "2015-01-01",
+  end = "2019-12-31"
 )
-stan_data$D # a single dyad
-stan_data$T # number of years
-stan_data$A # number of action classes
+agg
 ```
 
 ## 3. Fit
 
-[fit_dyad_ts()] checks that `stan_data$D == 1` and fits the model with
-`threads_per_chain = 1` by default (reduce_sum has nothing to chunk
-across when there's only one dyad). The example below uses a short
-warmup/sampling run so the vignette builds quickly; real analyses should
-use `iter_warmup`/`iter_sampling` in the low thousands and check the
-diagnostics below before trusting the result.
+[fit_dyad_ts()] takes the table directly. It builds the Stan data with
+[prepare_stan_data()], checks that there is exactly one dyad, and fits
+the model with `threads_per_chain = 1` by default (reduce_sum has
+nothing to chunk across when there's only one dyad).
+
+`reference_category` should be a low-conflict/neutral action class;
+here we use PentaClass 0 (verbal cooperation). It becomes `alpha[1]`,
+the discrimination parameter the model always reports as positive via
+an orientation fold (see `inst/stan/bilatr_alphanorm.stan`'s header,
+"IDENTIFICATION: ORIENTATION FOLD"), so that higher `theta` always
+means better relations. Every other action class's discrimination is
+freely estimated subject to `alpha` summing to exactly 0 across all
+classes (RMS normalized to 1) -- there is no single fixed-at-1 element.
+
+The example below uses a short warmup/sampling run so the vignette
+builds quickly; real analyses should use `iter_warmup`/`iter_sampling`
+in the low thousands and check the diagnostics below before trusting
+the result.
 
 ```{r, results = "hide"}
 fit <- fit_dyad_ts(
-  stan_data,
+  agg,
+  reference_category = "0",
   chains = 2,
   parallel_chains = 2,
   iter_warmup = 300,
@@ -115,23 +120,33 @@ fit <- fit_dyad_ts(
 )
 ```
 
+The fit carries the Stan data it was fit to:
+
+```{r}
+stan_data <- attr(fit, "stan_data")
+stan_data$D # a single dyad
+stan_data$T # number of years
+stan_data$A # number of action classes
+```
+
 ## 4. Extract
 
 [extract_theta()] reattaches human-readable dyad identifiers to the
-posterior summary of the latent conflict trajectory:
+posterior summary of the latent conflict trajectory. It finds them in
+the Stan data attached to `fit`, so no second argument is needed:
 
 ```{r}
-theta <- extract_theta(fit, stan_data)
+theta <- extract_theta(fit)
 theta
 ```
 
 [extract_alpha()] and [extract_mu_intercept()] extract the action-type
-discrimination and intercept parameters, optionally labeled with the
-event-class values used to build `stan_data`:
+discrimination and intercept parameters, labeled with the event-class
+values (again taken from the attached Stan data):
 
 ```{r}
-extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
-extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
+extract_alpha(fit)
+extract_mu_intercept(fit)
 ```
 
 Note `sum(alpha)` and `sum(mu_intercept)` are exactly 0: both are

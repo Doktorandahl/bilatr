@@ -44,9 +44,13 @@
 #' @param csv_files Character vector of raw CmdStan CSV file paths (one per
 #'   chain). Required; this function does not accept an in-memory fit
 #'   (see Details).
-#' @param stan_data The Stan data list used to produce the fit, as returned
-#'   by [assemble_stan_data()] (must still carry its `dyad_ids` attribute),
-#'   for [extract_theta()]'s dyad-identifier join.
+#' @param stan_data The Stan data list used to produce the fit, from
+#'   [prepare_stan_data()] (must carry its `dyad_ids` attribute), for
+#'   [extract_theta()]'s dyad-identifier join. `NULL` (default) reads the
+#'   single `*_stan_data.rds` file next to `csv_files` (which
+#'   [fit_panel()]/[fit_dyad_ts()] write to their `output_dir`), with a
+#'   `message()`; errors if there is none or more than one. Stan data saved
+#'   by `assemble_stan_data()` (bilatr 0.11.0 and earlier) works too.
 #' @param stan_model Name registered in `.bilatr_stan_models`; see
 #'   [.canonical_stan_model()]. Used only to decide whether `gamma` (the
 #'   experimental `stable_gamma` variant's country-level offset) gets its
@@ -54,8 +58,8 @@
 #'   Defaults to `.BILATR_DEFAULT_MODEL`.
 #' @param event_classes Optional character vector of event-class labels,
 #'   passed through to the `alpha`/`mu_intercept` outputs exactly as in
-#'   [extract_alpha()]. Defaults to `stan_data`'s `"event_classes"`
-#'   attribute, if present. When supplied, `alpha`/`mu_intercept` also get
+#'   [extract_alpha()]. `NULL` (default) uses `stan_data`'s
+#'   `"event_classes"` attribute, if present; an explicit value wins. When supplied, `alpha`/`mu_intercept` also get
 #'   a `class_label` column (0.10.1), from `event_class_labels(stan_data)`
 #'   (see [event_class_labels()]) unless overridden by `class_labels`.
 #' @param class_labels Optional; see [.resolve_class_labels()]. Ignored
@@ -77,17 +81,17 @@
 #' \dontrun{
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
 #' result <- diagnose_and_extract_bilatr(
-#'   csv_files, stan_data, n_dt = n_dt, stan_model = "ou"
+#'   csv_files, n_dt = n_dt, stan_model = "ou"
 #' )
 #' result$diagnostics
 #' result$theta
 #' }
 #' @export
 diagnose_and_extract_bilatr <- function(
-  csv_files, stan_data, n_dt,
+  csv_files, stan_data = NULL, n_dt,
   stan_model = .BILATR_DEFAULT_MODEL,
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
-  event_classes = attr(stan_data, "event_classes"),
+  event_classes = NULL,
   class_labels = NULL,
   max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
@@ -115,10 +119,12 @@ diagnose_and_extract_bilatr <- function(
   }
   n_dt_tbl <- if (any(c(2L, 3L) %in% tiers)) .normalize_n_dt(n_dt) else NULL
 
+  stan_data <- .stan_data_from_fit(csv_files, stan_data, "diagnose_and_extract_bilatr()")
+  event_classes <- event_classes %||% attr(stan_data, "event_classes")
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
     stop(
-      "`stan_data` must be the output of assemble_stan_data() ",
+      "`stan_data` must be a Stan data list from prepare_stan_data() ",
       "(missing the 'dyad_ids' attribute).",
       call. = FALSE
     )
@@ -160,7 +166,7 @@ diagnose_and_extract_bilatr <- function(
   # POSITION within filter_dyads, not the true D-space dyad_id, whenever
   # filter_dyads narrowed the dyad set -- see R/diagnose_convergence.R's
   # .bilatr_tier1_names docs for the caveat this resolves. stan_data$
-  # filter_dyads (assemble_stan_data()'s own resolved integer vector, 1:D
+  # filter_dyads (prepare_stan_data()'s own resolved integer vector, 1:D
   # when filter_dyads = NULL was used) maps that position back to the
   # true dyad_id before joining dyad_ids, so this is correct in both the
   # "all dyads filtered" and "an explicit subset" cases -- not just the

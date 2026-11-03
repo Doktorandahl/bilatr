@@ -7,13 +7,13 @@ CmdStan CSVs in a single shared read}
 \usage{
 diagnose_and_extract_bilatr(
   csv_files,
-  stan_data,
+  stan_data = NULL,
   n_dt,
   stan_model = .BILATR_DEFAULT_MODEL,
   rhat_threshold = 1.01,
   ess_threshold = 400,
   tiers = 1:3,
-  event_classes = attr(stan_data, "event_classes"),
+  event_classes = NULL,
   class_labels = NULL,
   max_memory_mb = 8192,
   chunk_size = NULL,
@@ -25,9 +25,13 @@ diagnose_and_extract_bilatr(
 chain). Required; this function does not accept an in-memory fit
 (see Details).}
 
-\item{stan_data}{The Stan data list used to produce the fit, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (must still carry its \code{dyad_ids} attribute),
-for \code{\link[=extract_theta]{extract_theta()}}'s dyad-identifier join.}
+\item{stan_data}{The Stan data list used to produce the fit, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}} (must carry its \code{dyad_ids} attribute), for
+\code{\link[=extract_theta]{extract_theta()}}'s dyad-identifier join. \code{NULL} (default) reads the
+single \verb{*_stan_data.rds} file next to \code{csv_files} (which
+\code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} write to their \code{output_dir}), with a
+\code{message()}; errors if there is none or more than one. Stan data saved
+by \code{assemble_stan_data()} (bilatr 0.11.0 and earlier) works too.}
 
 \item{n_dt}{A data frame with a dyad-id column (matching \code{"dyad..."})
 and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
@@ -56,8 +60,8 @@ computed" from "computed, nothing to report".}
 
 \item{event_classes}{Optional character vector of event-class labels,
 passed through to the \code{alpha}/\code{mu_intercept} outputs exactly as in
-\code{\link[=extract_alpha]{extract_alpha()}}. Defaults to \code{stan_data}'s \code{"event_classes"}
-attribute, if present. When supplied, \code{alpha}/\code{mu_intercept} also get
+\code{\link[=extract_alpha]{extract_alpha()}}. \code{NULL} (default) uses \code{stan_data}'s
+\code{"event_classes"} attribute, if present; an explicit value wins. When supplied, \code{alpha}/\code{mu_intercept} also get
 a \code{class_label} column (0.10.1), from \code{event_class_labels(stan_data)}
 (see \code{\link[=event_class_labels]{event_class_labels()}}) unless overridden by \code{class_labels}.}
 
@@ -189,7 +193,7 @@ quantiles.
 \dontrun{
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
 result <- diagnose_and_extract_bilatr(
-  csv_files, stan_data, n_dt = n_dt, stan_model = "ou"
+  csv_files, n_dt = n_dt, stan_model = "ou"
 )
 result$diagnostics
 result$theta

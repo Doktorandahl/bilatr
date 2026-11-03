@@ -7,7 +7,7 @@ offset}
 \usage{
 check_compositional_residuals(
   fit,
-  stan_data,
+  stan_data = NULL,
   stan_model = .BILATR_DEFAULT_MODEL,
   n_dyads = 1500,
   n_strata = 8,
@@ -16,7 +16,7 @@ check_compositional_residuals(
   eps_sensitivity = c(0.1, 1),
   seed = 1,
   probs = c(0.05, 0.95),
-  event_classes = attr(stan_data, "event_classes"),
+  event_classes = NULL,
   class_labels = NULL
 )
 }
@@ -25,9 +25,14 @@ check_compositional_residuals(
 CmdStan CSV file paths (one per chain) -- the same forms
 \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=.get_draws]{.get_draws()}} accept.}
 
-\item{stan_data}{The Stan data list used to produce \code{fit}, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (must still carry its \code{dyad_ids}
-attribute). Supplies \code{Y}, \code{is_obs}, \code{D}, \code{T}, \code{A}.}
+\item{stan_data}{The Stan data list used to produce \code{fit}, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
+\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
+\code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
+errors if neither is found. Stan data saved by \code{assemble_stan_data()}
+(bilatr 0.11.0 and earlier) works too.
+It must carry its \code{dyad_ids} attribute. Supplies \code{Y}, \code{is_obs},
+\code{D}, \code{T}, \code{A}.}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
 \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
@@ -58,8 +63,8 @@ medians (\code{dyads$along_lower}/\code{along_upper},
 \verb{categories$contribution_*_lower}/\verb{_upper}). Default \code{c(0.05, 0.95)}.}
 
 \item{event_classes}{Optional character vector of event-class labels,
-in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
-\code{"event_classes"} attribute.}
+in \code{stan_data}'s action-dimension order. \code{NULL} (default) uses
+\code{stan_data}'s \code{"event_classes"} attribute; an explicit value wins.}
 
 \item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
 to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see

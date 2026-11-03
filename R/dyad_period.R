@@ -3,12 +3,17 @@
 #' @param value The candidate reference value, or `NULL`.
 #' @param classes Vector of observed event-class values.
 #' @param arg_name Name of the argument, used in the error message.
+#' @param null_hint What `NULL` anchors on instead, for the error message.
+#'   The default describes [assemble_stan_data()]'s behaviour;
+#'   [prepare_stan_data()] anchors on its first action column.
 #' @return `value` (coerced to character) if it is present in `classes`.
 #'   `NULL` is returned as-is: the only way to say "no preference", which
 #'   then anchors on the first class in [order_event_classes()]'s
-#'   C-locale numeric sort.
+#'   C-locale numeric sort (or, in [prepare_stan_data()], on the first
+#'   action column).
 #' @keywords internal
-validate_reference_class <- function(value, classes, arg_name) {
+validate_reference_class <- function(value, classes, arg_name,
+                                     null_hint = "the first class instead (C-locale numeric sort)") {
   if (is.null(value)) {
     return(NULL)
   }
@@ -19,8 +24,7 @@ validate_reference_class <- function(value, classes, arg_name) {
       arg_name, " = '", value, "' was requested, but is not present in the ",
       "(in-window) data. Classes present: ",
       paste(sort(observed), collapse = ", "),
-      ". `", arg_name, " = NULL` anchors on the first class instead ",
-      "(C-locale numeric sort).",
+      ". `", arg_name, " = NULL` anchors on ", null_hint, ".",
       call. = FALSE
     )
   }
@@ -296,4 +300,65 @@ make_dyad_ids <- function(data) {
     dplyr::select(dplyr::any_of(c(
       "dyad_id", "time_index", "dyad", "dyad2", "actor_a", "actor_b", "year", "month"
     )))
+}
+
+#' Build the `dyad_ids` attribute for [prepare_stan_data()]
+#'
+#' The source-agnostic counterpart of [make_dyad_ids()], which keeps
+#' feeding [assemble_stan_data()] unchanged. Builds the table directly
+#' from the (already sorted, already `min_n_events`-filtered) dyads and
+#' the full time range rather than from an assembled table, so its rows
+#' are in the same order as `Y`'s: dyad (`dyad_id`), then time.
+#'
+#' @param dyads Character vector of retained dyads, in `dyad_id` order.
+#' @param actor1,actor2 Character vectors of each dyad's actors (aligned
+#'   with `dyads`), or `NULL` when the data has no actor columns.
+#' @param time_values Integer vector of the time-column values, `T` long.
+#' @param time_col Name of the time column.
+#' @param time_labels Optional data frame keyed by `time_col`; its other
+#'   columns are left-joined on.
+#' @return A tibble with `dyad_id`, `time_index`, `dyad`, `dyad2`
+#'   (the undirected dyad key), `actor1`, `actor2` (`dyad2`/`actor1`/
+#'   `actor2` are `NA` when `actor1` is `NULL`), the time column, and any
+#'   `time_labels` columns.
+#' @keywords internal
+.make_dyad_ids_generic <- function(dyads, actor1, actor2, time_values, time_col, time_labels = NULL) {
+  D <- length(dyads)
+  Tn <- length(time_values)
+  if (is.null(actor1)) {
+    actor1 <- actor2 <- dyad2 <- rep(NA_character_, D)
+  } else {
+    pair <- .order_pair_c_locale(actor1, actor2)
+    dyad2 <- paste(pair$actor_a, pair$actor_b, sep = "_")
+  }
+
+  ids <- tibble::tibble(
+    dyad_id = rep(seq_len(D), each = Tn),
+    time_index = rep(seq_len(Tn), times = D),
+    dyad = rep(dyads, each = Tn),
+    dyad2 = rep(dyad2, each = Tn),
+    actor1 = rep(actor1, each = Tn),
+    actor2 = rep(actor2, each = Tn),
+    !!time_col := rep(time_values, times = D)
+  )
+
+  if (is.null(time_labels)) {
+    return(ids)
+  }
+  if (!is.data.frame(time_labels) || !time_col %in% names(time_labels)) {
+    stop(
+      "prepare_stan_data(): `time_labels` must be a data frame with a `", time_col,
+      "` column (or NULL).",
+      call. = FALSE
+    )
+  }
+  clashing <- setdiff(intersect(names(time_labels), names(ids)), time_col)
+  if (length(clashing) > 0) {
+    stop(
+      "prepare_stan_data(): `time_labels` columns clash with `dyad_ids` columns: ",
+      paste(clashing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  dplyr::left_join(ids, time_labels, by = time_col, relationship = "many-to-one")
 }

@@ -78,8 +78,9 @@
       "(0.6.0), which found a dyad-level compositional residual a",
       "dyad-specific beta_d cannot identify (theta already absorbs it) but",
       "a country-level offset can (a country appears in many dyads).",
-      "Needs `stan_data` assembled by assemble_stan_data() >= 0.7.0",
-      "(`n_countries`/`ctry_a`/`ctry_b`/`w_send`); check_compositional_residuals()",
+      "Needs `stan_data` from prepare_stan_data() built with actor columns",
+      "(`n_countries`/`ctry_a`/`ctry_b`/`w_send`); fit_panel()/fit_dyad_ts()",
+      "error before compiling if they are absent. check_compositional_residuals()",
       "and icc_curves() are gamma-aware for this model (see NEWS.md). Still",
       "experimental: not yet fit at production scale."
     ),

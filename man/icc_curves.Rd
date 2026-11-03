@@ -26,10 +26,14 @@ icc_curves(
 \item{fit}{A \code{CmdStanMCMC} fit object, or a character vector of raw
 CmdStan CSV file paths -- the same forms \code{\link[=.get_draws]{.get_draws()}} accepts.}
 
-\item{stan_data}{The Stan data list used to produce \code{fit}, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}}. Only used for the last-resort
-\code{theta_range} fallback (see Details); \code{NULL} is fine if \code{theta_range}
-or \code{theta_summary} is supplied.}
+\item{stan_data}{The Stan data list used to produce \code{fit}, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. Used for the last-resort \code{theta_range}
+fallback (see Details), the \code{event_classes}/labels, and \code{country}
+codes. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}
+attached to \code{fit}, or, when \code{fit} is CSV paths, the single
+\verb{*_stan_data.rds} file next to them; if neither is found it stays
+\code{NULL}, which is fine when \code{theta_range} or \code{theta_summary} is
+supplied.}
 
 \item{theta_range}{Explicit \code{c(min, max)} for the theta grid. If
 \code{NULL} (default), resolved from \code{theta_summary} or, failing that,

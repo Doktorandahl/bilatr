@@ -3,8 +3,9 @@
 #' Pulls posterior summaries of the latent conflict trajectory `theta`
 #' out of a fitted model, indexed by dyad and time period, and reattaches
 #' the human-readable dyad identifiers (`dyad`, the undirected `dyad2`,
-#' `year`, and `month` if applicable) via the `dyad_ids` attribute that
-#' [assemble_stan_data()] attaches to its output. Works the same way for
+#' the actors, the time column and any time labels such as `year`/`month`)
+#' via the `dyad_ids` attribute that [prepare_stan_data()] attaches to its
+#' output. Works the same way for
 #' single-dyad ([fit_dyad_ts()]) and panel ([fit_panel()]) fits.
 #'
 #' `stable`/`ou` fold `alpha[1]`'s sign into the reported `alpha`/`theta`
@@ -35,9 +36,13 @@
 #' @param fit A `CmdStanMCMC` fit object from [fit_dyad_ts()] or
 #'   [fit_panel()], or a character vector of raw CmdStan CSV file paths
 #'   (see Details).
-#' @param stan_data The Stan data list used to produce `fit`, as returned
-#'   by [assemble_stan_data()] (must still carry its `dyad_ids`
-#'   attribute).
+#' @param stan_data The Stan data list used to produce `fit`, from
+#'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
+#'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
+#'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
+#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
+#'   (bilatr 0.11.0 and earlier) works too.
+#'   It must carry its `dyad_ids` attribute.
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
 #' @param max_memory_mb,chunk_size,n_cores Only used when
@@ -46,27 +51,31 @@
 #'   the one-time default-`max_memory_mb` `message()`), applied here to
 #'   `theta` alone rather than all of Tier 3.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
-#'   `time_index`, `dyad`, `dyad2`, `year` (and `month`, if applicable),
-#'   the posterior `mean` of theta, and one column per requested quantile.
+#'   `time_index`, the other `dyad_ids` columns (`dyad`, `dyad2`, `actor1`,
+#'   `actor2`, the time column and its labels; `actor_a`/`actor_b` and
+#'   `year`/`month` for Stan data from before 0.12.0), the posterior `mean`
+#'   of theta, and one column per requested quantile.
 #' @examples
 #' \dontrun{
-#' theta <- extract_theta(fit, stan_data)
+#' theta <- extract_theta(fit)
 #'
-#' # a completed SLURM run, never read into this R session
+#' # a completed SLURM run, never read into this R session; the
+#' # *_stan_data.rds that fit_panel() wrote next to the CSVs is found
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' theta <- extract_theta(csv_files, stan_data, max_memory_mb = 16384)
+#' theta <- extract_theta(csv_files, max_memory_mb = 16384)
 #' }
 #' @export
 extract_theta <- function(
-  fit, stan_data, probs = c(0.05, 0.5, 0.95),
+  fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95),
   max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
+  stan_data <- .stan_data_from_fit(fit, stan_data, "extract_theta()")
 
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
     stop(
-      "`stan_data` must be the output of assemble_stan_data() ",
+      "`stan_data` must be a Stan data list from prepare_stan_data() ",
       "(missing the 'dyad_ids' attribute).",
       call. = FALSE
     )
@@ -163,16 +172,18 @@ extract_theta <- function(
 #'
 #' @inheritParams extract_theta
 #' @param event_classes Optional character vector of event-class labels,
-#'   in the same order used to build `stan_data` (i.e. the
-#'   `"event_classes"` attribute attached by [assemble_stan_data()]). If
-#'   supplied, an `event_class` column is added alongside the raw action
-#'   index.
+#'   in the same order used to build the Stan data (i.e. its
+#'   `"event_classes"` attribute, from [prepare_stan_data()]). If supplied,
+#'   an `event_class` column is added alongside the raw action index.
+#'   `NULL` (default) uses the `event_classes` of the Stan data attached to
+#'   `fit` by [fit_panel()]/[fit_dyad_ts()], if any; otherwise the output
+#'   is unlabelled.
 #' @return A tibble with one row per action type: `action_index`
 #'   (and `event_class` if `event_classes` is supplied), the posterior
 #'   `mean` of alpha, and one column per requested quantile.
 #' @examples
 #' \dontrun{
-#' alpha <- extract_alpha(fit, event_classes = attr(stan_data, "event_classes"))
+#' alpha <- extract_alpha(fit) # labelled from attr(fit, "stan_data")
 #'
 #' # cross-chain roll-up from saved CSVs, no in-memory fit
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
@@ -180,6 +191,7 @@ extract_theta <- function(
 #' }
 #' @export
 extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
+  event_classes <- event_classes %||% .attached_event_classes(fit)
   draws <- .get_draws(fit, "alpha")
 
   out <- posterior::summarise_draws(
@@ -222,10 +234,11 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
 #'   `mean` of mu_intercept, and one column per requested quantile.
 #' @examples
 #' \dontrun{
-#' mu_intercept <- extract_mu_intercept(fit, event_classes = attr(stan_data, "event_classes"))
+#' mu_intercept <- extract_mu_intercept(fit)
 #' }
 #' @export
 extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
+  event_classes <- event_classes %||% .attached_event_classes(fit)
   draws <- .get_draws(fit, "mu_intercept")
 
   out <- posterior::summarise_draws(
@@ -268,13 +281,18 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #'   experimental, so fitting it emits a one-time message -- see
 #'   [.bilatr_warn_if_experimental()]),
 #'   or a character vector of raw CmdStan CSV file paths.
-#' @param stan_data The Stan data list used to produce `fit`, as returned
-#'   by [assemble_stan_data()] `>= 0.7.0` (must carry its
-#'   `country_codes` attribute).
+#' @param stan_data The Stan data list used to produce `fit`, from
+#'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
+#'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
+#'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
+#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
+#'   (bilatr 0.11.0 and earlier) works too.
+#'   It must carry its `country_codes` attribute (built only from actor
+#'   columns; `assemble_stan_data()` added it in 0.7.0).
 #' @param probs Posterior quantiles to report alongside the mean.
 #' @param event_classes Optional character vector of event-class labels,
-#'   in the same order used to build `stan_data` (i.e. `stan_data`'s
-#'   `"event_classes"` attribute, the default).
+#'   in the same order used to build `stan_data`. `NULL` (default) uses
+#'   `stan_data`'s `"event_classes"` attribute; an explicit value wins.
 #' @param class_labels Optional; see [.resolve_class_labels()]. Ignored
 #'   when `event_classes` is `NULL` (nothing to key labels by). Defaults
 #'   to `NULL`, which uses `event_class_labels(stan_data)` (see
@@ -286,21 +304,24 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #'   `gamma`, and one column per requested quantile.
 #' @examples
 #' \dontrun{
-#' gamma <- extract_gamma(fit, stan_data)
+#' gamma <- extract_gamma(fit)
 #' gamma_norm(gamma)
 #' }
 #' @export
 extract_gamma <- function(
-  fit, stan_data, probs = c(0.05, 0.5, 0.95),
-  event_classes = attr(stan_data, "event_classes"),
+  fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95),
+  event_classes = NULL,
   class_labels = NULL
 ) {
+  stan_data <- .stan_data_from_fit(fit, stan_data, "extract_gamma()")
+  event_classes <- event_classes %||% attr(stan_data, "event_classes")
   country_codes <- attr(stan_data, "country_codes")
   if (is.null(country_codes)) {
     stop(
-      "`stan_data` must be the output of assemble_stan_data() >= 0.7.0 ",
-      "(missing the 'country_codes' attribute -- a stan_data.rds saved ",
-      "before 0.7.0 cannot be used with stable_gamma; see NEWS.md).",
+      "`stan_data` has no 'country_codes' attribute. prepare_stan_data() ",
+      "builds it only from actor columns (`actor1`/`actor2`), which ",
+      "stable_gamma needs; a stan_data.rds saved by assemble_stan_data() ",
+      "before 0.7.0 lacks it too (see NEWS.md).",
       call. = FALSE
     )
   }

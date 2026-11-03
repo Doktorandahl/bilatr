@@ -1,3 +1,122 @@
+# bilatr 0.12.0 (in development)
+
+Step 1 of 3 (0.12.0a) of the source-agnostic dyad-period interface (see
+`dev/plan_0.12.0_dyad_period_interface.md`). The new data path is added
+*alongside* the old one: `assemble_stan_data()` and
+`grouped_events_to_dyad_period()` are unchanged, and are the in-tree
+reference the new path is tested against.
+
+Step 2 of 3 (0.12.0b): `fit_dyad_ts()`/`fit_panel()` take the
+dyad-period table directly, and the Stan data travels with the fit.
+Calls that pass a prepared `stan_data` list keep working unchanged.
+The runscripts are ported, and the old functions removed, in 0.12.0c.
+
+## New features
+
+* New data contract for already aggregated dyad x time-period tables of
+  action counts, from any source (`?bilatr_dyad_period_data`), with the
+  validator `validate_bilatr_dyad_period()`. A table needs a dyad column
+  (or two actor columns to build it from), an integer-valued time column
+  (gaps allowed), and at least two non-negative whole-number count
+  columns (`action_cols`, a character vector or a tidyselect
+  expression; by default every other column, with a warning). Actor and
+  sender-share (`w_send`) columns are optional. Duplicate dyad x period
+  rows are an error. Like `validate_bilatr_events()`, it reports every
+  broken rule in one error. `tidyselect` is now in Imports.
+* New `aggregate_events()`: event-level data (`?bilatr_event_data`) to a
+  dyad-period table with exactly the columns `dyad, actor1, actor2,
+  <time>, w_send, <one count column per class>`. Classes are named by
+  their raw value (no `EventClass_` prefix), in C-locale numeric order
+  unless `class_order` is given. It supports `resolution = "yearly"`,
+  `"monthly"`, `"weekly"` and `"daily"`, with absolute time IDs (`year`;
+  `month_id = year * 12 + month - 1`; `week_id`/`day_id` counted from
+  1946-01-01, or from 1 January of an earlier start year, with a
+  warning). The window is set by optional `start`/`end` dates instead of
+  `years`. Every dyad is filled over the whole window. Calendar labels
+  and the origin are kept as attributes (`time_labels`, `time_col`,
+  `time_origin`, `resolution`, `grouping_var`, `directed`).
+* New `prepare_stan_data()`: a dyad-period table to the Stan data list.
+  It drops all-zero action columns, puts `reference_category` first and
+  keeps the rest in the table's column order, fills each dyad over
+  `min(time):max(time)`, and applies `min_n_events`. It builds the
+  country index only when actor columns are present: without them,
+  `n_countries`/`ctry_a`/`ctry_b`/`w_send` are left out of the list.
+  When `w_send` is absent it is taken as 1 for directed data, or 0.5 for
+  undirected data (flagged by the new `w_send_imputed` attribute). A
+  `w_send` that is not 1 with `directed = TRUE` is an error. The
+  `dyad_ids` attribute uses `actor1`/`actor2` (instead of
+  `actor_a`/`actor_b`), carries the time column plus the `time_labels`
+  columns, and new `time_col`, `time_origin`, `directed` and
+  `w_send_imputed` attributes are added.
+
+* `fit_dyad_ts()`/`fit_panel()` take `data` as their first argument:
+  either a dyad-period table, which is passed to `prepare_stan_data()`
+  together with the new data-preparation arguments (`time`,
+  `action_cols`, `dyad`, `actor1`, `actor2`, `w_send`, `directed`,
+  `reference_category`, `min_n_events`, `time_range`, `chunk_size`,
+  `rho_prior_a`, `rho_prior_b`, `compute_log_lik`, `prior_only`,
+  `compute_theta_filtered`, `filter_dyads`), or a Stan data list from
+  `prepare_stan_data()` (or `assemble_stan_data()`, including lists saved
+  by 0.11.0 and earlier), which is used as-is. Supplying any
+  data-preparation argument with a prepared list is an error naming it.
+  `action_cols` accepts tidyselect expressions through `fit_*()`.
+* Checks that run before compiling: the D check (now reporting the dyad
+  count before `min_n_events` filtering when that changed it); for
+  `stan_model = "stable_gamma"`, an error if the country fields are
+  absent (the table has no actor columns), and a warning if `w_send` was
+  imputed as 0.5 for undirected dyads. `stable`/`ou` never warn about
+  `w_send`.
+* The fit carries the Stan data it was fit to, as
+  `attr(fit, "stan_data")`. The attribute survives `fit$save_object()`
+  and `saveRDS()`/`readRDS()`. With an `output_dir`, `fit_*()` also
+  write it, atomically and before sampling starts, to
+  `<output_basename>_stan_data.rds` (`bilatr_stan_data.rds` without an
+  `output_basename`).
+* `extract_theta()`, `extract_gamma()`, `check_compositional_residuals()`,
+  `diagnose_category_merges()`, `icc_curves()` and
+  `diagnose_and_extract_bilatr()` now default `stan_data = NULL`: they use
+  the fit's attached Stan data or, given CmdStan CSV paths, the single
+  `*_stan_data.rds` file next to them (with a message naming it). Zero or
+  several such files is an error asking for `stan_data`, except in
+  `icc_curves()`, where `stan_data` stays optional. `event_classes`
+  defaults to `NULL` throughout, resolved from the Stan data; an explicit
+  value still wins. `extract_alpha()`/`extract_mu_intercept()` label
+  their output from the attached Stan data when `event_classes` is not
+  given. Stan data saved before 0.12.0 (with `actor_a`/`actor_b` in
+  `dyad_ids`) works unchanged in all of them.
+* `prepare_stan_data()` gains `time_range = c(min, max)`: rows outside it
+  are dropped (with a message giving the count) and every dyad is filled
+  over `min:max`, so `T` can be pinned. `?prepare_stan_data` and
+  `?aggregate_events` now document the size of the dense `D x T x A`
+  `Y` array (about `D * T * A * 4` bytes): daily resolution is only
+  practical for few dyads or short windows.
+* `aggregate_events()` records its class columns as an `action_cols`
+  attribute. `prepare_stan_data()` with `action_cols = NULL` uses it
+  silently when every named column is still present, so the canonical
+  `aggregate_events()` -> `fit_*()` path no longer warns. (dplyr's
+  `filter()`, `select()`, `mutate()` and `arrange()` keep the attribute;
+  `summarise()` drops it.)
+* `validate_bilatr_dyad_period()` rejects leading/trailing whitespace in
+  the dyad and actor columns, as `validate_bilatr_events()` does for
+  actors.
+* README and vignettes use `aggregate_events()` -> `fit_panel()`/
+  `fit_dyad_ts()` -> extractors without `stan_data`. `panel_model`
+  gains a section, "Using your own aggregated data".
+* Error and help text that pointed to `assemble_stan_data()` now points
+  to `prepare_stan_data()` and the fit's attached Stan data.
+
+## Equivalence with 0.11.0
+
+`prepare_stan_data(aggregate_events(events, ...), ...)` gives a Stan data
+list identical (`identical()`, every field) to `assemble_stan_data(events,
+...)`, and identical `event_classes`/`country_codes`/`grouping_var`/
+`dyad_ids` attributes (up to the `actor_a`/`actor_b` rename and the new
+`month_id` column). This is tested in-tree
+(`tests/testthat/test_prepare_stan_data_equivalence.R`) and on the
+production 16cat inputs, directed and undirected, against a 0.10.2
+worktree (`dev/equivalence_0.12.0a.R`, report in
+`dev/equivalence_0.12.0a.md`).
+
 # bilatr 0.11.0
 
 ## New features

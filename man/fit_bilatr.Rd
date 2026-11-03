@@ -19,9 +19,11 @@ fit_bilatr(
 )
 }
 \description{
-Canonicalises \code{stan_model} once, here, so \code{.compile_stan_model()} and
+Compiles (or fetches from cache) the model and samples. Canonicalises
+\code{stan_model} again (idempotent), so \code{\link[=.compile_stan_model]{.compile_stan_model()}} and
 \code{\link[=bilatr_init_fn]{bilatr_init_fn()}} agree on the same resolved name, and emits the
 once-per-session experimental-model message (see
-\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}).
+\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}). Every check on the data has
+already run in \code{\link[=.bilatr_fit_entry]{.bilatr_fit_entry()}}.
 }
 \keyword{internal}

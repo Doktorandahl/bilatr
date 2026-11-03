@@ -383,9 +383,14 @@
 #' @param fit A `CmdStanMCMC` fit object, or a character vector of raw
 #'   CmdStan CSV file paths (one per chain) -- the same forms
 #'   [extract_alpha()]/[.get_draws()] accept.
-#' @param stan_data The Stan data list used to produce `fit`, as returned
-#'   by [assemble_stan_data()] (must still carry its `dyad_ids`
-#'   attribute). Supplies `Y`, `is_obs`, `D`, `T`, `A`.
+#' @param stan_data The Stan data list used to produce `fit`, from
+#'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
+#'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
+#'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
+#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
+#'   (bilatr 0.11.0 and earlier) works too.
+#'   It must carry its `dyad_ids` attribute. Supplies `Y`, `is_obs`,
+#'   `D`, `T`, `A`.
 #' @param stan_model Name registered in `.bilatr_stan_models`; see
 #'   [.canonical_stan_model()].
 #' @param n_dyads Target size of the stratified dyad subsample (capped at
@@ -407,8 +412,8 @@
 #'   medians (`dyads$along_lower`/`along_upper`,
 #'   `categories$contribution_*_lower`/`_upper`). Default `c(0.05, 0.95)`.
 #' @param event_classes Optional character vector of event-class labels,
-#'   in `stan_data`'s action-dimension order. Defaults to `stan_data`'s
-#'   `"event_classes"` attribute.
+#'   in `stan_data`'s action-dimension order. `NULL` (default) uses
+#'   `stan_data`'s `"event_classes"` attribute; an explicit value wins.
 #' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
 #'   to `NULL`, which uses `event_class_labels(stan_data)` (see
 #'   [event_class_labels()]).
@@ -432,7 +437,7 @@
 #' @export
 check_compositional_residuals <- function(
   fit,
-  stan_data,
+  stan_data = NULL,
   stan_model = .BILATR_DEFAULT_MODEL,
   n_dyads = 1500,
   n_strata = 8,
@@ -441,15 +446,17 @@ check_compositional_residuals <- function(
   eps_sensitivity = c(0.1, 1.0),
   seed = 1,
   probs = c(0.05, 0.95),
-  event_classes = attr(stan_data, "event_classes"),
+  event_classes = NULL,
   class_labels = NULL
 ) {
   stan_model <- .canonical_stan_model(stan_model)
+  stan_data <- .stan_data_from_fit(fit, stan_data, "check_compositional_residuals()")
+  event_classes <- event_classes %||% attr(stan_data, "event_classes")
 
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
     stop(
-      "`stan_data` must be the output of assemble_stan_data() ",
+      "`stan_data` must be a Stan data list from prepare_stan_data() ",
       "(missing the 'dyad_ids' attribute).",
       call. = FALSE
     )
@@ -465,9 +472,11 @@ check_compositional_residuals <- function(
   if (has_gamma && is.null(stan_data$ctry_a)) {
     stop(
       "`stan_data` is missing `ctry_a`/`ctry_b`/`w_send`, needed to ",
-      "compute stable_gamma's country offset g_d. This means `stan_data` ",
-      "was assembled by a pre-0.7.0 assemble_stan_data() -- re-assemble ",
-      "it (>= 0.7.0) before checking a stable_gamma fit; see NEWS.md.",
+      "compute stable_gamma's country offset g_d. prepare_stan_data() ",
+      "builds them only from actor columns (`actor1`/`actor2`); a ",
+      "stan_data.rds saved by assemble_stan_data() before 0.7.0 lacks them ",
+      "too. Rebuild it with actor columns before checking a stable_gamma ",
+      "fit; see NEWS.md.",
       call. = FALSE
     )
   }

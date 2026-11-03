@@ -78,21 +78,21 @@ events <- purrr::map2_dfr(seq_len(nrow(dyad_pairs)), n_events_per_dyad, function
 })
 events <- recode_cameo(events, code_col = "EventCode")
 
-stan_data <- assemble_stan_data(
+agg <- aggregate_events(
   events,
-  years = 2015:2019,
-  resolution = "yearly",
   grouping_var = "PentaClass",
-  reference_category = 0,
-  min_n_events = 1,
-  chunk_size = 4
+  resolution = "yearly",
+  start = "2015-01-01",
+  end = "2019-12-31"
 )
-stan_data$D
 ```
 
 ```{r, results = "hide"}
 fit <- fit_panel(
-  stan_data,
+  agg,
+  reference_category = "0",
+  min_n_events = 1,
+  chunk_size = 4,
   chains = 2,
   parallel_chains = 2,
   threads_per_chain = 2,
@@ -115,10 +115,11 @@ surface loudly rather than let it get lost among per-dyad noise.
 
 `diagnose_convergence()` needs `n_dt`: the total observation count per
 dyad, keyed by the same dyad index (1..D) used inside the Stan model.
-Here we derive it directly from the `Y` array already assembled by
-[assemble_stan_data()]:
+Here we derive it directly from the `Y` array of the Stan data that
+[fit_panel()] built and attached to the fit:
 
 ```{r}
+stan_data <- attr(fit, "stan_data")
 n_dt <- tibble::tibble(
   dyad_id = seq_len(stan_data$D),
   n_dt = apply(stan_data$Y, 1, sum)

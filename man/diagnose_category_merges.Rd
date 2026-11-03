@@ -6,7 +6,7 @@
 \usage{
 diagnose_category_merges(
   fit,
-  stan_data,
+  stan_data = NULL,
   event_classes = NULL,
   class_labels = NULL,
   shares = NULL,
@@ -18,13 +18,19 @@ diagnose_category_merges(
 \item{fit}{A \code{CmdStanMCMC}-like fit object, or a character vector of
 CmdStan CSV file paths (see \code{\link[=.get_draws]{.get_draws()}}).}
 
-\item{stan_data}{The Stan data list used to produce \code{fit}, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}} (used for the default empirical \code{shares}
-and the \code{effective_info} figure's mean event count).}
+\item{stan_data}{The Stan data list used to produce \code{fit}, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
+\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
+\code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
+errors if neither is found. Stan data saved by \code{assemble_stan_data()}
+(bilatr 0.11.0 and earlier) works too.
+Used for the default empirical \code{shares} and the \code{effective_info}
+figure's mean event count.}
 
 \item{event_classes}{Character vector of event-class labels, length
 \code{A}, in the same order as \code{stan_data}'s \code{"event_classes"} attribute.
-Defaults to that attribute if present, else \verb{"1", "2", ...}.}
+\code{NULL} (default) uses that attribute if present, else \verb{"1", "2", ...};
+an explicit value wins.}
 
 \item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
 to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see

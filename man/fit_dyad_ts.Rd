@@ -5,7 +5,24 @@
 \title{Fit the bilatr model to a single dyad's time series}
 \usage{
 fit_dyad_ts(
-  stan_data,
+  data,
+  time = NULL,
+  action_cols = NULL,
+  dyad = "dyad",
+  actor1 = "actor1",
+  actor2 = "actor2",
+  w_send = "w_send",
+  directed = attr(data, "directed") \%||\% TRUE,
+  reference_category = NULL,
+  min_n_events = 1,
+  time_range = NULL,
+  chunk_size = 100,
+  rho_prior_a = 8,
+  rho_prior_b = 2,
+  compute_log_lik = 0,
+  prior_only = 0,
+  compute_theta_filtered = 0,
+  filter_dyads = NULL,
   chains = 4,
   parallel_chains = 4,
   threads_per_chain = 1,
@@ -19,8 +36,93 @@ fit_dyad_ts(
 )
 }
 \arguments{
-\item{stan_data}{A Stan data list from \code{\link[=assemble_stan_data]{assemble_stan_data()}} with
-\code{D == 1}.}
+\item{data}{A dyad-period data frame (see \code{?bilatr_dyad_period_data})
+or a Stan data list from \code{\link[=prepare_stan_data]{prepare_stan_data()}}; see Details.}
+
+\item{time}{Name of the time-period column. \code{NULL} (default) takes
+\code{attr(data, "time_col")} (set by \code{\link[=aggregate_events]{aggregate_events()}}); failing that,
+whichever single one of \code{year}, \code{month_id}, \code{week_id} or \code{day_id} is
+present, with a \code{message()}; otherwise errors.}
+
+\item{action_cols}{The action-count columns: a character vector or a
+tidyselect expression. \code{NULL} (default) means every column except
+the dyad/actor/time/\code{w_send} columns, with a warning; see
+\code{?bilatr_dyad_period_data}.}
+
+\item{dyad, actor1, actor2, w_send}{Names of the dyad, actor and
+sender-share columns; see \code{?bilatr_dyad_period_data}. The actor and
+\code{w_send} columns are optional.}
+
+\item{directed}{Whether the dyads are directed; see
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. Defaults to \code{attr(data, "directed")} if set
+(by \code{\link[=aggregate_events]{aggregate_events()}}), else \code{TRUE}.}
+
+\item{reference_category}{Name of the action column to anchor as the
+model's scale/sign reference: \code{stable}/\code{ou} fold \code{alpha[1]}'s sign
+into the reported \code{alpha}/\code{theta} (see each \code{.stan} file's header,
+"IDENTIFICATION: ORIENTATION FOLD"), so positive \code{alpha[1]} means
+better relations at this class. Should typically be a
+low-conflict/cooperative class. \code{NULL} (default) anchors on the first
+action column. Errors if it is not one of the (non-all-zero) action
+columns.}
+
+\item{min_n_events}{Minimum total events for a dyad to be retained.}
+
+\item{time_range}{\code{NULL} (default), or two whole numbers \code{c(min, max)}
+on the time column's scale. Rows outside it are dropped (with a
+\code{message()} giving the count), and every dyad is filled over
+\code{min:max}, so \code{T = max - min + 1} whatever periods the data covers.
+\code{NULL} means \code{min:max} of the data. Errors if it is not two whole
+numbers, if \code{min > max}, or if no rows fall inside it.}
+
+\item{chunk_size}{\code{reduce_sum} grainsize used to chunk the likelihood
+across dyads. 16 cores with \code{chunk_size = 600} was the
+Pareto-optimal setting found in this project's own benchmarking for
+panel-sized data; smaller panels or single-dyad fits should use a
+smaller value (down to 1) since chunking overhead outweighs the
+benefit below that scale. See \code{\link[=fit_panel]{fit_panel()}} for the corresponding
+\code{threads_per_chain} argument.}
+
+\item{rho_prior_a, rho_prior_b}{Shape parameters of the
+\code{beta(rho_prior_a, rho_prior_b)} prior on the OU/AR(1) persistence
+parameter \code{rho}, consumed only by the experimental \code{ou} Stan model
+variant (see \code{R/model_registry.R}); ignored by \code{stable}, which keeps
+a random-walk \code{theta} with no persistence parameter. Default \verb{8, 2}
+(weighted toward strong persistence).}
+
+\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed by
+both registered Stan model variants, gating a per-dyad-period
+\code{log_lik} in \verb{generated quantities}; left off by default since it is
+\verb{D x T x} draws and file size already scales with dyad count.}
+
+\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by both
+registered Stan model variants, gating the \code{reduce_sum} likelihood
+call in \code{model} exactly as \code{compute_log_lik} gates its generated
+quantity -- \code{1} fits the prior alone, useful for prior-predictive
+checks and for validating \code{\link[=alpha_prior_moments]{alpha_prior_moments()}} against an actual
+fit.}
+
+\item{compute_theta_filtered}{\code{0} (default) or \code{1}. Data flag consumed
+by both registered Stan model variants, gating
+\code{theta_filtered}/\code{theta_filtered_sd} in \verb{generated quantities}: the
+forward-filtered state (conditional on each draw's hyperparameters,
+a West-Harrison/Fisher-scoring linear-Bayes update; see each \code{.stan}
+file's \verb{generated quantities} block) as opposed to the smoothed
+\code{theta} every fit already returns. Left off by default: computing it
+for every dyad is \code{D * T} iterations with \code{A} \code{digamma()} calls each,
+single-threaded (no \code{reduce_sum} in \verb{generated quantities}), on the
+order of a minute or two per chain for a full production-sized dyad
+set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
+
+\item{filter_dyads}{Optional character vector of dyad names (matched
+against the \code{dyad_ids} attribute's \code{dyad} column -- the directed
+\code{"AAA_BBB"} key, same as everywhere else in this package) naming
+which dyads to compute \code{theta_filtered} for. Ignored if
+\code{compute_theta_filtered} is \code{0}. \code{NULL} (default) means all dyads,
+once \code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
+fifty dyads) to compute the filter cheaply for just those. Errors,
+listing the offending names, if any requested dyad was dropped by
+\code{min_n_events} or never existed.}
 
 \item{chains}{Number of MCMC chains.}
 
@@ -41,7 +143,8 @@ chain.}
 \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}.}
 
 \item{output_dir}{Directory to write CmdStan's raw output CSVs to, or
-\code{NULL} for a temporary directory.}
+\code{NULL} for a temporary directory. When given, the Stan data list is
+also saved there (see Value).}
 
 \item{stan_model}{(0.10.1) Name registered in \code{.bilatr_stan_models}
 (see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}); an unregistered name errors,
@@ -51,10 +154,27 @@ including the four names retired in 0.10.0. Defaults to
 \code{message()} the first time it is fit in a session (see
 \code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}).}
 
-\item{...}{Additional arguments passed to \code{CmdStanModel$sample()}.}
+\item{...}{Additional arguments passed to \code{CmdStanModel$sample()}
+(e.g. \code{refresh}, \code{chain_ids}, \code{output_basename}).}
 }
 \value{
-A \code{CmdStanMCMC} fit object.
+A \code{CmdStanMCMC} fit object, with the Stan data list it was fit
+to attached as \code{attr(fit, "stan_data")} (with its own attributes:
+\code{dyad_ids}, \code{event_classes}, ...). The extractors (\code{\link[=extract_theta]{extract_theta()}},
+\code{\link[=extract_gamma]{extract_gamma()}}, \code{\link[=diagnose_category_merges]{diagnose_category_merges()}},
+\code{\link[=check_compositional_residuals]{check_compositional_residuals()}}, ...) use it when their own
+\code{stan_data} argument is not given. \code{CmdStanMCMC} objects are
+environments, so the attribute travels with every reference to the
+fit, and survives \code{fit$save_object()}/\code{saveRDS()} and \code{readRDS()}.
+
+When \code{output_dir} is given, the Stan data list is also written,
+before sampling starts, to
+\verb{file.path(output_dir, paste0(<basename>, "_stan_data.rds"))}, where
+\verb{<basename>} is the \code{output_basename} passed through \code{...}, else
+\code{"bilatr"}. The write is atomic (a temporary file, then a rename), so
+concurrent per-chain jobs sharing an \code{output_dir} are safe. The
+extractors find this file next to the CmdStan CSVs when given CSV
+paths.
 }
 \description{
 Fits the collapsed dyadic IRT model (see the package's Stan file,
@@ -67,17 +187,31 @@ pooling has no effect). Use \code{\link[=fit_panel]{fit_panel()}} instead when f
 than one dyad, to get the benefit of partial pooling.
 }
 \details{
+\code{data} is either a dyad-period table (see \code{?bilatr_dyad_period_data};
+e.g. the output of \code{\link[=aggregate_events]{aggregate_events()}}), which is passed to
+\code{\link[=prepare_stan_data]{prepare_stan_data()}} together with the data-preparation arguments
+(\code{time} through \code{filter_dyads}), or a Stan data list already built by
+\code{\link[=prepare_stan_data]{prepare_stan_data()}} (or by \code{assemble_stan_data()} in bilatr 0.11.0
+and earlier), which is used as-is. With a prepared list, supplying any
+data-preparation argument is an error.
+
+Before compiling anything, \code{fit_dyad_ts()} checks that the data has
+exactly one dyad (after \code{min_n_events} filtering), and, for
+\code{stan_model = "stable_gamma"}, that the country fields exist (the
+table needs actor columns) and warns if \code{w_send} was imputed as 0.5
+for undirected dyads.
+
 \code{reduce_sum} chunking across dyads has nothing to parallelize over
 when \code{D == 1}, so \code{threads_per_chain} defaults to 1 here (raising it
 will not speed up sampling for a single-dyad fit).
 }
 \examples{
 \dontrun{
-stan_data <- assemble_stan_data(
-  dplyr::filter(events, dyad == "USA_CHN"),
-  years = 2015:2020, resolution = "yearly", grouping_var = "PentaClass",
-  reference_category = 0
+agg <- aggregate_events(
+  dplyr::filter(events, Actor1CountryCode == "USA", Actor2CountryCode == "CHN"),
+  grouping_var = "PentaClass", start = "2015-01-01", end = "2020-12-31"
 )
-fit <- fit_dyad_ts(stan_data, chains = 4, iter_sampling = 1000)
+fit <- fit_dyad_ts(agg, reference_category = "0", chains = 4, iter_sampling = 1000)
+theta <- extract_theta(fit)
 }
 }

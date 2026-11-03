@@ -383,8 +383,9 @@ recode_cameo <- function(data, code_col = "EventCode") {
 #' default `attr(stan_data, "grouping_var")` is either absent or not a
 #' name [cameo_lookup] recognizes.
 #'
-#' @param stan_data A Stan data list as returned by [assemble_stan_data()]
-#'   (must carry its `"event_classes"` attribute).
+#' @param stan_data A Stan data list from [prepare_stan_data()] (or
+#'   `attr(fit, "stan_data")`; must carry its `"event_classes"`
+#'   attribute).
 #' @param scheme Name of a [cameo_lookup] column with a matching `*Name`
 #'   column (see Details), or anything else to fall back to the raw event
 #'   classes. Defaults to `attr(stan_data, "grouping_var")`.
@@ -404,7 +405,8 @@ event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var
   if (is.null(event_classes)) {
     stop(
       "event_class_labels(): `stan_data` has no \"event_classes\" ",
-      "attribute -- pass the output of assemble_stan_data().",
+      "attribute -- pass a Stan data list from prepare_stan_data(), or ",
+      "attr(fit, \"stan_data\") for a fit from fit_panel()/fit_dyad_ts().",
       call. = FALSE
     )
   }

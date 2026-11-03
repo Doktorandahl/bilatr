@@ -7,9 +7,9 @@ labels}
 \usage{
 extract_gamma(
   fit,
-  stan_data,
+  stan_data = NULL,
   probs = c(0.05, 0.5, 0.95),
-  event_classes = attr(stan_data, "event_classes"),
+  event_classes = NULL,
   class_labels = NULL
 )
 }
@@ -21,15 +21,20 @@ experimental, so fitting it emits a one-time message -- see
 \code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}),
 or a character vector of raw CmdStan CSV file paths.}
 
-\item{stan_data}{The Stan data list used to produce \code{fit}, as returned
-by \code{\link[=assemble_stan_data]{assemble_stan_data()}} \verb{>= 0.7.0} (must carry its
-\code{country_codes} attribute).}
+\item{stan_data}{The Stan data list used to produce \code{fit}, from
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
+\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
+\code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
+errors if neither is found. Stan data saved by \code{assemble_stan_data()}
+(bilatr 0.11.0 and earlier) works too.
+It must carry its \code{country_codes} attribute (built only from actor
+columns; \code{assemble_stan_data()} added it in 0.7.0).}
 
 \item{probs}{Posterior quantiles to report alongside the mean.}
 
 \item{event_classes}{Optional character vector of event-class labels,
-in the same order used to build \code{stan_data} (i.e. \code{stan_data}'s
-\code{"event_classes"} attribute, the default).}
+in the same order used to build \code{stan_data}. \code{NULL} (default) uses
+\code{stan_data}'s \code{"event_classes"} attribute; an explicit value wins.}
 
 \item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Ignored
 when \code{event_classes} is \code{NULL} (nothing to key labels by). Defaults
@@ -63,7 +68,7 @@ the chunked Tier 3 machinery \code{extract_theta()} needs.
 }
 \examples{
 \dontrun{
-gamma <- extract_gamma(fit, stan_data)
+gamma <- extract_gamma(fit)
 gamma_norm(gamma)
 }
 }

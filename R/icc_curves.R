@@ -107,10 +107,14 @@
 #'
 #' @param fit A `CmdStanMCMC` fit object, or a character vector of raw
 #'   CmdStan CSV file paths -- the same forms [.get_draws()] accepts.
-#' @param stan_data The Stan data list used to produce `fit`, as returned
-#'   by [assemble_stan_data()]. Only used for the last-resort
-#'   `theta_range` fallback (see Details); `NULL` is fine if `theta_range`
-#'   or `theta_summary` is supplied.
+#' @param stan_data The Stan data list used to produce `fit`, from
+#'   [prepare_stan_data()]. Used for the last-resort `theta_range`
+#'   fallback (see Details), the `event_classes`/labels, and `country`
+#'   codes. `NULL` (default) uses the one [fit_panel()]/[fit_dyad_ts()]
+#'   attached to `fit`, or, when `fit` is CSV paths, the single
+#'   `*_stan_data.rds` file next to them; if neither is found it stays
+#'   `NULL`, which is fine when `theta_range` or `theta_summary` is
+#'   supplied.
 #' @param theta_range Explicit `c(min, max)` for the theta grid. If
 #'   `NULL` (default), resolved from `theta_summary` or, failing that,
 #'   `stan_data` (see Details).
@@ -179,6 +183,7 @@ icc_curves <- function(
   type <- match.arg(type)
   stan_model <- .canonical_stan_model(stan_model)
   has_gamma <- .bilatr_model_has_gamma(stan_model)
+  stan_data <- .stan_data_from_fit(fit, stan_data, "icc_curves()", required = FALSE)
 
   if (!is.null(country) && !has_gamma) {
     warning(
@@ -208,8 +213,9 @@ icc_curves <- function(
         stop(
           "`country` was given as a code, but `stan_data` is missing its ",
           "'country_codes' attribute -- pass `stan_data` from ",
-          "assemble_stan_data() >= 0.7.0, or pass `country` as a raw ",
-          "integer country index instead.",
+          "prepare_stan_data() built with actor columns (or use a fit from ",
+          "fit_panel()/fit_dyad_ts(), which carries it), or pass `country` ",
+          "as a raw integer country index instead.",
           call. = FALSE
         )
       }

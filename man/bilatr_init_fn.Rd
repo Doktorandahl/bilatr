@@ -7,7 +7,8 @@
 bilatr_init_fn(stan_data, stan_model = .BILATR_DEFAULT_MODEL)
 }
 \arguments{
-\item{stan_data}{A Stan data list as returned by \code{\link[=assemble_stan_data]{assemble_stan_data()}}.}
+\item{stan_data}{A Stan data list as returned by \code{\link[=prepare_stan_data]{prepare_stan_data()}}
+(or attached to a fit by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}).}
 
 \item{stan_model}{Name registered in \code{.bilatr_stan_models}.}
 }

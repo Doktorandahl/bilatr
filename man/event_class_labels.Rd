@@ -7,8 +7,9 @@
 event_class_labels(stan_data, scheme = attr(stan_data, "grouping_var"))
 }
 \arguments{
-\item{stan_data}{A Stan data list as returned by \code{\link[=assemble_stan_data]{assemble_stan_data()}}
-(must carry its \code{"event_classes"} attribute).}
+\item{stan_data}{A Stan data list from \code{\link[=prepare_stan_data]{prepare_stan_data()}} (or
+\code{attr(fit, "stan_data")}; must carry its \code{"event_classes"}
+attribute).}
 
 \item{scheme}{Name of a \link{cameo_lookup} column with a matching \verb{*Name}
 column (see Details), or anything else to fall back to the raw event
