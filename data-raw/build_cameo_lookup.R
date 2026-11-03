@@ -3,16 +3,13 @@
 # QuadClass / PentaClass / PentaClass_modified / ModifiedRootCode
 # recodings (QuadClass, PentaClass, and ModifiedRootCode each get a
 # *Name label and a *EventCodes column listing the underlying CAMEO
-# root/event codes; ModifiedRootCode was previously named ERC16NZ). A
-# handful of other classification schemes (EventRootCode2/3/4,
-# BilatrClass/BilatrClass2) previously shipped here have been retired;
-# their assign_*()/*_name() functions remain available internally in
-# R/cameo_recode.R for backward compatibility.
-# Source values are taken
-# verbatim from the project's existing CAMEO/Goldstein reference table
-# (O'Brien 2010 scale; quad/penta
-# breakpoints and the EventRootCode2/BilatrClass regrouping as previously
-# used in this project's GDELT pipeline, see original_code/cameo_df.csv).
+# root/event codes). The schemes are defined by assign_quad(),
+# assign_penta(), assign_modified_root_code() and the PentaClass_modified
+# rule below; QuadClass matches GDELT's own QuadClass column (see
+# data-raw/quadclass_gdelt_check.md).
+# Goldstein scores and labels are taken verbatim from the project's
+# CAMEO/Goldstein reference table (O'Brien 2010 scale; see
+# original_code/cameo_df.csv).
 # Re-run this script (and `devtools::document()`) whenever the lookup
 # table needs to change; end users should not need to re-run it.
 
@@ -481,6 +478,8 @@ cameo_lookup <- cameo_label %>%
     PentaClass = assign_penta(root, QuadClass),
     PentaClassName = pentaclass_name(PentaClass),
     PentaClassEventCodes = pentaclass_eventcodes(PentaClass),
+    # PentaClass, except that QuadClass-1 codes scoring at most 1 on the
+    # Goldstein scale join class 0.
     PentaClass_modified = if_else(
       GoldsteinScore <= 1 & QuadClass == 1,
       0L,

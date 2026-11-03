@@ -222,8 +222,7 @@
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
 #'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
-#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
-#'   (bilatr 0.11.0 and earlier) works too.
+#'   errors if neither is found.
 #'   Used for the default empirical `shares` and the `effective_info`
 #'   figure's mean event count.
 #' @param event_classes Character vector of event-class labels, length

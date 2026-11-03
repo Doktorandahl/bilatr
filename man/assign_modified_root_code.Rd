@@ -14,16 +14,26 @@ assign_modified_root_code(code)
 Integer vector of \code{ModifiedRootCode} values (1-18).
 }
 \description{
-A regrouping of the 20 CAMEO root codes that relocates \code{016} into the
-Reject class and \code{018}/\code{019} into the diplomatic-cooperation class,
-splits root \code{04} ("Consult") by kind of consultation, splits root \code{13}
-("Threaten") off from force posture only where noted, and merges
-Investigate (root \code{09}) and Demand (root \code{10}) into a single
-"Investigate or demand" class.
+An 18-class regrouping of the 20 CAMEO root codes. Relative to the
+roots, it:
 }
 \details{
+\itemize{
+\item moves \code{016} (deny responsibility) into Reject (class 13), and \code{018}
+(make empathetic comment) and \code{019} (express accord) into diplomatic
+cooperation (class 7);
+\item splits root \code{04} (consult) into unspecified (\code{040}, class 4),
+meet, discuss, or visit (\code{041}-\code{044}, class 5) and negotiate or
+mediate (\code{045}-\code{046}, class 6);
+\item merges Investigate (\code{09}) and Demand (\code{10}) into "Investigate or
+demand" (class 11);
+\item merges Threaten (\code{13}) and Exhibit force posture (\code{15}) into
+"Threaten or exhibit force posture" (class 14);
+\item merges \code{18}, \code{19} and \code{20} into "Assault, fight, or mass violence"
+(class 18).
+}
+
 Classes are numbered 1-18 in ascending root-code order; see
-\code{\link[=modified_root_code_name]{modified_root_code_name()}} for labels. This scheme was previously
-named \code{ERC16NZ}.
+\code{\link[=modified_root_code_name]{modified_root_code_name()}} for labels.
 }
 \keyword{internal}

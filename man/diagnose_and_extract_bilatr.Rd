@@ -8,8 +8,8 @@ CmdStan CSVs in a single shared read}
 diagnose_and_extract_bilatr(
   csv_files,
   stan_data = NULL,
-  n_dt,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  n_dt = NULL,
+  stan_model = NULL,
   rhat_threshold = 1.01,
   ess_threshold = 400,
   tiers = 1:3,
@@ -30,20 +30,15 @@ chain). Required; this function does not accept an in-memory fit
 \code{\link[=extract_theta]{extract_theta()}}'s dyad-identifier join. \code{NULL} (default) reads the
 single \verb{*_stan_data.rds} file next to \code{csv_files} (which
 \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}} write to their \code{output_dir}), with a
-\code{message()}; errors if there is none or more than one. Stan data saved
-by \code{assemble_stan_data()} (bilatr 0.11.0 and earlier) works too.}
+\code{message()}; errors if there is none or more than one.}
 
-\item{n_dt}{A data frame with a dyad-id column (matching \code{"dyad..."})
-and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
-\code{"n_events"}), or a named numeric vector of counts keyed by dyad id.
-Only required when \code{tiers} includes \code{2} and/or \code{3} (Tier 1 has no
-per-dyad structure to join against \code{n_dt}).}
+\item{n_dt}{Each dyad's total number of events, for tiers 2 and 3.
+\code{NULL} (default) computes it from \code{stan_data}; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}} for passing your own.}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
-\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used only to decide whether \code{gamma} (the
-experimental \code{stable_gamma} variant's country-level offset) gets its
-own report element -- see \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{stan_model}.
-Defaults to \code{.BILATR_DEFAULT_MODEL}.}
+\item{stan_model}{The model that was fit. \code{NULL} (default) uses the
+model recorded on \code{stan_data} or in the CmdStan CSV header; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
 \item{rhat_threshold}{Rhat values strictly above this are flagged.
 Defaults to \code{1.01} (Vehtari et al. 2021).}
@@ -142,11 +137,16 @@ object, as from \code{\link[=diagnose_convergence]{diagnose_convergence()}}), \c
 \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} return, plus a
 \code{class_label} column on \code{alpha}/\code{mu_intercept} when \code{event_classes}
 is supplied), plus
-\code{theta_filtered}/\code{theta_filtered_sd} (0.5.0+; empty tibbles unless
-\code{compute_theta_filtered = 1} was set when the fit was assembled) --
+\code{theta_filtered}/\code{theta_filtered_sd} (empty tibbles unless
+\code{compute_theta_filtered = 1} was set when the data was prepared) --
 same \code{dyad_id}/\code{time_index}/\code{dyad_ids}-joined shape as \code{theta}, with
 the position-within-\code{filter_dyads} index already translated back to
 the true \code{dyad_id} via \code{stan_data$filter_dyads}.
+
+\code{theta}, \code{theta_filtered} and \code{theta_filtered_sd} are built from the
+Tier 3 summary, so they are empty tibbles unless \code{tiers} includes 3.
+\code{alpha} and \code{mu_intercept} come from Tier 1 and are empty unless
+\code{tiers} includes 1.
 }
 \description{
 A fused counterpart to calling \code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=extract_theta]{extract_theta()}},
@@ -192,9 +192,7 @@ quantiles.
 \examples{
 \dontrun{
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-result <- diagnose_and_extract_bilatr(
-  csv_files, n_dt = n_dt, stan_model = "ou"
-)
+result <- diagnose_and_extract_bilatr(csv_files)
 result$diagnostics
 result$theta
 }

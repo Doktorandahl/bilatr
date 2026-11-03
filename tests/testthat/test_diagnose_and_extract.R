@@ -201,17 +201,17 @@ test_that("diagnose_and_extract_bilatr() rejects an in-memory fit", {
   )
 })
 
-test_that("diagnose_and_extract_bilatr() requires n_dt when tiers includes 2 or 3", {
+test_that("diagnose_and_extract_bilatr() computes n_dt from stan_data by default", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
   fx <- make_csv_diagnostics_fixture()
-  expect_error(
-    diagnose_and_extract_bilatr(fx$csv_files, fx$stan_data, tiers = 1:3),
-    "`n_dt` is required"
-  )
-  expect_no_error(
-    suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(fx$csv_files, fx$stan_data, tiers = 1)))
-  )
+  default <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(fx$csv_files, fx$stan_data, tiers = 1:3)))
+  hand <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(fx$csv_files, fx$stan_data, n_dt = fx$n_dt, tiers = 1:3)))
+  expect_identical(default, hand)
+  # tiers = 1: theta is empty, alpha is not
+  tier1 <- suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(fx$csv_files, fx$stan_data, tiers = 1)))
+  expect_identical(nrow(tier1$theta), 0L)
+  expect_gt(nrow(tier1$alpha), 0)
 })

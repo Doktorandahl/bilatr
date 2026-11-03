@@ -25,8 +25,7 @@
 # R/diagnose_convergence.R's .bilatr_sign_ambiguous_raw_names() draws on to
 # keep those names out of the tiered diagnostics tables (tier = NA)
 # entirely, rather than let a meaningless Rhat surface as a false Tier 1
-# alarm. Its name and output must not change: the runscripts call
-# `bilatr:::.bilatr_sign_ambiguous_raw_names()` directly.
+# alarm.
 
 #' Raw, sampled parameter names the alpha/theta reflection symmetry ties
 #' to alpha's sign, per registered model

@@ -3,7 +3,7 @@
 \docType{data}
 \name{.bilatr_model_cache}
 \alias{.bilatr_model_cache}
-\title{Cache of compiled CmdStanModel objects, keyed by "\if{html}{\out{<stan file>}}::<opt_level>"}
+\title{Cache of compiled CmdStanModel objects}
 \format{
 An object of class \code{environment} of length 0.
 }
@@ -11,6 +11,7 @@ An object of class \code{environment} of length 0.
 .bilatr_model_cache
 }
 \description{
-Cache of compiled CmdStanModel objects, keyed by "\if{html}{\out{<stan file>}}::<opt_level>"
+Keyed by "<copied .stan path>::<opt_level>::<stan_threads>"; see
+\code{\link[=.compile_stan_model]{.compile_stan_model()}}. Emptied by \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}}.
 }
 \keyword{internal}

@@ -4,16 +4,26 @@
 \alias{.normalize_n_dt}
 \title{Normalize the \code{n_dt} argument to a two-column tibble}
 \usage{
-.normalize_n_dt(n_dt)
+.normalize_n_dt(n_dt, stan_data = NULL)
 }
 \arguments{
-\item{n_dt}{A data frame with \code{dyad}/\code{n_dt}-like columns, or a named
-numeric vector keyed by dyad id.}
+\item{n_dt}{A data frame with a dyad column (\code{dyad_id}, else the first
+column whose name starts with \code{"dyad"}) and a count column (matching
+\code{"n_dt"}/\code{"n_obs"}/\code{"n_events"}, or named \code{n}, as from
+\code{\link[dplyr:count]{dplyr::count()}}), or a named numeric vector keyed by dyad id or
+name.}
+
+\item{stan_data}{The Stan data list, or \code{NULL}. Needed only for
+name-keyed input.}
 }
 \value{
 A tibble with columns \code{dyad_id} (integer) and \code{n_dt} (numeric).
 }
 \description{
-Normalize the \code{n_dt} argument to a two-column tibble
+Accepts a data frame with a dyad column and a count column, or a named
+numeric vector. The dyads may be given by integer \code{dyad_id} or by
+dyad name (as in the \code{dyad} column of \code{attr(stan_data, "dyad_ids")});
+names are mapped to \code{dyad_id} through \code{stan_data}, and names not found
+there are an error.
 }
 \keyword{internal}

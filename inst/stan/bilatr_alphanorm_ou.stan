@@ -1,4 +1,4 @@
-// bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories.
+// bilatr: hierarchical dynamic IRT model for latent bilateral relations.
 //
 // Registered as `ou` (R/model_registry.R, status = "experimental") since
 // 0.4.0, promoted (still experimental) from the `alphanorm_ou` variant it
@@ -90,7 +90,7 @@
 //   - rho_prior_a/rho_prior_b (default Beta(8, 2)) and
 //     sigma_log_sd_stat ~ normal(0, 0.5): same as `ou`, same caveat.
 //
-// alpha[1] IS the reference/neutral action class here (same mechanism as
+// alpha[1] IS the reference action class here (same mechanism as
 // `alphanorm`: assemble_stan_data()'s `reference_category` argument
 // already reorders it to be first, so no new index needs to be passed
 // as data).
@@ -124,10 +124,11 @@
 // carries s once theta[d, t-1] does, and multiplying by the unsigned rho
 // preserves it, so every theta[d, t] carries the same s as theta[d, 1].
 //
-// ORIENTATION: positive alpha[1] means higher theta corresponds to
-// better (less hostile) relations at the reference/neutral action class
-// -- matching stable/ou, holding for every fit made under this file via
-// the fold. `alpha`, `theta`, `mu_dyad`, `mu_intercept`, `phi`, and every
+// ORIENTATION: the reported alpha[1] is never negative, so higher theta
+// makes the reference action class more likely relative to the other
+// action types (more cooperative relations, with a cooperative reference
+// class) -- matching stable, and holding for every fit made under this
+// file via the fold. `alpha`, `theta`, `mu_dyad`, `mu_intercept`, `phi`, and every
 // scale/dispersion/ratio quantity (`sigma_mu`, `sd_stat`, `process_noise`,
 // `rho`, `within_between_ratio`) are always in their final orientation as
 // REPORTED; bilatr_orient()/.bilatr_flip_variables() return `character(0)`

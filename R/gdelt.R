@@ -153,12 +153,12 @@ NULL
 #' Name-vector presets over the full 58-column schema (`?bilatr_gdelt_layout`),
 #' for use as [read_gdelt()]'s `columns` argument.
 #'
-#' GDELT's own `QuadClass` is deliberately left out of `"core"`:
-#' [recode_cameo()] attaches its own `QuadClass` derived from `EventCode`,
-#' and if both are present it keeps the existing column and warns --
-#' correct, but easy to trip over if you expect `"core"` to include
-#' GDELT's `QuadClass`. Request it explicitly (or via `"all"`) if you want
-#' GDELT's own value instead of `recode_cameo()`'s.
+#' `"core"` leaves out GDELT's own `QuadClass` only because
+#' [recode_cameo()] supplies it: `recode_cameo()`'s `QuadClass` is the same
+#' mapping from the root code (see [cameo_lookup]), so the two columns
+#' agree row for row. Requesting GDELT's column as well (explicitly, or
+#' via `"all"`) gives `recode_cameo()` an existing `QuadClass`, which it
+#' keeps, with a warning.
 #'
 #' @param set One of `"core"` (the essentials: identifiers, both actors'
 #'   `Code`/`CountryCode`/`Type1-3Code`, the event-code hierarchy,
@@ -314,6 +314,9 @@ gdelt_files <- function(start, end = start) {
 #' `readLines()` open it avoids this across R versions.
 #' @keywords internal
 .gdelt_peek_first_line <- function(path) {
+  if (isTRUE(file.size(path) == 0)) {
+    return(character(0))
+  }
   if (grepl("\\.zip$", path, ignore.case = TRUE)) {
     inner <- utils::unzip(path, list = TRUE)$Name[1]
     con <- unz(path, inner)
@@ -322,6 +325,24 @@ gdelt_files <- function(start, end = start) {
   }
   on.exit(close(con), add = TRUE)
   readLines(con, n = 1L, warn = FALSE)
+}
+
+#' First line of a GDELT file, erroring on an empty file
+#'
+#' @param path A GDELT `.CSV` or `.zip` path.
+#' @param caller The calling function's name, for the error.
+#' @return The first line.
+#' @keywords internal
+.gdelt_first_line <- function(path, caller) {
+  first_line <- .gdelt_peek_first_line(path)
+  if (length(first_line) == 0 || !nzchar(first_line)) {
+    stop(
+      caller, ": '", path, "' is empty (no rows), possibly from an interrupted ",
+      "download. Delete it and download it again, or leave it out of `files`.",
+      call. = FALSE
+    )
+  }
+  first_line
 }
 
 #' Count tab-separated fields on a line, without losing trailing empties
@@ -582,7 +603,7 @@ read_gdelt <- function(
                              cross_border, root_events_only,
                              event_codes, date_bounds, chunk_size = 100000L) {
   expected_n <- .gdelt_filename_ncols(file)
-  first_line <- .gdelt_peek_first_line(file)
+  first_line <- .gdelt_first_line(file, "read_gdelt()")
   actual_n <- .gdelt_count_fields(first_line)
   n_cols <- expected_n
   if (actual_n != expected_n && actual_n > 0) {
@@ -942,7 +963,7 @@ download_gdelt <- function(
                                           cross_border, root_events_only,
                                           date_bounds, chunk_size = 100000L) {
   expected_n <- .gdelt_filename_ncols(file)
-  first_line <- .gdelt_peek_first_line(file)
+  first_line <- .gdelt_first_line(file, "count_gdelt_actor_types()")
   actual_n <- .gdelt_count_fields(first_line)
   n_cols <- if (actual_n != expected_n && actual_n > 0) actual_n else expected_n
   n_cols <- min(n_cols, nrow(schema))

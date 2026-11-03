@@ -16,7 +16,7 @@ prepare_stan_data(
   reference_category = NULL,
   min_n_events = 1,
   time_range = NULL,
-  chunk_size = 100,
+  chunk_size = 1,
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
@@ -51,16 +51,28 @@ column must be all \code{1}, and a missing one is taken as \code{1}; with
 \code{directed = FALSE} a missing \code{w_send} is taken as \code{0.5} and the
 \code{w_send_imputed} attribute is set to \code{TRUE}.}
 
-\item{reference_category}{Name of the action column to anchor as the
-model's scale/sign reference: \code{stable}/\code{ou} fold \code{alpha[1]}'s sign
-into the reported \code{alpha}/\code{theta} (see each \code{.stan} file's header,
-"IDENTIFICATION: ORIENTATION FOLD"), so positive \code{alpha[1]} means
-better relations at this class. Should typically be a
-low-conflict/cooperative class. \code{NULL} (default) anchors on the first
-action column. Errors if it is not one of the (non-all-zero) action
-columns.}
+\item{reference_category}{Name of the action column that anchors the
+sign of the latent scale. \eqn{\theta} is oriented so that higher
+values make \code{reference_category} more likely relative to the other
+action types. With a cooperative reference category, higher
+\eqn{\theta} means more cooperative relations.
 
-\item{min_n_events}{Minimum total events for a dyad to be retained.}
+The reference category is placed first, and every bilatr model folds
+the sign of its discrimination \code{alpha[1]} into the reported \code{alpha}
+and \code{theta}, so the reported \code{alpha[1]} is never negative (see each
+\code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"). Since
+\code{alpha} sums to zero, \code{alpha[1]} is at least the average
+discrimination of the other classes, and the reference class gains
+probability relative to them as \eqn{\theta} rises.
+
+\code{NULL} (default) anchors on the first action column, with a
+\code{message()} naming it: the sign of \eqn{\theta} then depends on
+whichever class that is, so set a cooperative class explicitly (for
+example \code{"1"}, verbal cooperation, for \code{PentaClass}). Errors if it is
+not one of the (non-all-zero) action columns.}
+
+\item{min_n_events}{Minimum total events for a dyad to be retained: a
+single non-negative whole number.}
 
 \item{time_range}{\code{NULL} (default), or two whole numbers \code{c(min, max)}
 on the time column's scale. Rows outside it are dropped (with a
@@ -70,32 +82,33 @@ on the time column's scale. Rows outside it are dropped (with a
 numbers, if \code{min > max}, or if no rows fall inside it.}
 
 \item{chunk_size}{\code{reduce_sum} grainsize used to chunk the likelihood
-across dyads. 16 cores with \code{chunk_size = 600} was the
-Pareto-optimal setting found in this project's own benchmarking for
-panel-sized data; smaller panels or single-dyad fits should use a
-smaller value (down to 1) since chunking overhead outweighs the
-benefit below that scale. See \code{\link[=fit_panel]{fit_panel()}} for the corresponding
-\code{threads_per_chain} argument.}
+across dyads: a single whole number, at least 1. The default, 1, is
+conservative and fine for single-threaded fits; with several threads
+per chain a larger value is usually faster for large panels. See
+\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning")}.}
 
-\item{rho_prior_a, rho_prior_b}{Shape parameters of the
-\code{beta(rho_prior_a, rho_prior_b)} prior on the OU/AR(1) persistence
-parameter \code{rho}, consumed only by the experimental \code{ou} Stan model
-variant (see \code{R/model_registry.R}); ignored by \code{stable}, which keeps
-a random-walk \code{theta} with no persistence parameter. Default \verb{8, 2}
-(weighted toward strong persistence).}
+\item{rho_prior_a, rho_prior_b}{Shape parameters (single positive
+numbers) of the \code{beta(rho_prior_a, rho_prior_b)} prior on the
+OU/AR(1) persistence parameter \code{rho}, used only by the experimental
+\code{"ou"} model (see \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}); ignored by \code{"stable"},
+which keeps a random-walk \code{theta} with no persistence parameter.
+Default \verb{8, 2} (weighted toward strong persistence).}
 
-\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed by
+\item{compute_log_lik}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE} also
+work; stored as an integer). Data flag consumed by
 every registered Stan model, gating a per-dyad-period \code{log_lik} in
 \verb{generated quantities}; left off by default since it is \verb{D x T x}
 draws and file size already scales with dyad count.}
 
-\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by every
+\item{prior_only}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE} also work).
+Data flag consumed by every
 registered Stan model, gating the \code{reduce_sum} likelihood call in
 \code{model} -- \code{1} fits the prior alone, useful for prior-predictive
 checks and for validating \code{\link[=alpha_prior_moments]{alpha_prior_moments()}} against an actual
 fit.}
 
-\item{compute_theta_filtered}{\code{0} (default) or \code{1}. Data flag consumed
+\item{compute_theta_filtered}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE}
+also work). Data flag consumed
 by every registered Stan model, gating
 \code{theta_filtered}/\code{theta_filtered_sd} in \verb{generated quantities}: the
 forward-filtered state (conditional on each draw's hyperparameters,
@@ -109,8 +122,8 @@ set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
 
 \item{filter_dyads}{Optional character vector of dyad names (matched
 against the \code{dyad_ids} attribute's \code{dyad} column) naming which dyads
-to compute \code{theta_filtered} for. Ignored if \code{compute_theta_filtered}
-is \code{0}. \code{NULL} (default) means all dyads, once
+to compute \code{theta_filtered} for. Ignored, with a warning, if
+\code{compute_theta_filtered} is \code{0}. \code{NULL} (default) means all dyads, once
 \code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
 fifty dyads) to compute the filter cheaply for just those. Errors,
 listing the offending names, if any requested dyad was dropped by
@@ -126,7 +139,8 @@ attribute. Defaults to \code{attr(data, "time_labels")} (set by
 }
 \value{
 A named list suitable as the \code{data} argument to
-\code{cmdstanr::CmdStanModel$sample()}: \code{D}, \code{T}, \code{A}, \code{C}, \code{is_obs},
+\code{cmdstanr::CmdStanModel$sample()}: \code{D}, \code{T}, \code{A}, \code{C} (integers),
+\code{is_obs},
 \code{Y}, \code{rho_prior_a}, \code{rho_prior_b}, \code{compute_log_lik}, \code{prior_only},
 \code{compute_theta_filtered}, \code{n_filter_dyads}, \code{filter_dyads}, and, only
 when both actor columns are present, \code{n_countries}, \code{ctry_a},
@@ -210,5 +224,9 @@ events <- tibble::tibble(
   PentaClass = c(0, 1, 0, 1, 3)
 )
 agg <- aggregate_events(events, grouping_var = "PentaClass")
-stan_data <- prepare_stan_data(agg, action_cols = c("0", "1", "3"))
+stan_data <- prepare_stan_data(
+  agg,
+  action_cols = c("0", "1", "3"),
+  reference_category = "1" # verbal cooperation
+)
 }

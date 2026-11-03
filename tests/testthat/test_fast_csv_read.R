@@ -246,3 +246,65 @@ test_that(".fast_read_post_warmup_draws() errors clearly on an unknown variable"
     "not found in the CmdStan CSV header"
   )
 })
+
+# --- read_bilatr_draws(): the exported reader --------------------------------
+
+test_that("read_bilatr_draws() matches .fast_read_post_warmup_draws() on synthetic CSVs (no CmdStan)", {
+  dir <- withr::local_tempdir()
+  csv_files <- file.path(dir, c("chain_1.csv", "chain_2.csv"))
+  for (f in csv_files) .make_synthetic_stan_csv(f, n_cols = 50, n_draws = 7)
+  prepared <- .prepare_fast_csv_read(csv_files)
+
+  # concrete names, in the order given
+  got <- read_bilatr_draws(csv_files, c("x[40]", "x[3]", "lp__"))
+  expect_s3_class(got, "draws_array")
+  expect_identical(posterior::variables(got), c("x[40]", "x[3]", "lp__"))
+  expect_identical(got, .fast_read_post_warmup_draws(prepared, c("x[40]", "x[3]", "lp__")))
+  # values identify the column: draw d, column c holds d * 1e6 + c
+  expect_equal(as.numeric(got[, 1, "x[40]"]), seq_len(7) * 1e6 + 40)
+
+  # a base name expands to every element, in file order; duplicates are dropped
+  all_x <- read_bilatr_draws(csv_files, c("x", "x[1]"))
+  expect_identical(posterior::variables(all_x), paste0("x[", 1:50, "]"))
+  expect_identical(all_x, .fast_read_post_warmup_draws(prepared, "x"))
+
+  # sampler diagnostics by exact name; header column k (after the 7 sampler
+  # columns) is x[k - 7]
+  diag <- read_bilatr_draws(csv_files, c("divergent__", "x[2]", "treedepth__"))
+  expect_identical(posterior::variables(diag), c("divergent__", "x[2]", "treedepth__"))
+  expect_equal(as.numeric(diag[, 2, "divergent__"]), rep(0, 7))
+  expect_equal(as.numeric(diag[, 2, "treedepth__"]), rep(2, 7))
+})
+
+test_that("read_bilatr_draws() errors, naming them, on variables not found, and validates its input", {
+  dir <- withr::local_tempdir()
+  csv <- file.path(dir, "chain_1.csv")
+  .make_synthetic_stan_csv(csv, n_cols = 5, n_draws = 3)
+  expect_error(
+    read_bilatr_draws(csv, c("x[1]", "theta", "x[99]")),
+    "read_bilatr_draws\\(\\): Variable\\(s\\) not found in the CmdStan CSV header: theta, x\\[99\\]"
+  )
+  expect_error(read_bilatr_draws(csv, character(0)), "`variables` must be a character vector")
+  expect_error(read_bilatr_draws(csv, NA_character_), "`variables` must be a character vector")
+  expect_error(read_bilatr_draws(1, "x"), "`csv_files` must be a character vector")
+  expect_error(read_bilatr_draws(file.path(dir, "nope.csv"), "x"), "file\\(s\\) not found: .*nope\\.csv")
+})
+
+test_that("read_bilatr_draws() matches .fast_read_post_warmup_draws() and cmdstanr on a real fit", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+
+  fx <- make_csv_diagnostics_fixture()
+  prepared <- .prepare_fast_csv_read(fx$csv_files)
+  vars <- c("theta[3,2]", "alpha", "phi[1]")
+  got <- read_bilatr_draws(fx$csv_files, vars)
+  expect_identical(got, .fast_read_post_warmup_draws(prepared, vars))
+  expect_identical(posterior::variables(got)[1], "theta[3,2]")
+  expect_identical(posterior::variables(got)[-1][seq_len(4)], paste0("alpha[", 1:4, "]"))
+  ref <- posterior::subset_draws(fx$fit$draws(), variable = posterior::variables(got))
+  expect_equal(unclass(got), unclass(ref), ignore_attr = TRUE)
+
+  theta <- read_bilatr_draws(fx$csv_files, "theta")
+  expect_length(posterior::variables(theta), 6 * 4)
+  expect_error(read_bilatr_draws(fx$csv_files, "gamma"), "not found in the CmdStan CSV header: gamma")
+})

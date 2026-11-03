@@ -1,4 +1,4 @@
-// bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories,
+// bilatr: hierarchical dynamic IRT model for latent bilateral relations,
 // with a country-level category-offset vector gamma_c added on top of
 // `stable` (inst/stan/bilatr_alphanorm.stan).
 //

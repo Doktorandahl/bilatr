@@ -90,7 +90,7 @@ agg <- aggregate_events(
 ```{r, results = "hide"}
 fit <- fit_panel(
   agg,
-  reference_category = "0",
+  reference_category = "1", # verbal cooperation
   min_n_events = 1,
   chunk_size = 4,
   chains = 2,
@@ -113,10 +113,19 @@ surface loudly rather than let it get lost among per-dyad noise.
 
 ## Running the triage
 
-`diagnose_convergence()` needs `n_dt`: the total observation count per
-dyad, keyed by the same dyad index (1..D) used inside the Stan model.
-Here we derive it directly from the `Y` array of the Stan data that
-[fit_panel()] built and attached to the fit:
+Tiers 2 and 3 judge each dyad against `n_dt`, its total number of
+events. By default `diagnose_convergence()` computes it from the Stan
+data that [fit_panel()] attached to the fit, and it also knows from the
+fit which model was used:
+
+```{r}
+diag <- diagnose_convergence(fit)
+diag
+```
+
+You can also pass your own `n_dt`, keyed by `dyad_id` (the dyad index
+used inside the Stan model) or by dyad name. This is the same as the
+default:
 
 ```{r}
 stan_data <- attr(fit, "stan_data")
@@ -124,10 +133,7 @@ n_dt <- tibble::tibble(
   dyad_id = seq_len(stan_data$D),
   n_dt = apply(stan_data$Y, 1, sum)
 )
-n_dt
-
-diag <- diagnose_convergence(fit, n_dt = n_dt)
-diag
+identical(diagnose_convergence(fit, n_dt = n_dt), diag)
 ```
 
 The printed report separates concerns by tier: Tier 1 issues (if any)
@@ -158,8 +164,8 @@ diag$summary
 useful since Tier 3 typically dwarfs the other two in the number of
 monitored quantities (one per dyad-period), so computing Rhat/ESS for
 it is the most expensive part of a call. A quick check of just the
-global/shared parameters, with no `n_dt` needed at all since Tier 1 has
-no per-dyad structure to join against it, looks like:
+global/shared parameters, which has no per-dyad structure and so does
+not use `n_dt`, looks like:
 
 ```{r}
 diagnose_convergence(fit, tiers = 1)
@@ -176,7 +182,7 @@ applied to both `ess_bulk` and `ess_tail`) follow Vehtari et al. (2021)
 and can be tightened or loosened:
 
 ```{r, eval = FALSE}
-diagnose_convergence(fit, n_dt = n_dt, rhat_threshold = 1.05, ess_threshold = 100)
+diagnose_convergence(fit, rhat_threshold = 1.05, ess_threshold = 100)
 ```
 
 ## On the "worse than expected" flag

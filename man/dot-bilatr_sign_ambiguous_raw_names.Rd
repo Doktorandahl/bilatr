@@ -28,8 +28,5 @@ single source of truth for which raw names are sign-tied per model --
 unioning its \code{raw} component across every currently-registered model.
 Computed inside the function body, not as a top-level constant, so it
 doesn't depend on \code{R/model_registry.R} having been sourced first.
-
-This function's name and output must not change across versions: the
-runscripts call \code{bilatr:::.bilatr_sign_ambiguous_raw_names()} directly.
 }
 \keyword{internal}

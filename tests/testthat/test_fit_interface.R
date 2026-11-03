@@ -1,7 +1,8 @@
-# Tests for the 0.12.0b fit interface: fit_panel()/fit_dyad_ts() take a
+# Tests for the fit interface: fit_panel()/fit_dyad_ts() take a
 # dyad-period table or a prepared stan_data, run every data check before
-# compiling, attach stan_data to the fit and write the sidecar .rds; the
-# downstream functions default to the attached/sidecar stan_data.
+# compiling, attach stan_data (recording the model on it) to the fit and
+# write the sidecar .rds; the downstream functions default to the
+# attached/sidecar stan_data.
 #
 # Cases that only need to reach the pre-compile checks (or the call into
 # the sampler) replace .compile_stan_model() with a fake, so they need no
@@ -79,16 +80,10 @@ real_fit <- function(data, ..., fn = fit_panel) {
   )))
 }
 
-# A 0.11.0-shaped stan_data: no time_col/time_origin/directed/
-# w_send_imputed attributes, and dyad_ids with actor_a/actor_b.
-as_0.11.0_stan_data <- function(stan_data) {
-  for (a in c("time_col", "time_origin", "directed", "w_send_imputed")) {
-    attr(stan_data, a) <- NULL
-  }
-  ids <- attr(stan_data, "dyad_ids")
-  names(ids)[names(ids) == "actor1"] <- "actor_a"
-  names(ids)[names(ids) == "actor2"] <- "actor_b"
-  attr(stan_data, "dyad_ids") <- ids
+# What fit_*() attach: the prepared stan_data, plus the model it was fit
+# with.
+with_model <- function(stan_data, stan_model = "stable") {
+  attr(stan_data, "stan_model") <- stan_model
   stan_data
 }
 
@@ -99,15 +94,28 @@ test_that("a data frame goes through prepare_stan_data(), and the result is atta
   agg <- fit_agg()
   fit <- fit_panel(agg, reference_category = "0", chunk_size = 3)
   expect_identical(calls$n, 1L)
-  expected <- suppressMessages(prepare_stan_data(agg, reference_category = "0", chunk_size = 3))
+  expected <- with_model(suppressMessages(prepare_stan_data(agg, reference_category = "0", chunk_size = 3)))
   expect_identical(attr(fit, "stan_data"), expected)
   expect_identical(fit$data, expected)
+  expect_identical(attr(fit, "stan_model"), "stable")
+})
+
+test_that("fit_*() pass on prepare_stan_data()'s message when reference_category is NULL", {
+  local_fake_compile()
+  agg <- fit_agg()
+  msgs <- testthat::capture_messages(fit_panel(agg, chunk_size = 3))
+  expect_match(
+    grep("reference_category not set", msgs, value = TRUE),
+    "^prepare_stan_data\\(\\): reference_category not set; anchoring on the first action column, \"0\""
+  )
+  msgs <- testthat::capture_messages(fit_panel(agg, reference_category = "1", chunk_size = 3))
+  expect_false(any(grepl("reference_category not set", msgs)))
 })
 
 test_that("tidyselect and character action_cols both reach prepare_stan_data() through fit_panel()", {
   local_fake_compile()
   ut <- user_table()
-  expected <- prepare_stan_data(ut, time = "week_id", action_cols = c("meetings", "protests", "sanctions"))
+  expected <- with_model(prepare_stan_data(ut, time = "week_id", action_cols = c("meetings", "protests", "sanctions")))
   by_range <- fit_panel(ut, time = "week_id", action_cols = c(meetings:sanctions))
   by_helper <- fit_panel(ut, time = "week_id", action_cols = tidyselect::starts_with(c("m", "p", "s")))
   by_chr <- fit_panel(ut, time = "week_id", action_cols = c("meetings", "protests", "sanctions"))
@@ -130,19 +138,10 @@ test_that("a prepared stan_data is used as-is, and sampler arguments still pass 
   sd <- suppressMessages(prepare_stan_data(fit_agg()))
   fit <- fit_panel(sd, chains = 1, iter_warmup = 10, refresh = 0)
   expect_identical(calls$n, 1L)
-  expect_identical(attr(fit, "stan_data"), sd)
+  expect_identical(attr(fit, "stan_data"), with_model(sd))
   expect_identical(fit$args$chains, 1)
   expect_identical(fit$args$iter_warmup, 10)
   expect_identical(fit$args$refresh, 0)
-})
-
-test_that("a stan_data saved by 0.11.0 (no new attributes) is accepted", {
-  local_fake_compile()
-  old <- as_0.11.0_stan_data(suppressMessages(prepare_stan_data(fit_agg())))
-  expect_no_warning(fit <- fit_panel(old, chains = 1))
-  expect_identical(attr(fit, "stan_data"), old)
-  # missing w_send_imputed counts as FALSE: no warning under stable_gamma
-  expect_no_warning(suppressMessages(fit_panel(old, chains = 1, stan_model = "stable_gamma")))
 })
 
 test_that("(iv) a prepared stan_data plus a data-preparation argument errors, naming it, before compile", {
@@ -247,7 +246,7 @@ test_that("the sidecar is written atomically, named by output_basename or 'bilat
   od <- withr::local_tempfile()
   fit_panel(sd, output_dir = od)
   expect_identical(list.files(od, all.files = TRUE, no.. = TRUE), "bilatr_stan_data.rds")
-  expect_identical(readRDS(file.path(od, "bilatr_stan_data.rds")), sd)
+  expect_identical(readRDS(file.path(od, "bilatr_stan_data.rds")), with_model(sd))
   fit_panel(sd, output_dir = od, output_basename = "m16")
   expect_setequal(list.files(od, all.files = TRUE, no.. = TRUE), c("bilatr_stan_data.rds", "m16_stan_data.rds"))
   # no output_dir, no sidecar
@@ -263,7 +262,7 @@ test_that("the sidecar is written before sampling, so a crashed run leaves it", 
   sd <- suppressMessages(prepare_stan_data(fit_agg()))
   od <- withr::local_tempfile()
   expect_error(fit_panel(sd, output_dir = od), "sampler crashed")
-  expect_identical(readRDS(file.path(od, "bilatr_stan_data.rds")), sd)
+  expect_identical(readRDS(file.path(od, "bilatr_stan_data.rds")), with_model(sd))
 })
 
 # --- real fits ------------------------------------------------------------------
@@ -276,7 +275,7 @@ test_that("(i) fit_panel(aggregate_events(...)) samples; the attribute and the s
   fit <- real_fit(agg, reference_category = "0", output_dir = od)
   expect_s3_class(fit, "CmdStanMCMC")
   expect_gt(posterior::ndraws(fit$draws("alpha")), 0)
-  expected <- suppressMessages(prepare_stan_data(agg, reference_category = "0"))
+  expected <- with_model(suppressMessages(prepare_stan_data(agg, reference_category = "0")))
   expect_identical(attr(fit, "stan_data"), expected)
   expect_identical(readRDS(file.path(od, "bilatr_stan_data.rds")), expected)
 
@@ -284,6 +283,7 @@ test_that("(i) fit_panel(aggregate_events(...)) samples; the attribute and the s
   f1 <- withr::local_tempfile(fileext = ".rds")
   fit$save_object(f1)
   expect_identical(attr(readRDS(f1), "stan_data"), expected)
+  expect_identical(attr(readRDS(f1), "stan_model"), "stable")
   f2 <- withr::local_tempfile(fileext = ".rds")
   saveRDS(fit, f2)
   expect_identical(attr(readRDS(f2), "stan_data"), expected)
@@ -336,24 +336,31 @@ test_that("downstream functions use the attached stan_data, and the sidecar next
 
   # CSV paths: the sidecar is found, with a message naming it
   csv_files <- fit$output_files()
-  expect_message(theta_csv <- extract_theta(csv_files, max_memory_mb = 1024), "bilatr_stan_data.rds")
+  expect_message(
+    theta_csv <- muffle_short_fit_warnings(extract_theta(csv_files, max_memory_mb = 1024)),
+    "bilatr_stan_data.rds"
+  )
   expect_identical(theta_csv$dyad, extract_theta(fit)$dyad)
   n_dt <- tibble::tibble(dyad_id = seq_len(sd$D), n_dt = apply(sd$Y, 1, sum))
-  # (suppressWarnings: one chain, so R-hat is NA and the summaries warn)
+  # One chain of 50 draws, so posterior caps the ESS and warns.
   expect_message(
-    res <- suppressWarnings(diagnose_and_extract_bilatr(csv_files, n_dt = n_dt, max_memory_mb = 1024)),
+    res <- muffle_short_fit_warnings(diagnose_and_extract_bilatr(csv_files, n_dt = n_dt, max_memory_mb = 1024)),
     "bilatr_stan_data.rds"
   )
   expect_identical(res$alpha$event_class, attr(sd, "event_classes"))
   expect_identical(res$theta$dyad, theta_csv$dyad)
 
+  # n_dt defaults to the per-dyad event totals of the sidecar's Stan data
+  res_default <- muffle_short_fit_warnings(suppressMessages(diagnose_and_extract_bilatr(csv_files, max_memory_mb = 1024)))
+  expect_identical(res_default$diagnostics, res$diagnostics)
+
   # two sidecars: ambiguous, so an error that says to pass stan_data
   file.copy(file.path(od, "bilatr_stan_data.rds"), file.path(od, "other_stan_data.rds"))
   expect_error(
-    suppressWarnings(suppressMessages(diagnose_and_extract_bilatr(csv_files, n_dt = n_dt, max_memory_mb = 1024))),
+    muffle_short_fit_warnings(suppressMessages(diagnose_and_extract_bilatr(csv_files, n_dt = n_dt, max_memory_mb = 1024))),
     "there are 2 \\*_stan_data.rds files.*Pass `stan_data`"
   )
-  expect_no_error(suppressWarnings(suppressMessages(
+  expect_no_error(muffle_short_fit_warnings(suppressMessages(
     diagnose_and_extract_bilatr(csv_files, sd, n_dt = n_dt, max_memory_mb = 1024)
   )))
   # icc_curves() stays soft: no error, the raw action indices
@@ -400,36 +407,11 @@ test_that("extract_gamma() and the gamma-aware checks use the attached stan_data
   expect_no_error(icc_curves(fit, theta_range = c(-1, 1), n_grid = 5, stan_model = "stable_gamma", country = "USA"))
 })
 
-test_that("every downstream function works on a 0.11.0-shaped stan_data (actor_a/actor_b, no new attributes)", {
-  skip_on_cran()
-  skip_if_no_cmdstan()
-  agg <- fit_agg()
-  od <- withr::local_tempfile()
-  fit <- real_fit(agg, reference_category = "0", output_dir = od)
-  fit_g <- real_fit(agg, reference_category = "0", stan_model = "stable_gamma")
-  old <- as_0.11.0_stan_data(attr(fit, "stan_data"))
-
-  theta <- extract_theta(fit, old)
-  expect_true(all(c("actor_a", "actor_b", "year") %in% names(theta)))
-  expect_false(any(c("actor1", "actor2") %in% names(theta)))
-  expect_identical(extract_alpha(fit, event_classes = attr(old, "event_classes"))$event_class, attr(old, "event_classes"))
-  expect_identical(extract_mu_intercept(fit, event_classes = attr(old, "event_classes"))$event_class, attr(old, "event_classes"))
-  expect_s3_class(extract_gamma(fit_g, old), "bilatr_gamma")
-  expect_s3_class(diagnose_category_merges(fit, old), "bilatr_category_merges")
-  expect_s3_class(check_compositional_residuals(fit, old, n_dyads = 4, n_draws = 20), "bilatr_residual_check")
-  expect_s3_class(
-    check_compositional_residuals(fit_g, old, stan_model = "stable_gamma", n_dyads = 4, n_draws = 20),
-    "bilatr_residual_check"
-  )
-  expect_s3_class(suppressMessages(icc_curves(fit, old, n_grid = 5)), "bilatr_icc_curves")
-  expect_s3_class(
-    suppressMessages(icc_curves(fit_g, old, n_grid = 5, stan_model = "stable_gamma", country = "USA")),
-    "bilatr_icc_curves"
-  )
-  n_dt <- tibble::tibble(dyad_id = seq_len(old$D), n_dt = apply(old$Y, 1, sum))
-  res <- suppressWarnings(suppressMessages(
-    diagnose_and_extract_bilatr(fit$output_files(), old, n_dt = n_dt, max_memory_mb = 1024)
-  ))
-  expect_true(all(c("actor_a", "actor_b") %in% names(res$theta)))
-  expect_identical(event_class_labels(old), event_class_labels(attr(fit, "stan_data")))
+test_that("a prepared stan_data that records another model gets the fitted model, with a message", {
+  local_fake_compile()
+  sd <- with_model(suppressMessages(prepare_stan_data(fit_agg())), "ou")
+  expect_message(fit <- fit_panel(sd, chains = 1), "records stan_model = \"ou\"; replacing it with \"stable\"")
+  expect_identical(attr(attr(fit, "stan_data"), "stan_model"), "stable")
+  # the same model: no message
+  expect_no_message(fit_panel(attr(fit, "stan_data"), chains = 1))
 })

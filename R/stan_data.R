@@ -50,15 +50,27 @@
 #'   column must be all `1`, and a missing one is taken as `1`; with
 #'   `directed = FALSE` a missing `w_send` is taken as `0.5` and the
 #'   `w_send_imputed` attribute is set to `TRUE`.
-#' @param reference_category Name of the action column to anchor as the
-#'   model's scale/sign reference: `stable`/`ou` fold `alpha[1]`'s sign
-#'   into the reported `alpha`/`theta` (see each `.stan` file's header,
-#'   "IDENTIFICATION: ORIENTATION FOLD"), so positive `alpha[1]` means
-#'   better relations at this class. Should typically be a
-#'   low-conflict/cooperative class. `NULL` (default) anchors on the first
-#'   action column. Errors if it is not one of the (non-all-zero) action
-#'   columns.
-#' @param min_n_events Minimum total events for a dyad to be retained.
+#' @param reference_category Name of the action column that anchors the
+#'   sign of the latent scale. \eqn{\theta} is oriented so that higher
+#'   values make `reference_category` more likely relative to the other
+#'   action types. With a cooperative reference category, higher
+#'   \eqn{\theta} means more cooperative relations.
+#'
+#'   The reference category is placed first, and every bilatr model folds
+#'   the sign of its discrimination `alpha[1]` into the reported `alpha`
+#'   and `theta`, so the reported `alpha[1]` is never negative (see each
+#'   `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"). Since
+#'   `alpha` sums to zero, `alpha[1]` is at least the average
+#'   discrimination of the other classes, and the reference class gains
+#'   probability relative to them as \eqn{\theta} rises.
+#'
+#'   `NULL` (default) anchors on the first action column, with a
+#'   `message()` naming it: the sign of \eqn{\theta} then depends on
+#'   whichever class that is, so set a cooperative class explicitly (for
+#'   example `"1"`, verbal cooperation, for `PentaClass`). Errors if it is
+#'   not one of the (non-all-zero) action columns.
+#' @param min_n_events Minimum total events for a dyad to be retained: a
+#'   single non-negative whole number.
 #' @param time_range `NULL` (default), or two whole numbers `c(min, max)`
 #'   on the time column's scale. Rows outside it are dropped (with a
 #'   `message()` giving the count), and every dyad is filled over
@@ -72,28 +84,29 @@
 #' @param grouping_var Stored as the `grouping_var` attribute, for
 #'   [event_class_labels()]. Defaults to `attr(data, "grouping_var")`.
 #' @param chunk_size `reduce_sum` grainsize used to chunk the likelihood
-#'   across dyads. 16 cores with `chunk_size = 600` was the
-#'   Pareto-optimal setting found in this project's own benchmarking for
-#'   panel-sized data; smaller panels or single-dyad fits should use a
-#'   smaller value (down to 1) since chunking overhead outweighs the
-#'   benefit below that scale. See [fit_panel()] for the corresponding
-#'   `threads_per_chain` argument.
-#' @param rho_prior_a,rho_prior_b Shape parameters of the
-#'   `beta(rho_prior_a, rho_prior_b)` prior on the OU/AR(1) persistence
-#'   parameter `rho`, consumed only by the experimental `ou` Stan model
-#'   variant (see `R/model_registry.R`); ignored by `stable`, which keeps
-#'   a random-walk `theta` with no persistence parameter. Default `8, 2`
-#'   (weighted toward strong persistence).
-#' @param compute_log_lik `0` (default) or `1`. Data flag consumed by
+#'   across dyads: a single whole number, at least 1. The default, 1, is
+#'   conservative and fine for single-threaded fits; with several threads
+#'   per chain a larger value is usually faster for large panels. See
+#'   [fit_panel()]'s `threads_per_chain` and `vignette("tuning")`.
+#' @param rho_prior_a,rho_prior_b Shape parameters (single positive
+#'   numbers) of the `beta(rho_prior_a, rho_prior_b)` prior on the
+#'   OU/AR(1) persistence parameter `rho`, used only by the experimental
+#'   `"ou"` model (see [compile_bilatr_model()]); ignored by `"stable"`,
+#'   which keeps a random-walk `theta` with no persistence parameter.
+#'   Default `8, 2` (weighted toward strong persistence).
+#' @param compute_log_lik `0` (default) or `1` (`FALSE`/`TRUE` also
+#'   work; stored as an integer). Data flag consumed by
 #'   every registered Stan model, gating a per-dyad-period `log_lik` in
 #'   `generated quantities`; left off by default since it is `D x T x`
 #'   draws and file size already scales with dyad count.
-#' @param prior_only `0` (default) or `1`. Data flag consumed by every
+#' @param prior_only `0` (default) or `1` (`FALSE`/`TRUE` also work).
+#'   Data flag consumed by every
 #'   registered Stan model, gating the `reduce_sum` likelihood call in
 #'   `model` -- `1` fits the prior alone, useful for prior-predictive
 #'   checks and for validating [alpha_prior_moments()] against an actual
 #'   fit.
-#' @param compute_theta_filtered `0` (default) or `1`. Data flag consumed
+#' @param compute_theta_filtered `0` (default) or `1` (`FALSE`/`TRUE`
+#'   also work). Data flag consumed
 #'   by every registered Stan model, gating
 #'   `theta_filtered`/`theta_filtered_sd` in `generated quantities`: the
 #'   forward-filtered state (conditional on each draw's hyperparameters,
@@ -106,14 +119,15 @@
 #'   set, and adds two more `D x T`-scaled Tier 3 blocks to the output.
 #' @param filter_dyads Optional character vector of dyad names (matched
 #'   against the `dyad_ids` attribute's `dyad` column) naming which dyads
-#'   to compute `theta_filtered` for. Ignored if `compute_theta_filtered`
-#'   is `0`. `NULL` (default) means all dyads, once
+#'   to compute `theta_filtered` for. Ignored, with a warning, if
+#'   `compute_theta_filtered` is `0`. `NULL` (default) means all dyads, once
 #'   `compute_theta_filtered = 1` is set -- pass a small subset (e.g.
 #'   fifty dyads) to compute the filter cheaply for just those. Errors,
 #'   listing the offending names, if any requested dyad was dropped by
 #'   `min_n_events` or never existed.
 #' @return A named list suitable as the `data` argument to
-#'   `cmdstanr::CmdStanModel$sample()`: `D`, `T`, `A`, `C`, `is_obs`,
+#'   `cmdstanr::CmdStanModel$sample()`: `D`, `T`, `A`, `C` (integers),
+#'   `is_obs`,
 #'   `Y`, `rho_prior_a`, `rho_prior_b`, `compute_log_lik`, `prior_only`,
 #'   `compute_theta_filtered`, `n_filter_dyads`, `filter_dyads`, and, only
 #'   when both actor columns are present, `n_countries`, `ctry_a`,
@@ -158,7 +172,11 @@
 #'   PentaClass = c(0, 1, 0, 1, 3)
 #' )
 #' agg <- aggregate_events(events, grouping_var = "PentaClass")
-#' stan_data <- prepare_stan_data(agg, action_cols = c("0", "1", "3"))
+#' stan_data <- prepare_stan_data(
+#'   agg,
+#'   action_cols = c("0", "1", "3"),
+#'   reference_category = "1" # verbal cooperation
+#' )
 #' @export
 prepare_stan_data <- function(
   data,
@@ -172,7 +190,7 @@ prepare_stan_data <- function(
   reference_category = NULL,
   min_n_events = 1,
   time_range = NULL,
-  chunk_size = 100,
+  chunk_size = 1,
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
@@ -185,6 +203,28 @@ prepare_stan_data <- function(
   fn <- "prepare_stan_data()"
   if (!rlang::is_bool(directed)) {
     stop(fn, ": `directed` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!.is_count(min_n_events, min = 0)) {
+    stop(fn, ": `min_n_events` must be a single non-negative whole number.", call. = FALSE)
+  }
+  if (!.is_count(chunk_size, min = 1)) {
+    stop(fn, ": `chunk_size` must be a single whole number, at least 1.", call. = FALSE)
+  }
+  for (arg in c("rho_prior_a", "rho_prior_b")) {
+    val <- get(arg)
+    if (!is.numeric(val) || length(val) != 1 || !is.finite(val) || val <= 0) {
+      stop(fn, ": `", arg, "` must be a single positive number.", call. = FALSE)
+    }
+  }
+  compute_log_lik <- .as_flag(compute_log_lik, "compute_log_lik", fn)
+  prior_only <- .as_flag(prior_only, "prior_only", fn)
+  compute_theta_filtered <- .as_flag(compute_theta_filtered, "compute_theta_filtered", fn)
+  if (!is.null(filter_dyads) && compute_theta_filtered == 0L) {
+    warning(
+      fn, ": `filter_dyads` is ignored because `compute_theta_filtered = 0`. ",
+      "Set `compute_theta_filtered = 1` to compute theta_filtered for these dyads.",
+      call. = FALSE
+    )
   }
   time <- .resolve_time_col(data, time)
 
@@ -270,6 +310,15 @@ prepare_stan_data <- function(
     reference_category, names(counts), "reference_category",
     null_hint = "the first action column"
   )
+  if (is.null(reference_category)) {
+    anchor <- names(counts)[1]
+    message(
+      fn, ": reference_category not set; anchoring on the first action column, \"",
+      anchor, "\". Higher theta means more \"", anchor, "\" relative to other ",
+      "action types. Set reference_category to a cooperative class to read ",
+      "higher theta as more cooperative relations."
+    )
+  }
   event_classes <- c(reference_category, setdiff(names(counts), reference_category))
   counts <- counts[event_classes]
   A <- length(event_classes)
@@ -293,16 +342,15 @@ prepare_stan_data <- function(
   D <- length(dyads)
   if (D == 0) {
     stop(
-      "No dyads have at least `min_n_events` (", min_n_events, ") total events; ",
-      "nothing to assemble. Lower min_n_events or check the input data.",
+      fn, ": no dyads have at least `min_n_events` (", min_n_events, ") total events. ",
+      "Lower `min_n_events` or check the input data.",
       call. = FALSE
     )
   }
   keep_rows <- grid$.dyad %in% dyads
   grid <- grid[keep_rows, , drop = FALSE]
   total <- total[keep_rows]
-  # nrow / D, a double, as bilatr <= 0.11.0 computed it.
-  Tn <- nrow(grid) / D
+  Tn <- length(time_values)
 
   is_obs <- matrix(as.integer(total > 0), nrow = D, byrow = TRUE)
   Y <- array(
@@ -361,7 +409,7 @@ prepare_stan_data <- function(
   )
 
   # 8. filter_dyads, the list, and attributes
-  if (compute_theta_filtered == 1) {
+  if (compute_theta_filtered == 1L) {
     if (is.null(filter_dyads)) {
       filter_dyad_ids <- seq_len(D)
     } else {
@@ -369,7 +417,7 @@ prepare_stan_data <- function(
       missing_dyads <- filter_dyads[is.na(filter_dyad_ids)]
       if (length(missing_dyads) > 0) {
         stop(
-          "`filter_dyads` names not found (dropped by min_n_events, or never existed): ",
+          fn, ": `filter_dyads` names not found (dropped by min_n_events, or never existed): ",
           paste(missing_dyads, collapse = ", "),
           call. = FALSE
         )
@@ -384,7 +432,7 @@ prepare_stan_data <- function(
       D = D,
       T = Tn,
       A = A,
-      C = chunk_size,
+      C = as.integer(chunk_size),
       is_obs = is_obs,
       Y = Y,
       rho_prior_a = rho_prior_a,
@@ -436,4 +484,30 @@ prepare_stan_data <- function(
     "; set `time`.",
     call. = FALSE
   )
+}
+
+#' Is `x` a single whole number of at least `min`?
+#'
+#' @param x Anything.
+#' @param min The smallest allowed value.
+#' @return `TRUE`/`FALSE`.
+#' @keywords internal
+.is_count <- function(x, min = 0) {
+  is.numeric(x) && length(x) == 1 && !is.na(x) && is.finite(x) && .is_whole_number(x) && x >= min
+}
+
+#' Validate a 0/1 data flag and store it as an integer
+#'
+#' Accepts `0`/`1` and `FALSE`/`TRUE`.
+#'
+#' @param x The flag.
+#' @param arg Its argument name, for the error.
+#' @param fn The calling function, for the error.
+#' @return `0L` or `1L`.
+#' @keywords internal
+.as_flag <- function(x, arg, fn) {
+  if (length(x) != 1 || is.na(x) || !(is.logical(x) || (is.numeric(x) && x %in% c(0, 1)))) {
+    stop(fn, ": `", arg, "` must be 0 or 1 (or FALSE or TRUE).", call. = FALSE)
+  }
+  as.integer(x)
 }

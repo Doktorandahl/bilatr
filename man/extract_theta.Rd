@@ -22,8 +22,7 @@ extract_theta(
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
 \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
 \code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
-errors if neither is found. Stan data saved by \code{assemble_stan_data()}
-(bilatr 0.11.0 and earlier) works too.
+errors if neither is found.
 It must carry its \code{dyad_ids} attribute.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
@@ -38,12 +37,12 @@ the one-time default-\code{max_memory_mb} \code{message()}), applied here to
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
 \code{time_index}, the other \code{dyad_ids} columns (\code{dyad}, \code{dyad2}, \code{actor1},
-\code{actor2}, the time column and its labels; \code{actor_a}/\code{actor_b} and
-\code{year}/\code{month} for Stan data from before 0.12.0), the posterior \code{mean}
+\code{actor2}, the time column and its labels), the posterior \code{mean}
 of theta, and one column per requested quantile.
 }
 \description{
-Pulls posterior summaries of the latent conflict trajectory \code{theta}
+Pulls posterior summaries of the latent bilateral-relations trajectory
+\code{theta}
 out of a fitted model, indexed by dyad and time period, and reattaches
 the human-readable dyad identifiers (\code{dyad}, the undirected \code{dyad2},
 the actors, the time column and any time labels such as \code{year}/\code{month})
@@ -54,8 +53,11 @@ single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=
 \details{
 \code{stable}/\code{ou} fold \code{alpha[1]}'s sign into the reported \code{alpha}/\code{theta}
 (see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-so \code{theta} is already in its canonical orientation (higher theta =
-better relations) with no post-hoc relabeling needed.
+so \code{theta} is already oriented, with no post-hoc relabeling needed:
+higher values make \code{reference_category} more likely relative to the
+other action types, and so mean more cooperative relations when the
+reference category is cooperative. See the \code{reference_category}
+argument of \code{\link[=prepare_stan_data]{prepare_stan_data()}}.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
 (one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --

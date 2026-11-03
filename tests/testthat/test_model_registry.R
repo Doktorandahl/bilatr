@@ -45,12 +45,17 @@ test_that(".resolve_stan_model() errors informatively on an unknown name", {
   expect_error(.resolve_stan_model("phi_logn"), "Unknown stan_model")
 })
 
-test_that("each name retired in 0.10.0 gives a dedicated 'retired' error, not the generic 'unknown' one", {
+test_that("names that are no longer registered get the generic 'Unknown stan_model' error", {
   for (name in c("alphanorm", "alphanorm_ou", "stable_soft_anchor", "ou_soft_anchor")) {
-    expect_error(.canonical_stan_model(name), "retired in bilatr 0\\.10\\.0")
-    expect_error(.canonical_stan_model(name), "bilatr <= 0\\.9\\.1")
-    expect_error(.resolve_stan_model(name), "retired in bilatr 0\\.10\\.0")
+    expect_error(.canonical_stan_model(name), "Unknown stan_model")
+    expect_error(.resolve_stan_model(name), "Unknown stan_model")
   }
+})
+
+test_that(".canonical_stan_model() rejects a non-string", {
+  expect_error(.canonical_stan_model(c("stable", "ou")), "single string")
+  expect_error(.canonical_stan_model(NULL), "single string")
+  expect_error(.canonical_stan_model(NA_character_), "single string")
 })
 
 test_that("every registered model's file actually exists under inst/stan/", {
@@ -94,7 +99,7 @@ test_that("fit_dyad_ts()/fit_panel() still validate D == 1 / D >= 2 for a regist
 test_that(".bilatr_warn_if_experimental() messages once per stan_model name per session, and never for 'stable'", {
   .reset_bilatr_experimental_messaged()
 
-  expect_message(.bilatr_warn_if_experimental("ou"), "experimental")
+  expect_message(.bilatr_warn_if_experimental("ou"), "experimental.*\\?compile_bilatr_model")
   expect_no_message(.bilatr_warn_if_experimental("ou"))
   expect_message(.bilatr_warn_if_experimental("stable_gamma"), "experimental")
   expect_no_message(.bilatr_warn_if_experimental("stable_gamma"))

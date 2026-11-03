@@ -125,7 +125,8 @@
 #'   the default range. Default `c(0.01, 0.99)`.
 #' @param categories Optional subset of categories to compute curves for:
 #'   a character vector of `event_class` labels, or an integer vector of
-#'   `action_index` values. `NULL` (default) computes every category.
+#'   `action_index` values in `1:A`. `NULL` (default) computes every
+#'   category.
 #' @param event_classes Optional character vector of event-class labels,
 #'   in `stan_data`'s action-dimension order. Defaults to `stan_data`'s
 #'   `"event_classes"` attribute if `stan_data` is supplied.
@@ -139,18 +140,19 @@
 #' @param type `"probability"` (default) for `p_k(theta)`, or
 #'   `"information"` for the per-category Fisher information
 #'   contribution (see Details).
-#' @param stan_model Name registered in `.bilatr_stan_models`; see
-#'   [.canonical_stan_model()].
-#' @param country Only meaningful for `stan_model = "stable_gamma"` (see
-#'   `R/model_registry.R`'s `.bilatr_model_has_gamma()`) -- ignored, with
-#'   a warning if supplied, for any other `stan_model`. `NULL` (default)
+#' @param stan_model The model that was fit. `NULL` (default) uses the
+#'   model recorded on the fit, on its Stan data, or in the CmdStan CSV
+#'   header, else assumes `"stable"` with a message; see
+#'   [diagnose_convergence()].
+#' @param country Only meaningful for `stan_model = "stable_gamma"` --
+#'   ignored, with a warning if supplied, for any other `stan_model`. `NULL` (default)
 #'   evaluates the curves at the `gamma = 0` GLOBAL baseline, i.e. what
 #'   every non-`gamma` model already computes -- this is the right
 #'   default (a country-specific curve is the exception, not the norm,
 #'   and every existing caller/test comparing curves across models stays
 #'   valid). A single country code (character, matched against
-#'   `stan_data`'s `"country_codes"` attribute) or a raw integer country
-#'   index gives that country's curves instead, subtracting its `gamma_c`
+#'   `stan_data`'s `"country_codes"` attribute) or an integer country
+#'   index (in `1:n_countries`) gives that country's curves instead, subtracting its `gamma_c`
 #'   from `eta` (`gamma`, read once, Tier 1/cheap, alongside `alpha`/
 #'   `mu_intercept` above -- `gamma` is orientation-free by construction,
 #'   so no relabeling applies to it; see
@@ -175,15 +177,15 @@ icc_curves <- function(
   n_grid = 201,
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = NULL,
   country = NULL,
   n_dyads_fallback = 300,
   seed = 1
 ) {
   type <- match.arg(type)
-  stan_model <- .canonical_stan_model(stan_model)
-  has_gamma <- .bilatr_model_has_gamma(stan_model)
   stan_data <- .stan_data_from_fit(fit, stan_data, "icc_curves()", required = FALSE)
+  stan_model <- .resolve_stan_model_for_fit(fit, stan_data, stan_model, "icc_curves()")
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
 
   if (!is.null(country) && !has_gamma) {
     warning(
@@ -220,14 +222,23 @@ icc_curves <- function(
         )
       }
       country_index <- match(country, country_codes)
-      if (is.na(country_index)) {
-        stop("`country` = \"", country, "\" not found in `stan_data`'s country_codes.", call. = FALSE)
+      if (length(country) != 1 || is.na(country_index)) {
+        stop("`country` = \"", paste(country, collapse = ", "), "\" not found in `stan_data`'s country_codes.", call. = FALSE)
       }
-    } else {
-      country_index <- as.integer(country)
     }
     gamma_draws <- .get_draws(fit, "gamma")
     gamma_mat <- .as_plain_matrix(posterior::as_draws_matrix(gamma_draws))
+    if (!is.character(country)) {
+      n_countries <- stan_data$n_countries %||% (ncol(gamma_mat) / A)
+      if (!.is_count(country, min = 1) || country > n_countries) {
+        stop(
+          "icc_curves(): an integer `country` must be a single country index in 1:",
+          n_countries, ", or give a country code.",
+          call. = FALSE
+        )
+      }
+      country_index <- as.integer(country)
+    }
     gamma_vec <- gamma_mat[, paste0("gamma[", seq_len(A), ",", country_index, "]"), drop = FALSE]
   }
 
@@ -245,6 +256,14 @@ icc_curves <- function(
       stop("`categories` contains a label not found in `event_classes`.", call. = FALSE)
     }
   } else {
+    if (!is.numeric(categories) || length(categories) == 0 ||
+        !all(.is_whole_number(categories)) || any(categories < 1 | categories > A)) {
+      stop(
+        "icc_curves(): integer `categories` must be action indices in 1:", A,
+        ", or give event-class labels.",
+        call. = FALSE
+      )
+    }
     cat_idx <- as.integer(categories)
   }
   A_used <- length(cat_idx)

@@ -2,9 +2,9 @@
 
 `bilatr` fits a hierarchical Bayesian dynamic IRT-style model to dyadic
 event data (CAMEO-coded, or any categorically coded event type) to
-estimate latent conflict trajectories (`theta`) between country pairs
-over time. Action types discriminate between high- and low-conflict
-states through a Dirichlet-multinomial likelihood, with dyad-specific
+estimate latent bilateral relations (`theta`) between country pairs
+over time, on a scale running from conflict to cooperation. Action types
+discriminate between more and less cooperative states through a Dirichlet-multinomial likelihood, with dyad-specific
 latent states following a random-walk process. The package supports
 both single-dyad time-series estimation and multi-dyad panel estimation
 with hierarchical pooling. You supply the event data (see `?bilatr_event_data`);
@@ -12,13 +12,16 @@ GDELT download/ingest helpers and a CAMEO recoding table are included.
 
 ## Installation
 
-`bilatr` depends on [`cmdstanr`](https://mc-stan.org/cmdstanr/), which
+Fitting models needs [`cmdstanr`](https://mc-stan.org/cmdstanr/), which
 in turn requires a working CmdStan installation and a C++ toolchain.
+`cmdstanr` is a suggested package, so it is not installed with `bilatr`:
+install it as below. Data preparation, and reading and checking
+CmdStan output CSV files, work without it.
 Set those up first:
 
 ```r
 # 1. Install cmdstanr itself (not on CRAN)
-install.packages("cmdstanr", repos = c("https://mc-stan.org/r-packages/", getOption("repos")))
+install.packages("cmdstanr", repos = c("https://stan-dev.r-universe.dev", getOption("repos")))
 
 # 2. Check for a C++ toolchain (installs one if needed, on some platforms)
 cmdstanr::check_cmdstan_toolchain()
@@ -90,20 +93,22 @@ agg <- aggregate_events(
 )
 
 # --- 3. Fit --------------------------------------------------------------
-# reference_category anchors the model's scale/sign reference; every
-# other action class's discrimination (alpha[2:A]) is freely estimated.
+# reference_category orients theta: higher theta makes that class more
+# likely relative to the other action types, so with a cooperative
+# reference higher theta means more cooperative relations (see
+# ?prepare_stan_data). Every other action class's discrimination
+# (alpha[2:A]) is freely estimated.
 # A full panel (D > 1), with hierarchical pooling on theta0/phi/process noise:
 fit <- fit_panel(
   agg,
-  reference_category = "0", # verbal cooperation
+  reference_category = "1", # verbal cooperation
   min_n_events = 10,
-  chunk_size = 600,
-  chains = 4, threads_per_chain = 16, iter_warmup = 1000, iter_sampling = 1000
+  chains = 4, iter_warmup = 1000, iter_sampling = 1000, seed = 1
 )
 
 # Or one dyad at a time (D == 1):
 # usa_chn <- filter(agg, dyad == "USA_CHN")
-# fit <- fit_dyad_ts(usa_chn, reference_category = "0", chains = 4)
+# fit <- fit_dyad_ts(usa_chn, reference_category = "1", chains = 4) # verbal cooperation
 
 # --- 4. Extract ------------------------------------------------------------
 # The fit carries the Stan data it was fit to (attr(fit, "stan_data")),
@@ -134,10 +139,12 @@ by default.
   to zero, by construction; `mu_intercept` is likewise a
   `sum_to_zero_vector`, with no fixed-first-to-0 element. An orientation
   fold (see the `.stan` file's header, "IDENTIFICATION: ORIENTATION
-  FOLD") reports every fit with `alpha[1] >= 0`, so positive `alpha[1]`
-  always means higher `theta` corresponds to better (less hostile)
-  relations at the reference/neutral action class -- without truncating
-  or excluding any part of the sampled parameter space. There is no
+  FOLD") reports every fit with `alpha[1] >= 0`, without truncating or
+  excluding any part of the sampled parameter space. θ is therefore
+  oriented so that higher values make `reference_category` more likely
+  relative to the other action types; with a cooperative reference
+  category, higher θ means more cooperative relations (see the
+  `reference_category` argument of `?prepare_stan_data`). There is no
   dyad-specific intercept — cross-dyad level differences are absorbed
   into the global `mu_intercept`, which is what keeps `theta` comparable
   across dyads.
@@ -152,16 +159,20 @@ Two other Stan programs are registered as experimental variants: `ou`
 (an Ornstein-Uhlenbeck `theta` with mean reversion instead of a pure
 random walk) and `stable_gamma` (adds a country-level category-offset
 `gamma` on top of `stable`'s likelihood; it needs actor columns in the
-dyad-period table). See `R/model_registry.R` and `?prepare_stan_data`
-for details.
+dyad-period table). See `?compile_bilatr_model` and `?prepare_stan_data`
+for details. Compiled models are cached in a user cache directory (see
+`?compile_bilatr_model`), never in the package library.
 
 ## Performance notes
 
-- The `chunk_size` argument of `fit_panel()`/`prepare_stan_data()` sets the `reduce_sum`
-  grainsize used to chunk the likelihood across dyads. 16 threads with
-  `chunk_size = 600` was Pareto-optimal in this project's own
-  benchmarking for panel-sized data; tune both together for your data
-  size and hardware.
+- The defaults of `fit_panel()` (`threads_per_chain = 1`,
+  `parallel_chains = 1`, `chunk_size = 1`) are conservative and use one
+  core. On a multi-core machine, run chains in parallel
+  (`parallel_chains`) and give each chain several threads
+  (`threads_per_chain`) with a larger `chunk_size` (the `reduce_sum`
+  grainsize used to chunk the likelihood across dyads); tune them
+  together for your data size and hardware, as described in
+  `vignette("tuning")`.
 - The Stan data's count array `Y` is dense, dyads x periods x action
   types (about `D * T * A * 4` bytes), so very fine time resolutions
   (e.g. daily) are only practical for few dyads or short windows.

@@ -15,6 +15,9 @@ Integer vector with values 1 (verbal cooperation), 2 (material
 cooperation), 3 (verbal conflict), 4 (material conflict), or \code{NA}.
 }
 \description{
-Assign QuadClass from a CAMEO root code
+The same mapping as GDELT's own \code{QuadClass} column: roots 01-05 are
+1 (verbal cooperation), 06-09 are 2 (material cooperation), 10-14 are
+3 (verbal conflict) and 15-20 are 4 (material conflict). Checked
+against raw GDELT 1.0 event files (\code{data-raw/quadclass_gdelt_check.md}).
 }
 \keyword{internal}

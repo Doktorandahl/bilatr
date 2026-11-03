@@ -43,17 +43,15 @@ classes' own codes are used as their labels, since there is no lookup
 to consult; if \code{scheme} was non-\code{NULL} but unrecognized, a \code{message()}
 names the schemes that do have labels.
 
-\code{stan_data.rds} files saved before 0.9.0 have no \code{grouping_var}
-attribute (added in 0.9.0), and the three current cluster runscripts'
-specs name their \code{ModifiedRootCode} column \code{"ERC16NZ"} (its pre-0.8.0
-name) rather than \code{"ModifiedRootCode"} -- in both cases, \code{scheme} must
-be passed explicitly (\code{scheme = "ModifiedRootCode"}), since the
-default \code{attr(stan_data, "grouping_var")} is either absent or not a
-name \link{cameo_lookup} recognizes.
+If the event classes come from a renamed CAMEO column (for example,
+\code{ModifiedRootCode} copied into a column of another name before
+aggregating), pass \code{scheme} explicitly, since the default
+\code{attr(stan_data, "grouping_var")} is then not a name \link{cameo_lookup}
+recognizes.
 }
 \examples{
 \dontrun{
 event_class_labels(stan_data)
-event_class_labels(stan_data, scheme = "ModifiedRootCode") # pre-0.9.0 stan_data.rds
+event_class_labels(stan_data, scheme = "ModifiedRootCode")
 }
 }

@@ -16,7 +16,7 @@ icc_curves(
   n_grid = 201,
   probs = c(0.05, 0.95),
   type = c("probability", "information"),
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = NULL,
   country = NULL,
   n_dyads_fallback = 300,
   seed = 1
@@ -48,7 +48,8 @@ the default range. Default \code{c(0.01, 0.99)}.}
 
 \item{categories}{Optional subset of categories to compute curves for:
 a character vector of \code{event_class} labels, or an integer vector of
-\code{action_index} values. \code{NULL} (default) computes every category.}
+\code{action_index} values in \code{1:A}. \code{NULL} (default) computes every
+category.}
 
 \item{event_classes}{Optional character vector of event-class labels,
 in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
@@ -68,19 +69,20 @@ e.g. the median, is always included). Default \code{c(0.05, 0.95)}.}
 \code{"information"} for the per-category Fisher information
 contribution (see Details).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
-\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+\item{stan_model}{The model that was fit. \code{NULL} (default) uses the
+model recorded on the fit, on its Stan data, or in the CmdStan CSV
+header, else assumes \code{"stable"} with a message; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
-\item{country}{Only meaningful for \code{stan_model = "stable_gamma"} (see
-\code{R/model_registry.R}'s \code{.bilatr_model_has_gamma()}) -- ignored, with
-a warning if supplied, for any other \code{stan_model}. \code{NULL} (default)
+\item{country}{Only meaningful for \code{stan_model = "stable_gamma"} --
+ignored, with a warning if supplied, for any other \code{stan_model}. \code{NULL} (default)
 evaluates the curves at the \code{gamma = 0} GLOBAL baseline, i.e. what
 every non-\code{gamma} model already computes -- this is the right
 default (a country-specific curve is the exception, not the norm,
 and every existing caller/test comparing curves across models stays
 valid). A single country code (character, matched against
-\code{stan_data}'s \code{"country_codes"} attribute) or a raw integer country
-index gives that country's curves instead, subtracting its \code{gamma_c}
+\code{stan_data}'s \code{"country_codes"} attribute) or an integer country
+index (in \code{1:n_countries}) gives that country's curves instead, subtracting its \code{gamma_c}
 from \code{eta} (\code{gamma}, read once, Tier 1/cheap, alongside \code{alpha}/
 \code{mu_intercept} above -- \code{gamma} is orientation-free by construction,
 so no relabeling applies to it; see

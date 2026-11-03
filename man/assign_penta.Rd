@@ -16,8 +16,12 @@ assign_penta(root, quad)
 Integer vector with values 0-4.
 }
 \description{
-Refines QuadClass into a five-level scheme by splitting out verbal
-cooperation (root 01-02) as its own class and carving protest (root 14)
-and reduce-relations (root 16) out of the conflict classes.
+As QuadClass, except that roots 01-02 (make public statement, appeal)
+form class 0 "Make statement", root 14 (protest) moves to class 4
+(material conflict), and root 16 (reduce relations) moves to class 3
+(verbal conflict). The classes are 0 "Make statement", 1 "Verbal
+cooperation" (roots 03-05), 2 "Material cooperation" (06-09),
+3 "Verbal conflict" (10-13, 16) and 4 "Material conflict" (14, 15,
+17-20).
 }
 \keyword{internal}

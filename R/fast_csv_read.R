@@ -63,6 +63,8 @@
 #' @return A list with `skip` (integer: number of lines to pass so the
 #'   next line is the first post-warmup draw -- i.e. `fread(skip =
 #'   this)`'s first row), `header_line` (the raw, unparsed header line),
+#'   `model` (CmdStan's model name from the `model = ` config line, e.g.
+#'   `"bilatr_alphanorm_model"`, or `NA` if absent),
 #'   `num_samples`/`num_warmup`/`thin` (integers) and `save_warmup`
 #'   (logical), parsed from the config block, and `num_post_warmup_draws`
 #'   (`ceiling(num_samples / thin)`, the same arithmetic
@@ -73,7 +75,9 @@
   on.exit(close(con), add = TRUE)
 
   config_keys <- c("method", "num_samples", "num_warmup", "save_warmup", "thin")
-  config <- stats::setNames(as.list(rep(NA_character_, length(config_keys))), config_keys)
+  # `model` is optional: read when present, never required
+  all_keys <- c(config_keys, "model")
+  config <- stats::setNames(as.list(rep(NA_character_, length(all_keys))), all_keys)
 
   skip <- 0L
   repeat {
@@ -83,7 +87,7 @@
     }
     skip <- skip + 1L
     if (!startsWith(line, "#")) break
-    for (key in config_keys) {
+    for (key in all_keys) {
       if (is.na(config[[key]])) {
         val <- .match_stan_csv_config_field(line, key)
         if (!is.na(val)) config[[key]] <- val
@@ -92,7 +96,7 @@
   }
   header_line <- line
 
-  missing_keys <- config_keys[vapply(config, is.na, logical(1))]
+  missing_keys <- config_keys[vapply(config[config_keys], is.na, logical(1))]
   if (length(missing_keys) > 0) {
     stop(
       "'", csv_file, "': could not find config field(s) ",
@@ -144,7 +148,7 @@
   }
 
   list(
-    skip = skip, header_line = header_line,
+    skip = skip, header_line = header_line, model = config$model,
     num_samples = num_samples, num_warmup = num_warmup,
     save_warmup = save_warmup, thin = thin,
     num_post_warmup_draws = ceiling(num_samples / thin)
@@ -188,7 +192,9 @@
 #'   integer vector: bracket name -> 1-based column position in the raw
 #'   CSV header -- sampler-diagnostic columns like `accept_stat__`
 #'   occupy earlier positions and are counted in this numbering even
-#'   though they're never named in `variables`), `num_post_warmup_draws`,
+#'   though they're never named in `variables`), `sampler_col_index` (the
+#'   same, for the sampler-diagnostic columns such as `accept_stat__`,
+#'   named as in the header), `num_post_warmup_draws`,
 #'   `n_chains`, `data_skip` (integer vector, one per `csv_files` entry,
 #'   for `fread(skip = )`), and `file_mb` (the LARGEST `csv_files` entry's
 #'   size in MB -- `fread()` reads one file at a time, so this is the
@@ -235,6 +241,8 @@
   bracket_vars <- vapply(variables_dot, .dot_name_to_bracket, character(1), USE.NAMES = FALSE)
   dot_name_map <- stats::setNames(variables_dot, bracket_vars)
   col_index <- stats::setNames(col_index_dot[variables_dot], bracket_vars)
+  sampler_cols <- setdiff(header_fields, variables_dot)
+  sampler_col_index <- col_index_dot[sampler_cols]
 
   n_chains <- length(csv_files)
 
@@ -258,6 +266,7 @@
     variables = bracket_vars,
     dot_name_map = dot_name_map,
     col_index = col_index,
+    sampler_col_index = sampler_col_index,
     num_post_warmup_draws = num_post_warmup_draws,
     n_chains = n_chains,
     data_skip = data_skip,
@@ -280,6 +289,7 @@
 #' @param available Character vector of all bracket-form variable names
 #'   in the CSV header (`prepared$variables`).
 #' @param filters Character vector of requested variable names/base names.
+#' @param caller Optional calling function's name, prefixed to the error.
 #' @return Character vector of concrete, available variable names, in
 #'   the order their filters were given (a base-name filter expands to
 #'   its matches in `available`'s order), with duplicates dropped (B5): a
@@ -287,7 +297,7 @@
 #'   `"alpha[1]"` twice, and `data.table::fread(select = )` errors opaquely
 #'   ("Column number ... has been selected twice") on a duplicated column.
 #' @keywords internal
-.expand_bilatr_variable_filters <- function(available, filters) {
+.expand_bilatr_variable_filters <- function(available, filters, caller = NULL) {
   matched <- as.list(match(filters, available))
   for (id in which(is.na(matched))) {
     matched[[id]] <- which(startsWith(available, paste0(filters[id], "[")))
@@ -295,6 +305,7 @@
   not_found <- filters[vapply(matched, length, 0L) == 0]
   if (length(not_found) > 0) {
     stop(
+      if (!is.null(caller)) paste0(caller, ": "),
       "Variable(s) not found in the CmdStan CSV header: ",
       paste(not_found, collapse = ", "),
       call. = FALSE
@@ -371,4 +382,57 @@
   }
 
   posterior::as_draws_array(arr)
+}
+
+#' Read selected variables from CmdStan CSV files
+#'
+#' Reads the post-warmup draws of the requested variables straight from
+#' CmdStan's output CSV files, without loading the whole fit. This is the
+#' memory-light way to get a few parameters out of a large run, for
+#' example `alpha` and some dyads' `theta` from a panel with millions of
+#' `theta` columns: only the requested columns are parsed and kept, and
+#' one chain file is read at a time.
+#'
+#' The files must be CmdStan `sample` output from one run (one file per
+#' chain), with the same settings and columns; that is checked, as is that
+#' no chain stopped early.
+#'
+#' @param csv_files Character vector of CmdStan CSV file paths, one per
+#'   chain (e.g. `fit$output_files()`, or the files in a `fit_panel()`
+#'   `output_dir`).
+#' @param variables Character vector of variables to read. Each is either
+#'   a single element (`"theta[3,7]"`, `"alpha[1]"`) or a parameter name
+#'   (`"alpha"`, `"theta"`), which reads every element of that parameter.
+#'   Sampler diagnostics (`"lp__"`, `"accept_stat__"`, `"stepsize__"`,
+#'   `"treedepth__"`, `"n_leapfrog__"`, `"divergent__"`, `"energy__"`) can
+#'   be requested by exact name too.
+#' @return A `posterior::draws_array` with the variables in the order
+#'   given (a parameter name expands to its elements in the file's
+#'   order; duplicates are dropped). Errors, naming them, if any requested
+#'   variable is not in the files.
+#' @examples
+#' \dontrun{
+#' csv_files <- list.files("model_output", pattern = "\\.csv$", full.names = TRUE)
+#' draws <- read_bilatr_draws(csv_files, c("alpha", "theta[1,1]", "divergent__"))
+#' posterior::summarise_draws(draws)
+#' }
+#' @export
+read_bilatr_draws <- function(csv_files, variables) {
+  fn <- "read_bilatr_draws()"
+  if (!is.character(csv_files) || length(csv_files) == 0 || anyNA(csv_files)) {
+    stop(fn, ": `csv_files` must be a character vector of CmdStan CSV file paths.", call. = FALSE)
+  }
+  absent <- csv_files[!file.exists(csv_files)]
+  if (length(absent) > 0) {
+    stop(fn, ": file(s) not found: ", paste(absent, collapse = ", "), ".", call. = FALSE)
+  }
+  if (!is.character(variables) || length(variables) == 0 || anyNA(variables)) {
+    stop(fn, ": `variables` must be a character vector of variable names.", call. = FALSE)
+  }
+  prepared <- .prepare_fast_csv_read(csv_files)
+  prepared$variables <- c(prepared$variables, names(prepared$sampler_col_index))
+  prepared$col_index <- c(prepared$col_index, prepared$sampler_col_index)
+  # resolved here first, so a missing variable errors with this function's name
+  resolved <- .expand_bilatr_variable_filters(prepared$variables, variables, caller = fn)
+  .fast_read_post_warmup_draws(prepared, resolved)
 }

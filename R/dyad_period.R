@@ -32,11 +32,13 @@ validate_reference_class <- function(value, classes, arg_name,
 #' Order event classes with the reference category first
 #'
 #' Puts `reference_category` first (if supplied and present), with all other
-#' classes sorted alphabetically after it. This ordering is what implements
+#' classes after it in C-locale, numeric-aware order (`"2"` before `"10"`,
+#' digits before letters, upper case before lower case). This ordering is what implements
 #' the model's identification constraint on the R side: `stable`/`ou` fold
 #' `alpha[1]`'s (the first column's) sign into the reported `alpha`/`theta`
 #' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-#' so the reference/neutral class anchors alpha's sign and scale. All
+#' so the reference class anchors the sign of the latent scale (see the
+#' `reference_category` argument of [prepare_stan_data()]). All
 #' remaining `alpha[2:A]` are freely estimated.
 #'
 #' @param classes Vector of observed event-class values.

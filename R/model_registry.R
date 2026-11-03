@@ -136,42 +136,25 @@
 
 .BILATR_DEFAULT_MODEL <- "stable"
 
-#' Names retired in 0.10.0 that once resolved to a registered model
-#'
-#' `alphanorm`/`alphanorm_ou` (the pre-0.4.0 names) and
-#' `stable_soft_anchor`/`ou_soft_anchor` (the pre-0.4.2 soft-sign-anchor
-#' programs those aliases ultimately resolved to) are no longer registered
-#' at all -- every fit made under any of these four names predates 0.4.2,
-#' so it needs bilatr <= 0.9.1 (the last version to still register and
-#' orient them) to read, not this or any later version.
-#' @keywords internal
-.BILATR_RETIRED_MODEL_NAMES <- c("alphanorm", "alphanorm_ou", "stable_soft_anchor", "ou_soft_anchor")
-
 #' Resolve a `stan_model` argument to its canonical registered name
 #'
 #' Every `stan_model`-accepting entry point should call this before doing
 #' anything else with the value: an unrecognized name must never be
 #' allowed to silently fall through as though it were a no-op.
 #'
-#' @param name A `stan_model` value as given by the caller: a name
-#'   currently in `.bilatr_stan_models`, one of
-#'   `.BILATR_RETIRED_MODEL_NAMES` (a dedicated "retired in 0.10.0" error),
-#'   or anything else (a generic "unknown" error).
-#' @return The canonical registered name.
+#' @param name A `stan_model` value as given by the caller.
+#' @return The canonical registered name; anything else is an error.
 #' @keywords internal
 .canonical_stan_model <- function(name) {
-  if (name %in% names(.bilatr_stan_models)) {
-    return(name)
-  }
-  if (name %in% .BILATR_RETIRED_MODEL_NAMES) {
+  if (!rlang::is_string(name)) {
     stop(
-      "stan_model '", name, "' was retired in bilatr 0.10.0 (see NEWS.md): ",
-      "its sign-ambiguous soft-anchor identification was replaced by the ",
-      "current models' orientation fold, and the post-hoc orientation ",
-      "machinery it needed no longer exists. Install bilatr <= 0.9.1 to ",
-      "read/re-derive a fit made under this name.",
+      "`stan_model` must be a single string, one of: ",
+      paste(names(.bilatr_stan_models), collapse = ", "), ".",
       call. = FALSE
     )
+  }
+  if (name %in% names(.bilatr_stan_models)) {
+    return(name)
   }
   stop(
     "Unknown stan_model '", name, "'. Registered models: ",
@@ -256,8 +239,7 @@
     message(
       "stan_model = \"", stan_model, "\" is experimental (not yet ",
       "prior-predictive calibrated or fit at production scale; see ",
-      "?.bilatr_stan_models or R/model_registry.R). This message is ",
-      "shown once per session."
+      "?compile_bilatr_model). This message is shown once per session."
     )
     assign(stan_model, TRUE, envir = .bilatr_experimental_messaged)
   }

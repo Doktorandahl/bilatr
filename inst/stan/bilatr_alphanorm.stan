@@ -1,4 +1,4 @@
-// bilatr: hierarchical dynamic IRT model for dyadic conflict trajectories.
+// bilatr: hierarchical dynamic IRT model for latent bilateral relations.
 //
 // Registered as `stable` (R/model_registry.R, status = "stable") since
 // 0.4.0, promoted from the experimental `alphanorm` variant it was
@@ -147,7 +147,7 @@
 // plays here). Not implemented; recorded here as the documented fallback
 // per task instructions, left for a future decision.
 //
-// alpha[1] IS the reference/neutral action class here, not an arbitrary
+// alpha[1] IS the reference action class here, not an arbitrary
 // index: assemble_stan_data() (via grouped_events_to_dyad_period()'s
 // `reference_category` argument) already reorders that class to be
 // first in the action dimension before this model ever sees the data
@@ -222,11 +222,12 @@
 // 0.4.2 approach) -- see "RADIAL DEGENERACY" above for why it is
 // load-bearing, not merely regularizing.
 //
-// ORIENTATION: positive alpha[1] means higher theta corresponds to
-// better (less hostile) relations at the reference/neutral action class,
-// matching stable/ou and the package's stated quantity (bilateral
-// relationship quality) -- and this holds for every fit made under this
-// file via the fold above, not just on average across many. `alpha`,
+// ORIENTATION: the reported alpha[1] is never negative, so higher theta
+// makes the reference action class more likely relative to the other
+// action types; with a cooperative reference class, higher theta means
+// more cooperative relations (see ?prepare_stan_data, reference_category).
+// This holds for every fit made under this file via the fold above, not
+// just on average across many. `alpha`,
 // `theta`, `mu_intercept`, `phi`, and every scale/dispersion parameter
 // are always in their final orientation as REPORTED;
 // bilatr_orient()/.bilatr_flip_variables() return `character(0)` for

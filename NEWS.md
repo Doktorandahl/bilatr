@@ -1,3 +1,89 @@
+# bilatr (development version)
+
+Steps 1 and 2 of the 1.0.0 release (code blockers; semantics). The full
+NEWS rewrite comes later in the release.
+
+* 'cmdstanr' moves from Imports to Suggests (install it from
+  <https://stan-dev.r-universe.dev>), and CmdStan is listed under
+  SystemRequirements. The package loads, prepares data and reads
+  CmdStan output without it; compiling or fitting without it gives an
+  error saying how to install it.
+* Models are compiled in a user cache directory
+  (`tools::R_user_dir("bilatr", "cache")`, one directory per bilatr
+  version), never in the installed package. Set
+  `options(bilatr.model_dir = )` to use another directory.
+  `compile_bilatr_model()` gains `stan_model` and documents the three
+  models; the new `bilatr_clear_model_cache()` deletes compiled models.
+* Each chain now starts from its own random initial values (before,
+  every chain started from the same point). With a `seed`, the initial
+  values are seeded too, so two fits with the same `seed` give
+  identical draws. An `init` passed through `...` is used as given.
+* Fits record their model (`attr(fit, "stan_model")`, and on the
+  attached Stan data and its `*_stan_data.rds` file).
+  `diagnose_convergence()`, `diagnose_and_extract_bilatr()`,
+  `icc_curves()` and `check_compositional_residuals()` default to
+  `stan_model = NULL` and use the recorded model (or the CmdStan CSV
+  header), so a `stable_gamma` fit is checked as one without being told.
+  An explicit `stan_model` that contradicts the recorded one is an
+  error.
+* `diagnose_convergence()` and `diagnose_and_extract_bilatr()` compute
+  `n_dt` from the fit's Stan data when it is not given, and accept an
+  `n_dt` keyed by dyad name (or with a count column `n`, as from
+  `dplyr::count()`).
+* New defaults: `threads_per_chain = 1`, `parallel_chains = 1` and
+  `chunk_size = 1` in `fit_panel()`; `parallel_chains = 1` and
+  `chunk_size = 1` in `fit_dyad_ts()`; `chunk_size = 1` in
+  `prepare_stan_data()`.
+* New `read_bilatr_draws()` reads selected variables (and sampler
+  diagnostics) from large CmdStan CSV files without loading the whole
+  fit.
+* `prepare_stan_data()` validates `min_n_events`, `chunk_size`,
+  `rho_prior_a`/`rho_prior_b` and the 0/1 flags (which also accept
+  `FALSE`/`TRUE` and are stored as integers), and warns when
+  `filter_dyads` is ignored because `compute_theta_filtered = 0`.
+  `stan_data$T` is an integer.
+* `diagnose_convergence()` reports `NA` instead of `-Inf`/`Inf` (with a
+  warning) for a dyad whose Tier 3 R-hat is all `NA`.
+* `read_gdelt()` and `count_gdelt_actor_types()` give a clear error
+  naming an empty file. `icc_curves()` range-checks an integer
+  `country` or `categories`.
+* Removed: compatibility with Stan data saved by bilatr 0.11.0 and
+  earlier, and the dedicated error for model names retired in 0.10.0
+  (they now get the generic "Unknown stan_model" error).
+
+## Orientation and terminology
+
+* The package is retitled "Hierarchical Dynamic IRT Models for Latent
+  Bilateral Relations". The documentation now states the orientation
+  of `theta` precisely: higher values make `reference_category` more
+  likely relative to the other action types, so with a cooperative
+  reference category higher `theta` means more cooperative relations
+  (`?prepare_stan_data`, argument `reference_category`). The README,
+  vignettes and examples use a cooperative reference category
+  (PentaClass `"1"`, verbal cooperation).
+* `prepare_stan_data()`, and so `fit_panel()` and `fit_dyad_ts()`, emit a
+  message naming the anchor class when `reference_category` is `NULL`.
+  Which class is chosen is unchanged.
+* `?theta_directed`/`?theta_undirected` now document the source data,
+  event filters, model and orientation (higher `theta` means more
+  cooperative relations).
+
+## CAMEO schemes
+
+* `QuadClass` was checked against GDELT's own `QuadClass` column in raw
+  GDELT 1.0 files and is the same mapping (roots 01-05, 06-09, 10-14,
+  15-20). No `cameo_lookup` value changes.
+* The descriptions of the schemes now match the code. `PentaClass` 0 is
+  "Make statement" (roots 01-02), not verbal cooperation (class 1, roots
+  03-05); protest (root 14) and reduce relations (root 16) move into the
+  existing classes 4 and 3. The `ModifiedRootCode` description now lists
+  every merge and split it makes.
+
+## Other
+
+* `stan_data$C` is an integer.
+* cmdstanr 0.8.0 or later is required to compile and fit models.
+
 # bilatr 0.12.0
 
 A source-agnostic data interface. `fit_panel()`/`fit_dyad_ts()` now take an

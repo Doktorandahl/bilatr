@@ -12,36 +12,44 @@ A data frame with one row per CAMEO event code and columns:
 code.}
 \item{GoldsteinScore}{Numeric. Goldstein conflict-cooperation score,
 ranging from -10 (most conflictual) to 10 (most cooperative).}
-\item{QuadClass}{Integer, 1-4. 1 = verbal cooperation, 2 = material
-cooperation, 3 = verbal conflict, 4 = material conflict.}
+\item{QuadClass}{Integer, 1-4. The same mapping as GDELT's own
+\code{QuadClass} column: 1 = verbal cooperation (roots 01-05),
+2 = material cooperation (06-09), 3 = verbal conflict (10-14),
+4 = material conflict (15-20).}
 \item{QuadClassName}{Character. Human-readable label for
 \code{QuadClass}; see \code{\link[=quadclass_name]{quadclass_name()}}.}
 \item{QuadClassEventCodes}{Character. Comma-separated CAMEO root
 codes underlying each \code{QuadClass} class; see
 \code{\link[=quadclass_eventcodes]{quadclass_eventcodes()}}.}
-\item{PentaClass}{Integer, 0-4. As QuadClass, but with verbal
-cooperation (0) split out from material cooperation (1), and
-protest/reduce-relations events reassigned to their own classes.}
+\item{PentaClass}{Integer, 0-4. As QuadClass, except that roots
+01-02 (make public statement, appeal) form class 0, root 14
+(protest) moves to class 4 (material conflict), and root 16
+(reduce relations) moves to class 3 (verbal conflict): 0 = make
+statement (roots 01-02), 1 = verbal cooperation (03-05),
+2 = material cooperation (06-09), 3 = verbal conflict (10-13, 16),
+4 = material conflict (14, 15, 17-20).}
 \item{PentaClassName}{Character. Human-readable label for
 \code{PentaClass}; see \code{\link[=pentaclass_name]{pentaclass_name()}}.}
 \item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
 codes underlying each \code{PentaClass} class; see
 \code{\link[=pentaclass_eventcodes]{pentaclass_eventcodes()}}.}
-\item{PentaClass_modified}{Integer, 0-4. As PentaClass, but low-
-intensity verbal cooperation (Goldstein score <= 1) is folded into
-class 0, useful as a near-neutral reference category.}
+\item{PentaClass_modified}{Integer, 0-4. As PentaClass, except that
+every code with \code{QuadClass} 1 and \code{GoldsteinScore} at most 1 is
+class 0. Class 0 is therefore roots 01-02 plus the codes of roots
+03-05 scoring at most 1 (in this table \code{04}, \code{040} and \code{041}).}
 \item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
-root codes that relocates \code{016} into the Reject class and
-\code{018}/\code{019} into the diplomatic-cooperation class, splits root
-\code{04} ("Consult") by kind of consultation, splits root \code{13}
-("Threaten") off from force posture only where noted, and merges
-Investigate (root \code{09}) and Demand (root \code{10}) into a single
-"Investigate or demand" class; see
-\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}. Blank (\code{NA}) on the top-level
-(two-digit) row for a root whose own event codes don't all belong
-to the same \code{ModifiedRootCode} class (currently roots \code{01} and
-\code{04}); populated on that root's individual sub-codes as normal.
-This scheme was previously named \code{ERC16NZ}.}
+root codes that moves \code{016} (deny responsibility) into Reject
+(class 13) and \code{018}/\code{019} (make empathetic comment, express
+accord) into diplomatic cooperation (class 7); splits root \code{04}
+(consult) into unspecified (\code{040}), meet, discuss, or visit
+(\code{041}-\code{044}) and negotiate or mediate (\code{045}-\code{046}); merges
+Investigate (\code{09}) and Demand (\code{10}); merges Threaten (\code{13}) and
+Exhibit force posture (\code{15}); and merges \code{18}-\code{20} into "Assault,
+fight, or mass violence". See \code{\link[=assign_modified_root_code]{assign_modified_root_code()}}.
+Blank (\code{NA}) on the top-level (two-digit) row for a root whose own
+event codes don't all belong to the same \code{ModifiedRootCode} class
+(roots \code{01} and \code{04}); populated on that root's individual
+sub-codes as normal.}
 \item{ModifiedRootCodeName}{Character. Human-readable label for
 \code{ModifiedRootCode}; see \code{\link[=modified_root_code_name]{modified_root_code_name()}}. \code{NA}
 wherever \code{ModifiedRootCode} is blank.}
@@ -51,15 +59,8 @@ root/event codes underlying each \code{ModifiedRootCode} class; see
 is blank.}
 }
 
-A handful of other classification schemes previously shipped in this
-table (\code{EventRootCode2}, \code{EventRootCode3}, \code{EventRootCode4},
-\code{BilatrClass}, \code{BilatrClass2}, each with their \verb{*Name}/\verb{*RootCodes}
-columns) have been retired from it, and their \verb{assign_*()}/\verb{*_name()}
-functions removed entirely (0.10.1; they are no longer attached by
-\code{\link[=recode_cameo]{recode_cameo()}}, and reading pre-0.10.1 output that used them needs
-an older bilatr install). \code{\link[=event_class_labels]{event_class_labels()}} is the current,
-data-driven way to get a class's human-readable label from a fitted
-model's \code{stan_data}, for any scheme that still has a \verb{*Name} column
+\code{\link[=event_class_labels]{event_class_labels()}} gives a class's human-readable label from a
+fitted model's \code{stan_data}, for each scheme with a \verb{*Name} column
 here (\code{QuadClass}, \code{PentaClass}, \code{ModifiedRootCode}).
 }
 \source{

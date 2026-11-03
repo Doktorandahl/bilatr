@@ -15,15 +15,18 @@ fit_bilatr(
   opt_level,
   output_dir,
   stan_model = .BILATR_DEFAULT_MODEL,
+  init = NULL,
   ...
 )
 }
+\arguments{
+\item{init}{A list of per-chain initial-value lists, or whatever the
+user passed as \code{init}.}
+}
 \description{
-Compiles (or fetches from cache) the model and samples. Canonicalises
-\code{stan_model} again (idempotent), so \code{\link[=.compile_stan_model]{.compile_stan_model()}} and
-\code{\link[=bilatr_init_fn]{bilatr_init_fn()}} agree on the same resolved name, and emits the
-once-per-session experimental-model message (see
-\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}). Every check on the data has
-already run in \code{\link[=.bilatr_fit_entry]{.bilatr_fit_entry()}}.
+Compiles (or fetches from cache) the model and samples, after emitting
+the once-per-session experimental-model message (see
+\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}). Every check on the data, and the
+initial values, are handled by \code{\link[=.bilatr_fit_entry]{.bilatr_fit_entry()}}.
 }
 \keyword{internal}

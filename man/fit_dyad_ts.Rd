@@ -16,7 +16,7 @@ fit_dyad_ts(
   reference_category = NULL,
   min_n_events = 1,
   time_range = NULL,
-  chunk_size = 100,
+  chunk_size = 1,
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
@@ -24,14 +24,14 @@ fit_dyad_ts(
   compute_theta_filtered = 0,
   filter_dyads = NULL,
   chains = 4,
-  parallel_chains = 4,
+  parallel_chains = 1,
   threads_per_chain = 1,
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
   opt_level = 3,
   output_dir = NULL,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = "stable",
   ...
 )
 }
@@ -57,16 +57,28 @@ sender-share columns; see \code{?bilatr_dyad_period_data}. The actor and
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. Defaults to \code{attr(data, "directed")} if set
 (by \code{\link[=aggregate_events]{aggregate_events()}}), else \code{TRUE}.}
 
-\item{reference_category}{Name of the action column to anchor as the
-model's scale/sign reference: \code{stable}/\code{ou} fold \code{alpha[1]}'s sign
-into the reported \code{alpha}/\code{theta} (see each \code{.stan} file's header,
-"IDENTIFICATION: ORIENTATION FOLD"), so positive \code{alpha[1]} means
-better relations at this class. Should typically be a
-low-conflict/cooperative class. \code{NULL} (default) anchors on the first
-action column. Errors if it is not one of the (non-all-zero) action
-columns.}
+\item{reference_category}{Name of the action column that anchors the
+sign of the latent scale. \eqn{\theta} is oriented so that higher
+values make \code{reference_category} more likely relative to the other
+action types. With a cooperative reference category, higher
+\eqn{\theta} means more cooperative relations.
 
-\item{min_n_events}{Minimum total events for a dyad to be retained.}
+The reference category is placed first, and every bilatr model folds
+the sign of its discrimination \code{alpha[1]} into the reported \code{alpha}
+and \code{theta}, so the reported \code{alpha[1]} is never negative (see each
+\code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"). Since
+\code{alpha} sums to zero, \code{alpha[1]} is at least the average
+discrimination of the other classes, and the reference class gains
+probability relative to them as \eqn{\theta} rises.
+
+\code{NULL} (default) anchors on the first action column, with a
+\code{message()} naming it: the sign of \eqn{\theta} then depends on
+whichever class that is, so set a cooperative class explicitly (for
+example \code{"1"}, verbal cooperation, for \code{PentaClass}). Errors if it is
+not one of the (non-all-zero) action columns.}
+
+\item{min_n_events}{Minimum total events for a dyad to be retained: a
+single non-negative whole number.}
 
 \item{time_range}{\code{NULL} (default), or two whole numbers \code{c(min, max)}
 on the time column's scale. Rows outside it are dropped (with a
@@ -76,32 +88,33 @@ on the time column's scale. Rows outside it are dropped (with a
 numbers, if \code{min > max}, or if no rows fall inside it.}
 
 \item{chunk_size}{\code{reduce_sum} grainsize used to chunk the likelihood
-across dyads. 16 cores with \code{chunk_size = 600} was the
-Pareto-optimal setting found in this project's own benchmarking for
-panel-sized data; smaller panels or single-dyad fits should use a
-smaller value (down to 1) since chunking overhead outweighs the
-benefit below that scale. See \code{\link[=fit_panel]{fit_panel()}} for the corresponding
-\code{threads_per_chain} argument.}
+across dyads: a single whole number, at least 1. The default, 1, is
+conservative and fine for single-threaded fits; with several threads
+per chain a larger value is usually faster for large panels. See
+\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning")}.}
 
-\item{rho_prior_a, rho_prior_b}{Shape parameters of the
-\code{beta(rho_prior_a, rho_prior_b)} prior on the OU/AR(1) persistence
-parameter \code{rho}, consumed only by the experimental \code{ou} Stan model
-variant (see \code{R/model_registry.R}); ignored by \code{stable}, which keeps
-a random-walk \code{theta} with no persistence parameter. Default \verb{8, 2}
-(weighted toward strong persistence).}
+\item{rho_prior_a, rho_prior_b}{Shape parameters (single positive
+numbers) of the \code{beta(rho_prior_a, rho_prior_b)} prior on the
+OU/AR(1) persistence parameter \code{rho}, used only by the experimental
+\code{"ou"} model (see \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}); ignored by \code{"stable"},
+which keeps a random-walk \code{theta} with no persistence parameter.
+Default \verb{8, 2} (weighted toward strong persistence).}
 
-\item{compute_log_lik}{\code{0} (default) or \code{1}. Data flag consumed by
+\item{compute_log_lik}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE} also
+work; stored as an integer). Data flag consumed by
 every registered Stan model, gating a per-dyad-period \code{log_lik} in
 \verb{generated quantities}; left off by default since it is \verb{D x T x}
 draws and file size already scales with dyad count.}
 
-\item{prior_only}{\code{0} (default) or \code{1}. Data flag consumed by every
+\item{prior_only}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE} also work).
+Data flag consumed by every
 registered Stan model, gating the \code{reduce_sum} likelihood call in
 \code{model} -- \code{1} fits the prior alone, useful for prior-predictive
 checks and for validating \code{\link[=alpha_prior_moments]{alpha_prior_moments()}} against an actual
 fit.}
 
-\item{compute_theta_filtered}{\code{0} (default) or \code{1}. Data flag consumed
+\item{compute_theta_filtered}{\code{0} (default) or \code{1} (\code{FALSE}/\code{TRUE}
+also work). Data flag consumed
 by every registered Stan model, gating
 \code{theta_filtered}/\code{theta_filtered_sd} in \verb{generated quantities}: the
 forward-filtered state (conditional on each draw's hyperparameters,
@@ -115,8 +128,8 @@ set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
 
 \item{filter_dyads}{Optional character vector of dyad names (matched
 against the \code{dyad_ids} attribute's \code{dyad} column) naming which dyads
-to compute \code{theta_filtered} for. Ignored if \code{compute_theta_filtered}
-is \code{0}. \code{NULL} (default) means all dyads, once
+to compute \code{theta_filtered} for. Ignored, with a warning, if
+\code{compute_theta_filtered} is \code{0}. \code{NULL} (default) means all dyads, once
 \code{compute_theta_filtered = 1} is set -- pass a small subset (e.g.
 fifty dyads) to compute the filter cheaply for just those. Errors,
 listing the offending names, if any requested dyad was dropped by
@@ -124,7 +137,9 @@ listing the offending names, if any requested dyad was dropped by
 
 \item{chains}{Number of MCMC chains.}
 
-\item{parallel_chains}{Number of chains to run in parallel.}
+\item{parallel_chains}{Number of chains to run in parallel. Defaults
+to 1 (chains run one after another); set it to \code{chains} to run them
+all at once if you have the cores.}
 
 \item{threads_per_chain}{Threads per chain for within-chain
 parallelization. Not useful for \code{D == 1}; left as an argument mainly
@@ -135,7 +150,8 @@ for consistency with \code{\link[=fit_panel]{fit_panel()}}.}
 \item{iter_sampling}{Number of post-warmup sampling iterations per
 chain.}
 
-\item{seed}{Random seed, or \code{NULL} for \code{cmdstanr}'s default.}
+\item{seed}{Random seed for CmdStan and for the initial values (see
+Details), or \code{NULL} for no seed.}
 
 \item{opt_level}{Compiler optimization level; see
 \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}.}
@@ -144,21 +160,18 @@ chain.}
 \code{NULL} for a temporary directory. When given, the Stan data list is
 also saved there (see Value).}
 
-\item{stan_model}{(0.10.1) Name registered in \code{.bilatr_stan_models}
-(see \code{\link[=.canonical_stan_model]{.canonical_stan_model()}}); an unregistered name errors,
-including the four names retired in 0.10.0. Defaults to
-\code{"stable"} (\code{.BILATR_DEFAULT_MODEL}). Fitting a model whose registry
-\code{status} is \code{"experimental"} (currently \code{ou}/\code{stable_gamma}) emits a
-\code{message()} the first time it is fit in a session (see
-\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}).}
+\item{stan_model}{Which model to fit: \code{"stable"} (default), or the
+experimental \code{"ou"} or \code{"stable_gamma"}; see \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}.
+Fitting an experimental model shows a \code{message()} once per session.}
 
 \item{...}{Additional arguments passed to \code{CmdStanModel$sample()}
-(e.g. \code{refresh}, \code{chain_ids}, \code{output_basename}).}
+(e.g. \code{refresh}, \code{chain_ids}, \code{output_basename}, \code{init}).}
 }
 \value{
 A \code{CmdStanMCMC} fit object, with the Stan data list it was fit
 to attached as \code{attr(fit, "stan_data")} (with its own attributes:
-\code{dyad_ids}, \code{event_classes}, ...). The extractors (\code{\link[=extract_theta]{extract_theta()}},
+\code{dyad_ids}, \code{event_classes}, \code{stan_model}, ...) and the model's name
+as \code{attr(fit, "stan_model")}. The extractors (\code{\link[=extract_theta]{extract_theta()}},
 \code{\link[=extract_gamma]{extract_gamma()}}, \code{\link[=diagnose_category_merges]{diagnose_category_merges()}},
 \code{\link[=check_compositional_residuals]{check_compositional_residuals()}}, ...) use it when their own
 \code{stan_data} argument is not given. \code{CmdStanMCMC} objects are
@@ -175,10 +188,10 @@ extractors find this file next to the CmdStan CSVs when given CSV
 paths.
 }
 \description{
-Fits the collapsed dyadic IRT model (see the package's Stan file,
-\code{bilatr_alphanorm.stan}, registered as the \code{stable} model -- see
-\code{R/model_registry.R}) to a single dyad (\code{D == 1}), i.e. estimates
-one latent conflict trajectory \code{theta} with no cross-dyad pooling on
+Fits the dynamic IRT model (by default the \code{"stable"} model; see
+\code{\link[=compile_bilatr_model]{compile_bilatr_model()}} for the available models) to a single dyad
+(\code{D == 1}), i.e. estimates
+one latent bilateral-relations trajectory \code{theta} with no cross-dyad pooling on
 \code{theta0}, \code{phi}, or process noise (those hierarchical parameters still
 exist in the model but are estimated from a single unit, so their
 pooling has no effect). Use \code{\link[=fit_panel]{fit_panel()}} instead when fitting more
@@ -189,9 +202,8 @@ than one dyad, to get the benefit of partial pooling.
 e.g. the output of \code{\link[=aggregate_events]{aggregate_events()}}), which is passed to
 \code{\link[=prepare_stan_data]{prepare_stan_data()}} together with the data-preparation arguments
 (\code{time} through \code{filter_dyads}), or a Stan data list already built by
-\code{\link[=prepare_stan_data]{prepare_stan_data()}} (or by \code{assemble_stan_data()} in bilatr 0.11.0
-and earlier), which is used as-is. With a prepared list, supplying any
-data-preparation argument is an error.
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}, which is used as-is. With a prepared list,
+supplying any data-preparation argument is an error.
 
 Before compiling anything, \code{fit_dyad_ts()} checks that the data has
 exactly one dyad (after \code{min_n_events} filtering), and, for
@@ -202,6 +214,20 @@ for undirected dyads.
 \code{reduce_sum} chunking across dyads has nothing to parallelize over
 when \code{D == 1}, so \code{threads_per_chain} defaults to 1 here (raising it
 will not speed up sampling for a single-dyad fit).
+
+\strong{Reproducibility.} Each chain starts from its own random initial
+values. With a \code{seed}, chain \code{k}'s initial values are drawn with seed
+\code{seed + k} (\code{seed + chain_ids[k]} if \code{chain_ids} is passed through
+\code{...}), and \code{seed} is also passed to CmdStan, so two calls with the
+same \code{seed} and data give identical draws (on the same machine and
+CmdStan version). With \code{seed = NULL}, the initial values come from R's
+current random-number stream. Pass \code{init} through \code{...} to supply your
+own initial values instead.
+
+The fitted model's name is recorded as \code{attr(fit, "stan_model")} and
+\code{attr(attr(fit, "stan_data"), "stan_model")}, so the post-fit functions
+(\code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=check_compositional_residuals]{check_compositional_residuals()}},
+\code{\link[=icc_curves]{icc_curves()}}, ...) know which model was fit without being told.
 }
 \examples{
 \dontrun{
@@ -209,7 +235,8 @@ agg <- aggregate_events(
   dplyr::filter(events, Actor1CountryCode == "USA", Actor2CountryCode == "CHN"),
   grouping_var = "PentaClass", start = "2015-01-01", end = "2020-12-31"
 )
-fit <- fit_dyad_ts(agg, reference_category = "0", chains = 4, iter_sampling = 1000)
+# reference "1" (verbal cooperation): higher theta = more cooperative
+fit <- fit_dyad_ts(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
 theta <- extract_theta(fit)
 }
 }

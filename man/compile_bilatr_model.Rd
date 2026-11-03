@@ -2,11 +2,18 @@
 % Please edit documentation in R/fit.R
 \name{compile_bilatr_model}
 \alias{compile_bilatr_model}
-\title{Compile the bilatr Stan model}
+\title{Compile a bilatr Stan model}
 \usage{
-compile_bilatr_model(opt_level = 3, force_recompile = FALSE)
+compile_bilatr_model(
+  stan_model = "stable",
+  opt_level = 3,
+  force_recompile = FALSE
+)
 }
 \arguments{
+\item{stan_model}{Which model to compile: \code{"stable"} (default), \code{"ou"}
+or \code{"stable_gamma"}. See the Models section.}
+
 \item{opt_level}{C++ compiler optimization level passed to CmdStan's
 \code{O} Makefile variable (0-3). The reduce_sum-based likelihood in this
 model generates a lot of C++ template code; at the default \code{O = 3},
@@ -17,21 +24,63 @@ somewhat slower sampling; \code{opt_level = 0} is fastest to compile but
 slowest to sample and rarely worth it. If compilation is being
 killed by the OOM killer, try \code{opt_level = 1} before anything else.}
 
-\item{force_recompile}{Set \code{TRUE} to force a rebuild (e.g. after
-changing \code{opt_level}), bypassing the internal cache.}
+\item{force_recompile}{Set \code{TRUE} to force a rebuild, bypassing both
+the in-session cache and the compiled executable on disk.}
 }
 \value{
 A \code{CmdStanModel} object.
 }
 \description{
-Compiles the package's registered \code{stable} Stan program (see
-\code{R/model_registry.R}), used by both \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} and \code{\link[=fit_panel]{fit_panel()}}.
-Compiled executables are cached internally by \code{opt_level}, so repeated
-calls with the same \code{opt_level} are cheap after the first.
+Compiles one of the package's Stan models with CmdStan, or returns the
+already compiled model. \code{\link[=fit_panel]{fit_panel()}} and \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} call this
+themselves, so you only need it to compile ahead of time (for example,
+before submitting batch jobs) or with a non-default \code{opt_level}.
 }
+\section{Models}{
+
+Three models are available:
+\itemize{
+\item \code{"stable"} (the default): the dynamic IRT model. Each dyad's latent
+state \code{theta} follows a random walk; action counts follow a
+Dirichlet-multinomial whose category probabilities depend on \code{theta}
+through the discrimination vector \code{alpha} and the intercepts
+\code{mu_intercept}. Process noise, the dispersion \code{phi} and the initial
+state are partially pooled across dyads.
+\item \code{"ou"} (experimental): as \code{"stable"}, but \code{theta} follows a
+mean-reverting Ornstein-Uhlenbeck (AR(1)) process around a
+dyad-specific level, with a shared persistence \code{rho} (prior
+\code{beta(rho_prior_a, rho_prior_b)}; see \code{\link[=prepare_stan_data]{prepare_stan_data()}}).
+\item \code{"stable_gamma"} (experimental): as \code{"stable"}, plus a country-level
+offset \code{gamma} on each action category, which absorbs a country's
+habitual repertoire. Needs actor columns in the data; see
+\code{\link[=extract_gamma]{extract_gamma()}}.
+}
+
+The experimental models have not yet been calibrated or tested at
+scale as thoroughly as \code{"stable"}; fitting one shows a message once per
+session.
+}
+
+\section{Where compiled models are stored}{
+
+The \code{.stan} file is copied into a cache directory and compiled there:
+by default \verb{file.path(tools::R_user_dir("bilatr", "cache"), "models", <bilatr version>)}, so each package version compiles its own
+executables. Set \code{options(bilatr.model_dir = "<directory>")} to use
+another directory, for example one shared by the jobs of a cluster
+run. Compiled models are reused across sessions until the \code{.stan} file
+changes. \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}} deletes them.
+
+Compiling needs the 'cmdstanr' package and a working CmdStan
+installation (see \code{cmdstanr::install_cmdstan()}).
+}
+
 \examples{
 \dontrun{
 mod <- compile_bilatr_model()
+mod_gamma <- compile_bilatr_model("stable_gamma")
 mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
 }
+}
+\seealso{
+\code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}}
 }

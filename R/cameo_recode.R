@@ -10,6 +10,11 @@ get_root <- function(code) {
 
 #' Assign QuadClass from a CAMEO root code
 #'
+#' The same mapping as GDELT's own `QuadClass` column: roots 01-05 are
+#' 1 (verbal cooperation), 06-09 are 2 (material cooperation), 10-14 are
+#' 3 (verbal conflict) and 15-20 are 4 (material conflict). Checked
+#' against raw GDELT 1.0 event files (`data-raw/quadclass_gdelt_check.md`).
+#'
 #' @param root Character vector of two-digit CAMEO root codes, as returned
 #'   by [get_root()].
 #' @return Integer vector with values 1 (verbal cooperation), 2 (material
@@ -62,9 +67,13 @@ quadclass_eventcodes <- function(class) {
 
 #' Assign PentaClass from a CAMEO root code and QuadClass
 #'
-#' Refines QuadClass into a five-level scheme by splitting out verbal
-#' cooperation (root 01-02) as its own class and carving protest (root 14)
-#' and reduce-relations (root 16) out of the conflict classes.
+#' As QuadClass, except that roots 01-02 (make public statement, appeal)
+#' form class 0 "Make statement", root 14 (protest) moves to class 4
+#' (material conflict), and root 16 (reduce relations) moves to class 3
+#' (verbal conflict). The classes are 0 "Make statement", 1 "Verbal
+#' cooperation" (roots 03-05), 2 "Material cooperation" (06-09),
+#' 3 "Verbal conflict" (10-13, 16) and 4 "Material conflict" (14, 15,
+#' 17-20).
 #'
 #' @param root Character vector of two-digit CAMEO root codes.
 #' @param quad Integer vector of QuadClass values, as returned by
@@ -74,9 +83,12 @@ quadclass_eventcodes <- function(class) {
 assign_penta <- function(root, quad) {
   root_num <- as.integer(root)
   dplyr::case_when(
-    root_num %in% c(1, 2) ~ 0L, # verbal cooperation
-    root_num == 14 ~ 4L, # protest (override quad = 3)
-    root_num == 16 ~ 3L, # reduce relations (override quad = 4)
+    # Make statement: make public statement (01) and appeal (02).
+    root_num %in% c(1, 2) ~ 0L,
+    # Protest (14) is material conflict, not QuadClass's verbal conflict.
+    root_num == 14 ~ 4L,
+    # Reduce relations (16) is verbal conflict, not QuadClass's material conflict.
+    root_num == 16 ~ 3L,
     TRUE ~ quad
   )
 }
@@ -119,16 +131,24 @@ pentaclass_eventcodes <- function(class) {
 
 #' Regroup a CAMEO event code into the bilatr "ModifiedRootCode" scheme
 #'
-#' A regrouping of the 20 CAMEO root codes that relocates `016` into the
-#' Reject class and `018`/`019` into the diplomatic-cooperation class,
-#' splits root `04` ("Consult") by kind of consultation, splits root `13`
-#' ("Threaten") off from force posture only where noted, and merges
-#' Investigate (root `09`) and Demand (root `10`) into a single
-#' "Investigate or demand" class.
+#' An 18-class regrouping of the 20 CAMEO root codes. Relative to the
+#' roots, it:
+#'
+#' * moves `016` (deny responsibility) into Reject (class 13), and `018`
+#'   (make empathetic comment) and `019` (express accord) into diplomatic
+#'   cooperation (class 7);
+#' * splits root `04` (consult) into unspecified (`040`, class 4),
+#'   meet, discuss, or visit (`041`-`044`, class 5) and negotiate or
+#'   mediate (`045`-`046`, class 6);
+#' * merges Investigate (`09`) and Demand (`10`) into "Investigate or
+#'   demand" (class 11);
+#' * merges Threaten (`13`) and Exhibit force posture (`15`) into
+#'   "Threaten or exhibit force posture" (class 14);
+#' * merges `18`, `19` and `20` into "Assault, fight, or mass violence"
+#'   (class 18).
 #'
 #' Classes are numbered 1-18 in ascending root-code order; see
-#' [modified_root_code_name()] for labels. This scheme was previously
-#' named `ERC16NZ`.
+#' [modified_root_code_name()] for labels.
 #'
 #' @param code Character or numeric vector of CAMEO event codes (e.g.
 #'   `"0211"`, `"19"`).
@@ -246,27 +266,26 @@ modified_root_code_eventcodes <- function(class) {
 #' classes
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
-#' attach `CAMEOLabel`, `GoldsteinScore`, `QuadClass`, `QuadClassName`,
-#' `QuadClassEventCodes`, `PentaClass`, `PentaClassName`,
+#' attach 12 columns: `CAMEOLabel`, `GoldsteinScore`, `QuadClass`,
+#' `QuadClassName`, `QuadClassEventCodes`, `PentaClass`, `PentaClassName`,
 #' `PentaClassEventCodes`, `PentaClass_modified`, `ModifiedRootCode`,
-#' `ModifiedRootCodeName`, and `ModifiedRootCodeEventCodes` columns.
-#' `PentaClass_modified` folds low-intensity verbal cooperation
-#' (Goldstein score <= 1) into its own class, which can be useful as a
-#' near-neutral reference category. `ModifiedRootCode` /
-#' `ModifiedRootCodeName` / `ModifiedRootCodeEventCodes` (see
-#' [assign_modified_root_code()], [modified_root_code_name()], and
-#' [modified_root_code_eventcodes()]) is an 18-level regrouping of the
-#' CAMEO root codes (formerly named `ERC16NZ`).
+#' `ModifiedRootCodeName`, and `ModifiedRootCodeEventCodes`. See
+#' [cameo_lookup] for the schemes:
 #'
-#' A handful of other classification schemes
-#' (`EventRootCode2`/`EventRootCode3`/`EventRootCode4`, `BilatrClass`/
-#' `BilatrClass2`) previously shipped in [cameo_lookup] have been retired
-#' from it, and their `assign_*()`/`*_name()` functions removed entirely
-#' (0.10.1); they are no longer attached by this function. See
-#' [event_class_labels()] for the current, data-driven way to label a
-#' class from a fitted model's `stan_data` (covers `QuadClass`,
-#' `PentaClass`, and `ModifiedRootCode`, the schemes still labeled in
-#' [cameo_lookup]).
+#' * `QuadClass` is the same mapping as GDELT's own `QuadClass` (roots
+#'   01-05 verbal cooperation, 06-09 material cooperation, 10-14 verbal
+#'   conflict, 15-20 material conflict);
+#' * `PentaClass` is QuadClass, except that roots 01-02 form class 0
+#'   "Make statement", root 14 (protest) moves to class 4 (material
+#'   conflict), and root 16 (reduce relations) moves to class 3 (verbal
+#'   conflict);
+#' * `PentaClass_modified` is `PentaClass`, except that codes with
+#'   QuadClass 1 and a Goldstein score of at most 1 are class 0;
+#' * `ModifiedRootCode` is an 18-class regrouping of the root codes (see
+#'   [assign_modified_root_code()]).
+#'
+#' [event_class_labels()] labels the classes of a fitted model's
+#' `stan_data` from these columns.
 #'
 #' Any of these columns that already exist in `data` are left as they are
 #' (not overwritten, no `.x`/`.y` suffixing), with a warning naming them.
@@ -375,13 +394,11 @@ recode_cameo <- function(data, code_col = "EventCode") {
 #' to consult; if `scheme` was non-`NULL` but unrecognized, a `message()`
 #' names the schemes that do have labels.
 #'
-#' `stan_data.rds` files saved before 0.9.0 have no `grouping_var`
-#' attribute (added in 0.9.0), and the three current cluster runscripts'
-#' specs name their `ModifiedRootCode` column `"ERC16NZ"` (its pre-0.8.0
-#' name) rather than `"ModifiedRootCode"` -- in both cases, `scheme` must
-#' be passed explicitly (`scheme = "ModifiedRootCode"`), since the
-#' default `attr(stan_data, "grouping_var")` is either absent or not a
-#' name [cameo_lookup] recognizes.
+#' If the event classes come from a renamed CAMEO column (for example,
+#' `ModifiedRootCode` copied into a column of another name before
+#' aggregating), pass `scheme` explicitly, since the default
+#' `attr(stan_data, "grouping_var")` is then not a name [cameo_lookup]
+#' recognizes.
 #'
 #' @param stan_data A Stan data list from [prepare_stan_data()] (or
 #'   `attr(fit, "stan_data")`; must carry its `"event_classes"`
@@ -397,7 +414,7 @@ recode_cameo <- function(data, code_col = "EventCode") {
 #' @examples
 #' \dontrun{
 #' event_class_labels(stan_data)
-#' event_class_labels(stan_data, scheme = "ModifiedRootCode") # pre-0.9.0 stan_data.rds
+#' event_class_labels(stan_data, scheme = "ModifiedRootCode")
 #' }
 #' @export
 event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var")) {
@@ -474,7 +491,7 @@ event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var
 #'   [event_class_labels()]). Falls back to `event_classes` themselves
 #'   when `stan_data` is `NULL` (possible for [icc_curves()]), or when it
 #'   lacks a usable `"event_classes"` attribute (e.g. a hand-built
-#'   `stan_data` list in a test or a pre-0.9.0 `stan_data.rds`) --
+#'   `stan_data` list) --
 #'   `class_labels`/`event_classes` are the caller-supplied fallback for
 #'   exactly that case. Only the missing-attribute case is treated this
 #'   way; a genuine error raised by [event_class_labels()] itself (once

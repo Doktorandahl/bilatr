@@ -4,9 +4,9 @@
 \name{bilatr-package}
 \alias{bilatr}
 \alias{bilatr-package}
-\title{bilatr: Hierarchical Dynamic IRT Models for Dyadic Conflict Trajectories}
+\title{bilatr: Hierarchical Dynamic IRT Models for Latent Bilateral Relations}
 \description{
-Fits a hierarchical Bayesian dynamic item-response-theory-style model to dyadic event data in order to estimate latent conflict trajectories. Users supply CAMEO-coded (or any categorically coded) dyadic event data in a documented, validated format; action types discriminate between high- and low-conflict states through a Dirichlet-multinomial likelihood, and dyad-specific latent states follow a random-walk process, with support for both single-dyad time-series and multi-dyad panel estimation. Includes GDELT download/ingest helpers and a CAMEO recoding table, 'cmdstanr'-based fitting wrappers, and tidy posterior extraction utilities.
+Estimates latent bilateral relations between pairs of actors over time with a hierarchical Bayesian dynamic item-response-theory-style model for dyadic event data. The latent scale runs from conflict to cooperation: it is oriented by a reference action type, so that with a cooperative reference higher values mean more cooperative relations. Users supply CAMEO-coded (or any categorically coded) dyadic event data in a documented, validated format; action types discriminate between more and less cooperative states through a Dirichlet-multinomial likelihood, and dyad-specific latent states follow a random-walk process, with support for both single-dyad time-series and multi-dyad panel estimation. Includes GDELT download/ingest helpers and a CAMEO recoding table, 'cmdstanr'-based fitting wrappers, and tidy posterior extraction utilities.
 }
 \seealso{
 Useful links:

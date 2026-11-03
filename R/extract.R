@@ -1,6 +1,7 @@
 #' Extract theta trajectories with dyad identifiers reattached
 #'
-#' Pulls posterior summaries of the latent conflict trajectory `theta`
+#' Pulls posterior summaries of the latent bilateral-relations trajectory
+#' `theta`
 #' out of a fitted model, indexed by dyad and time period, and reattaches
 #' the human-readable dyad identifiers (`dyad`, the undirected `dyad2`,
 #' the actors, the time column and any time labels such as `year`/`month`)
@@ -10,8 +11,11 @@
 #'
 #' `stable`/`ou` fold `alpha[1]`'s sign into the reported `alpha`/`theta`
 #' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-#' so `theta` is already in its canonical orientation (higher theta =
-#' better relations) with no post-hoc relabeling needed.
+#' so `theta` is already oriented, with no post-hoc relabeling needed:
+#' higher values make `reference_category` more likely relative to the
+#' other action types, and so mean more cooperative relations when the
+#' reference category is cooperative. See the `reference_category`
+#' argument of [prepare_stan_data()].
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
 #' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
@@ -40,8 +44,7 @@
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
 #'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
-#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
-#'   (bilatr 0.11.0 and earlier) works too.
+#'   errors if neither is found.
 #'   It must carry its `dyad_ids` attribute.
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
@@ -52,8 +55,7 @@
 #'   `theta` alone rather than all of Tier 3.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, the other `dyad_ids` columns (`dyad`, `dyad2`, `actor1`,
-#'   `actor2`, the time column and its labels; `actor_a`/`actor_b` and
-#'   `year`/`month` for Stan data from before 0.12.0), the posterior `mean`
+#'   `actor2`, the time column and its labels), the posterior `mean`
 #'   of theta, and one column per requested quantile.
 #' @examples
 #' \dontrun{
@@ -153,8 +155,8 @@ extract_theta <- function(
 #'
 #' Pulls posterior summaries of the action-type discrimination parameters
 #' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has RMS 1
-#' for `stable`/`ou`; `alpha[1]`, the reference/neutral action class
-#' supplied via `reference_category`, is always reported positive via the
+#' for `stable`/`ou`; `alpha[1]`, the discrimination of the
+#' `reference_category` class, is always reported non-negative via the
 #' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
 #' ORIENTATION FOLD"). See the package's identification notes in
 #' `vignette("dyad_time_series")`. `alpha`'s sign is already canonical by
@@ -285,10 +287,9 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
 #'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
-#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
-#'   (bilatr 0.11.0 and earlier) works too.
+#'   errors if neither is found.
 #'   It must carry its `country_codes` attribute (built only from actor
-#'   columns; `assemble_stan_data()` added it in 0.7.0).
+#'   columns).
 #' @param probs Posterior quantiles to report alongside the mean.
 #' @param event_classes Optional character vector of event-class labels,
 #'   in the same order used to build `stan_data`. `NULL` (default) uses
@@ -320,8 +321,7 @@ extract_gamma <- function(
     stop(
       "`stan_data` has no 'country_codes' attribute. prepare_stan_data() ",
       "builds it only from actor columns (`actor1`/`actor2`), which ",
-      "stable_gamma needs; a stan_data.rds saved by assemble_stan_data() ",
-      "before 0.7.0 lacks it too (see NEWS.md).",
+      "stable_gamma needs.",
       call. = FALSE
     )
   }

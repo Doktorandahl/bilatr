@@ -7,13 +7,10 @@
 .canonical_stan_model(name)
 }
 \arguments{
-\item{name}{A \code{stan_model} value as given by the caller: a name
-currently in \code{.bilatr_stan_models}, one of
-\code{.BILATR_RETIRED_MODEL_NAMES} (a dedicated "retired in 0.10.0" error),
-or anything else (a generic "unknown" error).}
+\item{name}{A \code{stan_model} value as given by the caller.}
 }
 \value{
-The canonical registered name.
+The canonical registered name; anything else is an error.
 }
 \description{
 Every \code{stan_model}-accepting entry point should call this before doing

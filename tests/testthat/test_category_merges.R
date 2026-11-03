@@ -376,8 +376,10 @@ test_that("a prior_only = 1 short fit reproduces alpha_prior_moments() within MC
   # already documents (some divergences here are expected/harmless) --
   # needs enough chains/draws for adequate ESS on the exchangeable
   # non-reference classes, or this reproduces alpha_prior_moments() only
-  # noisily. Confirmed 4 chains x 2000 draws gets comfortably within
-  # 0.05 of both mean and sd in exploratory runs.
+  # noisily. 4 chains x 2000 draws usually lands within 0.05 of both mean
+  # and sd, but not always (0.054 has been seen), so the tolerance is
+  # 0.08: the funnel can bias as well as add noise, and
+  # alpha_prior_moments() is itself a simulation.
   mod <- .compile_stan_model("stable", opt_level = 1)
   fit <- suppressWarnings(mod$sample(
     data = data_list, chains = 4, parallel_chains = 4,
@@ -394,8 +396,8 @@ test_that("a prior_only = 1 short fit reproduces alpha_prior_moments() within MC
 
   prior <- alpha_prior_moments(A)
 
-  expect_lt(max(abs(alpha_summ$mean - prior$prior_mean)), 0.05)
-  expect_lt(max(abs(alpha_summ$sd - prior$prior_sd)), 0.05)
+  expect_lt(max(abs(alpha_summ$mean - prior$prior_mean)), 0.08)
+  expect_lt(max(abs(alpha_summ$sd - prior$prior_sd)), 0.08)
 })
 
 test_that("print.bilatr_category_merges() runs without error on the CmdStan fixture", {

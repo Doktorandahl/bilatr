@@ -63,9 +63,15 @@ events <- tibble::tibble(
 events <- recode_cameo(events, code_col = "EventCode")
 ```
 
-`recode_cameo()` attaches `QuadClass`, `PentaClass`, and
-`PentaClass_modified` from the package's built-in [cameo_lookup] table
-(no external CAMEO reference package required).
+`recode_cameo()` attaches 12 columns from the package's built-in
+[cameo_lookup] table (no external CAMEO reference package required):
+`CAMEOLabel`, `GoldsteinScore`, and three event-class schemes with their
+labels and underlying codes: `QuadClass`, `QuadClassName`,
+`QuadClassEventCodes`; `PentaClass`, `PentaClassName`,
+`PentaClassEventCodes`, `PentaClass_modified`; and `ModifiedRootCode`,
+`ModifiedRootCodeName`, `ModifiedRootCodeEventCodes`. `QuadClass` is the
+same mapping as GDELT's own `QuadClass`; see `?cameo_lookup` for the
+schemes.
 
 ## 2. Aggregate to a dyad-period table
 
@@ -93,12 +99,15 @@ agg
 the model with `threads_per_chain = 1` by default (reduce_sum has
 nothing to chunk across when there's only one dyad).
 
-`reference_category` should be a low-conflict/neutral action class;
-here we use PentaClass 0 (verbal cooperation). It becomes `alpha[1]`,
-the discrimination parameter the model always reports as positive via
-an orientation fold (see `inst/stan/bilatr_alphanorm.stan`'s header,
-"IDENTIFICATION: ORIENTATION FOLD"), so that higher `theta` always
-means better relations. Every other action class's discrimination is
+`reference_category` orients the latent scale: θ is oriented so that
+higher values make `reference_category` more likely relative to the
+other action types. With a cooperative reference category, higher θ
+means more cooperative relations, so here we use PentaClass 1 (verbal
+cooperation). It becomes `alpha[1]`, the discrimination parameter the
+model always reports as non-negative via an orientation fold (see
+`inst/stan/bilatr_alphanorm.stan`'s header, "IDENTIFICATION: ORIENTATION
+FOLD"); the `reference_category` argument of `?prepare_stan_data` has
+the details. Every other action class's discrimination is
 freely estimated subject to `alpha` summing to exactly 0 across all
 classes (RMS normalized to 1) -- there is no single fixed-at-1 element.
 
@@ -110,7 +119,7 @@ the result.
 ```{r, results = "hide"}
 fit <- fit_dyad_ts(
   agg,
-  reference_category = "0",
+  reference_category = "1", # verbal cooperation
   chains = 2,
   parallel_chains = 2,
   iter_warmup = 300,
@@ -132,7 +141,7 @@ stan_data$A # number of action classes
 ## 4. Extract
 
 [extract_theta()] reattaches human-readable dyad identifiers to the
-posterior summary of the latent conflict trajectory. It finds them in
+posterior summary of the latent bilateral-relations trajectory. It finds them in
 the Stan data attached to `fit`, so no second argument is needed:
 
 ```{r}
@@ -156,9 +165,9 @@ always reported positive too, via an orientation fold (`alpha` and
 `theta` are both multiplied by `sign(alpha_raw[1])` in `transformed
 parameters` -- exact and Jacobian-free, since the likelihood only ever
 sees their product) rather than a hard constraint on the sampled
-parameter, so every fit already reports `theta` in its canonical
-orientation (higher `theta` = better relations) with no post-hoc
-relabeling needed.
+parameter, so every fit already reports `theta` oriented toward the
+reference category (here, higher `theta` means more verbal cooperation
+relative to the other classes) with no post-hoc relabeling needed.
 
 ## 5. Diagnose
 

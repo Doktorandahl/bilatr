@@ -57,7 +57,8 @@
 #'   actor2 = "target",
 #'   date = "when"
 #' )
-#' stan_data <- prepare_stan_data(agg)
+#' # higher theta = more of action type 1 relative to the others
+#' stan_data <- prepare_stan_data(agg, reference_category = "1")
 #'
 #' @name bilatr_event_data
 NULL

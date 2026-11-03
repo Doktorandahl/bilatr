@@ -71,21 +71,21 @@ count(agg, dyad) # multiple dyads
 
 ## 3. Fit
 
-[fit_panel()] builds the Stan data from the table, checks that there
-are at least two dyads, and defaults `threads_per_chain = 16`.
-Panel-sized data is where `reduce_sum` chunking matters: `chunk_size`
-sets how many dyads' worth of likelihood evaluation each `reduce_sum`
-task covers. This project's own benchmarking found `chunk_size = 600`
-with 16 threads Pareto-optimal for panel-sized data (tune the two
-together for your hardware; see [fit_panel()]'s documentation); for a
-small illustrative panel like this one, a small `chunk_size` (or even 1)
-is fine. As in the single-dyad vignette, this example uses a short run
-to build quickly.
+[fit_panel()] builds the Stan data from the table and checks that there
+are at least two dyads. Its defaults (`threads_per_chain = 1`,
+`parallel_chains = 1`, `chunk_size = 1`) are conservative and run on
+any machine. Panel-sized data is where within-chain parallelism pays
+off: `threads_per_chain` sets how many threads `reduce_sum` uses per
+chain, and `chunk_size` how many dyads' worth of likelihood evaluation
+each `reduce_sum` task covers. Tune the two together for your data size
+and hardware; `vignette("tuning")` shows how. This example runs two
+chains in parallel with two threads each, and uses a short run to build
+quickly.
 
 ```{r, results = "hide"}
 fit <- fit_panel(
   agg,
-  reference_category = "0",
+  reference_category = "1", # verbal cooperation
   min_n_events = 1,
   chunk_size = 4,
   chains = 2,
@@ -134,12 +134,12 @@ in a shared/global parameter. [diagnose_convergence()] triages
 ```{r}
 fit$diagnostic_summary()
 
-n_dt <- tibble::tibble(
-  dyad_id = seq_len(stan_data$D),
-  n_dt = apply(stan_data$Y, 1, sum)
-)
-diagnose_convergence(fit, n_dt = n_dt)
+diagnose_convergence(fit)
 ```
+
+`diagnose_convergence()` judges each dyad's diagnostics against how much
+data it has, `n_dt`, which it computes from the Stan data attached to
+the fit (each dyad's total event count).
 
 Dyads flagged as worse than expected for their `n_dt` (Tier 2) or with
 low minimum `theta` ESS concentrated at low `n_dt` (Tier 3) are the
@@ -171,8 +171,7 @@ fit_own <- fit_panel(
   time = "week_id",
   action_cols = c(meetings, protests, sanctions), # or c("meetings", ...)
   reference_category = "meetings",
-  chunk_size = 1,
-  chains = 2, threads_per_chain = 1
+  chains = 2
 )
 extract_theta(fit_own)
 ```

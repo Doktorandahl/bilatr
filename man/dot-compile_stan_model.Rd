@@ -4,25 +4,33 @@
 \alias{.compile_stan_model}
 \title{Compile (or fetch from cache) a registered Stan model}
 \usage{
-.compile_stan_model(stan_model, opt_level, force_recompile = FALSE)
+.compile_stan_model(
+  stan_model,
+  opt_level,
+  force_recompile = FALSE,
+  stan_threads = TRUE
+)
 }
 \arguments{
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}.}
+\item{stan_model}{A registered model name.}
 
 \item{opt_level}{C++ compiler optimization level; see
 \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}.}
 
-\item{force_recompile}{If \code{TRUE}, bypass the cache and rebuild.}
+\item{force_recompile}{If \code{TRUE}, bypass both caches and rebuild.}
+
+\item{stan_threads}{Whether to compile with \code{STAN_THREADS}. Always
+\code{TRUE} for the package's own fits.}
 }
 \value{
 A \code{CmdStanModel} object.
 }
 \description{
-Shared compilation path for both the exported \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}
-(always the stable model) and the internal \verb{_dev} fitters (any
-registered model; see \code{R/model_registry.R}). Compiled \code{CmdStanModel}
-objects are cached in \code{.bilatr_model_cache} by resolved file path and
-\code{opt_level}, so repeated calls (e.g. across dev iterations) don't pay
-\code{cmdstanr}'s own hash-checking/Makefile overhead every time.
+Shared compilation path behind \code{\link[=compile_bilatr_model]{compile_bilatr_model()}} and
+\code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}. Copies the model's \code{.stan} file into
+\code{\link[=.bilatr_model_dir]{.bilatr_model_dir()}} and compiles it there, so the executable is
+written next to the copy, never into the installed package. Compiled
+\code{CmdStanModel} objects are also kept in \code{.bilatr_model_cache} for the
+session, keyed by the copied path, \code{opt_level} and \code{stan_threads}.
 }
 \keyword{internal}

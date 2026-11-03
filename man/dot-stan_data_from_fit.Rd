@@ -33,8 +33,5 @@ single \verb{*_stan_data.rds} file in their common directory (written by
 naming the file;
 \item otherwise an error, or \code{NULL} when \code{required = FALSE}.
 }
-
-Stan data lists saved before 0.12.0 are returned unchanged (their
-\code{dyad_ids} keep \code{actor_a}/\code{actor_b}).
 }
 \keyword{internal}

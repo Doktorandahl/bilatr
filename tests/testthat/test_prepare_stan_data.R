@@ -22,7 +22,7 @@ prep <- function(data, ...) {
 test_that("the dyad x time grid is filled, with is_obs = 0 in the gaps", {
   sd <- prep(synthetic_dp())
   expect_identical(sd$D, 3L)
-  expect_identical(sd$T, 6)
+  expect_identical(sd$T, 6L)
   expect_identical(sd$A, 3L)
   # dyads in C-locale order: "South" < "east" < "north"
   ids <- attr(sd, "dyad_ids")
@@ -48,6 +48,37 @@ test_that("action columns: reference first, then the user's column order (not so
   expect_identical(attr(sd, "event_classes"), c("mid", "zeta", "alpha"))
   expect_identical(sd$Y[3, 1, ], c(1L, 2L, 0L))
   expect_error(prep(synthetic_dp(), reference_category = "nope"), "anchors on the first action column")
+})
+
+test_that("reference_category = NULL names the anchor class in one message; a set one gives none", {
+  run <- function(...) {
+    prepare_stan_data(synthetic_dp(), time = "week_id", action_cols = c(zeta, alpha, mid), ...)
+  }
+  msgs <- testthat::capture_messages(sd <- run())
+  anchor_msgs <- grep("reference_category not set", msgs, value = TRUE)
+  expect_length(anchor_msgs, 1)
+  expect_match(
+    anchor_msgs,
+    paste0(
+      "^prepare_stan_data\\(\\): reference_category not set; anchoring on the first ",
+      "action column, \"zeta\"\\. Higher theta means more \"zeta\" relative to ",
+      "other action types\\. Set reference_category to a cooperative class to read ",
+      "higher theta as more cooperative relations\\."
+    )
+  )
+  # the choice itself is unchanged: the first action column
+  expect_identical(attr(sd, "event_classes")[1], "zeta")
+
+  # a different column order anchors on (and names) a different class
+  msgs <- testthat::capture_messages(
+    prepare_stan_data(synthetic_dp(), time = "week_id", action_cols = c(mid, zeta, alpha))
+  )
+  expect_match(grep("reference_category not set", msgs, value = TRUE), "first action column, \"mid\"")
+
+  for (ref in c("zeta", "mid")) {
+    msgs <- testthat::capture_messages(run(reference_category = ref))
+    expect_false(any(grepl("reference_category", msgs)), label = ref)
+  }
 })
 
 test_that("without actor columns, no country fields; dyad2/actor1/actor2 are NA", {
@@ -173,7 +204,7 @@ test_that("min_n_events drops dyads, and D == 0 errors", {
   sd <- prep(synthetic_dp(), min_n_events = 5)
   expect_identical(sd$D, 2L)
   expect_identical(dim(sd$Y), c(2L, 6L, 3L))
-  expect_error(prep(synthetic_dp(), min_n_events = 100), "No dyads have at least `min_n_events`")
+  expect_error(prep(synthetic_dp(), min_n_events = 100), "prepare_stan_data\\(\\): no dyads have at least `min_n_events`")
 })
 
 test_that("filter_dyads resolves to dyad_ids and errors on unknown dyads", {
@@ -338,7 +369,7 @@ test_that("an action_cols attribute naming a missing column falls back to the de
 
 test_that("time_range pins T and fills the grid over it (D17)", {
   sd <- prep(synthetic_dp(), time_range = c(3859, 3868))
-  expect_identical(sd$T, 10)
+  expect_identical(sd$T, 10L)
   ids <- attr(sd, "dyad_ids")
   expect_identical(ids$week_id, rep(3859:3868, 3))
   expect_identical(sd$is_obs[, 1:2], matrix(0L, 3, 2))
@@ -356,7 +387,7 @@ test_that("time_range drops rows outside it with a message giving the count (D17
     sd <- prepare_stan_data(synthetic_dp(), time = "week_id", action_cols = c(zeta, alpha, mid), time_range = c(3861, 3864)),
     "dropping 2 row\\(s\\) outside `time_range`"
   )
-  expect_identical(sd$T, 4)
+  expect_identical(sd$T, 4L)
   expect_identical(unique(attr(sd, "dyad_ids")$week_id), 3861:3864)
   # "east" has no events in 3861:3864 and drops out under min_n_events = 1
   expect_identical(unique(attr(sd, "dyad_ids")$dyad), c("South", "north"))
@@ -377,4 +408,54 @@ test_that("event_class_labels() returns the raw column names silently for a user
   expect_null(attr(sd, "grouping_var"))
   expect_silent(labels <- event_class_labels(sd))
   expect_identical(labels, c(zeta = "zeta", alpha = "alpha", mid = "mid"))
+})
+
+test_that("min_n_events, chunk_size and the rho prior shapes are validated", {
+  for (bad in list(NA, -1, 1.5, c(1, 2), "1", Inf)) {
+    expect_error(prep(synthetic_dp(), min_n_events = bad), "prepare_stan_data\\(\\): `min_n_events` must be a single non-negative whole number")
+  }
+  expect_identical(prep(synthetic_dp(), min_n_events = 0)$D, 3L)
+  for (bad in list(-5, 0, 2.5, NA, c(1, 2), "100")) {
+    expect_error(prep(synthetic_dp(), chunk_size = bad), "prepare_stan_data\\(\\): `chunk_size` must be a single whole number, at least 1")
+  }
+  expect_identical(prep(synthetic_dp(), chunk_size = 600L)$C, 600L)
+  expect_identical(prep(synthetic_dp())$C, 1L)
+  for (arg in c("rho_prior_a", "rho_prior_b")) {
+    for (bad in list(0, -1, Inf, NA, c(1, 2), "8")) {
+      args <- rlang::list2(!!arg := bad)
+      expect_error(
+        do.call(prep, c(list(synthetic_dp()), args)),
+        paste0("prepare_stan_data\\(\\): `", arg, "` must be a single positive number")
+      )
+    }
+  }
+})
+
+test_that("the 0/1 flags accept 0/1 and FALSE/TRUE and are stored as integers", {
+  sd <- prep(synthetic_dp(), compute_log_lik = TRUE, prior_only = FALSE, compute_theta_filtered = 1)
+  expect_identical(sd$compute_log_lik, 1L)
+  expect_identical(sd$prior_only, 0L)
+  expect_identical(sd$compute_theta_filtered, 1L)
+  expect_identical(sd$filter_dyads, 1:3)
+  sd0 <- prep(synthetic_dp())
+  expect_identical(sd0[c("compute_log_lik", "prior_only", "compute_theta_filtered")], list(compute_log_lik = 0L, prior_only = 0L, compute_theta_filtered = 0L))
+  for (flag in c("compute_log_lik", "prior_only", "compute_theta_filtered")) {
+    for (bad in list(2, -1, NA, c(0, 1), "1", 0.5)) {
+      args <- rlang::list2(!!flag := bad)
+      expect_error(
+        do.call(prep, c(list(synthetic_dp()), args)),
+        paste0("prepare_stan_data\\(\\): `", flag, "` must be 0 or 1 \\(or FALSE or TRUE\\)")
+      )
+    }
+  }
+})
+
+test_that("filter_dyads with compute_theta_filtered = 0 warns that it is ignored", {
+  expect_warning(
+    sd <- prep(synthetic_dp(), filter_dyads = "north"),
+    "`filter_dyads` is ignored because `compute_theta_filtered = 0`.*compute_theta_filtered = 1"
+  )
+  expect_identical(sd$n_filter_dyads, 0L)
+  expect_identical(sd$filter_dyads, integer(0))
+  expect_no_warning(prep(synthetic_dp(), compute_theta_filtered = 1, filter_dyads = "north"))
 })

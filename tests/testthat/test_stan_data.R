@@ -88,7 +88,7 @@ test_that("min_n_events drops low-activity dyads, and errors clearly if it drops
   expect_gt(sd_all$D, 0L)
   expect_error(
     events_to_stan_data(events, "PentaClass", "2015-01-01", "2019-12-31", min_n_events = 10000),
-    "No dyads"
+    "prepare_stan_data\\(\\): no dyads"
   )
 })
 

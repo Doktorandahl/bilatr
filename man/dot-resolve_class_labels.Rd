@@ -21,7 +21,7 @@ supplied, defaults to \code{event_class_labels(stan_data)} (see
 \code{\link[=event_class_labels]{event_class_labels()}}). Falls back to \code{event_classes} themselves
 when \code{stan_data} is \code{NULL} (possible for \code{\link[=icc_curves]{icc_curves()}}), or when it
 lacks a usable \code{"event_classes"} attribute (e.g. a hand-built
-\code{stan_data} list in a test or a pre-0.9.0 \code{stan_data.rds}) --
+\code{stan_data} list) --
 \code{class_labels}/\code{event_classes} are the caller-supplied fallback for
 exactly that case. Only the missing-attribute case is treated this
 way; a genuine error raised by \code{\link[=event_class_labels]{event_class_labels()}} itself (once

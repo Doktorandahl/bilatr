@@ -4,13 +4,15 @@
 \alias{.expand_bilatr_variable_filters}
 \title{Expand variable filters to concrete variable names, cmdstanr-style}
 \usage{
-.expand_bilatr_variable_filters(available, filters)
+.expand_bilatr_variable_filters(available, filters, caller = NULL)
 }
 \arguments{
 \item{available}{Character vector of all bracket-form variable names
 in the CSV header (\code{prepared$variables}).}
 
 \item{filters}{Character vector of requested variable names/base names.}
+
+\item{caller}{Optional calling function's name, prefixed to the error.}
 }
 \value{
 Character vector of concrete, available variable names, in

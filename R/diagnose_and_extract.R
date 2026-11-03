@@ -49,13 +49,13 @@
 #'   [extract_theta()]'s dyad-identifier join. `NULL` (default) reads the
 #'   single `*_stan_data.rds` file next to `csv_files` (which
 #'   [fit_panel()]/[fit_dyad_ts()] write to their `output_dir`), with a
-#'   `message()`; errors if there is none or more than one. Stan data saved
-#'   by `assemble_stan_data()` (bilatr 0.11.0 and earlier) works too.
-#' @param stan_model Name registered in `.bilatr_stan_models`; see
-#'   [.canonical_stan_model()]. Used only to decide whether `gamma` (the
-#'   experimental `stable_gamma` variant's country-level offset) gets its
-#'   own report element -- see [diagnose_convergence()]'s `stan_model`.
-#'   Defaults to `.BILATR_DEFAULT_MODEL`.
+#'   `message()`; errors if there is none or more than one.
+#' @param n_dt Each dyad's total number of events, for tiers 2 and 3.
+#'   `NULL` (default) computes it from `stan_data`; see
+#'   [diagnose_convergence()] for passing your own.
+#' @param stan_model The model that was fit. `NULL` (default) uses the
+#'   model recorded on `stan_data` or in the CmdStan CSV header; see
+#'   [diagnose_convergence()].
 #' @param event_classes Optional character vector of event-class labels,
 #'   passed through to the `alpha`/`mu_intercept` outputs exactly as in
 #'   [extract_alpha()]. `NULL` (default) uses `stan_data`'s
@@ -72,30 +72,33 @@
 #'   [extract_alpha()]/[extract_mu_intercept()] return, plus a
 #'   `class_label` column on `alpha`/`mu_intercept` when `event_classes`
 #'   is supplied), plus
-#'   `theta_filtered`/`theta_filtered_sd` (0.5.0+; empty tibbles unless
-#'   `compute_theta_filtered = 1` was set when the fit was assembled) --
+#'   `theta_filtered`/`theta_filtered_sd` (empty tibbles unless
+#'   `compute_theta_filtered = 1` was set when the data was prepared) --
 #'   same `dyad_id`/`time_index`/`dyad_ids`-joined shape as `theta`, with
 #'   the position-within-`filter_dyads` index already translated back to
 #'   the true `dyad_id` via `stan_data$filter_dyads`.
+#'
+#'   `theta`, `theta_filtered` and `theta_filtered_sd` are built from the
+#'   Tier 3 summary, so they are empty tibbles unless `tiers` includes 3.
+#'   `alpha` and `mu_intercept` come from Tier 1 and are empty unless
+#'   `tiers` includes 1.
 #' @examples
 #' \dontrun{
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' result <- diagnose_and_extract_bilatr(
-#'   csv_files, n_dt = n_dt, stan_model = "ou"
-#' )
+#' result <- diagnose_and_extract_bilatr(csv_files)
 #' result$diagnostics
 #' result$theta
 #' }
 #' @export
 diagnose_and_extract_bilatr <- function(
-  csv_files, stan_data = NULL, n_dt,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  csv_files, stan_data = NULL, n_dt = NULL,
+  stan_model = NULL,
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
   event_classes = NULL,
   class_labels = NULL,
   max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
-  stan_model <- .canonical_stan_model(stan_model)
+  caller <- "diagnose_and_extract_bilatr()"
   if (!is.character(csv_files)) {
     stop(
       "diagnose_and_extract_bilatr() only supports raw CmdStan CSV file ",
@@ -110,16 +113,10 @@ diagnose_and_extract_bilatr <- function(
   max_memory_mb_missing <- missing(max_memory_mb)
 
   tiers <- .validate_tiers(tiers)
-  if (any(c(2L, 3L) %in% tiers) && missing(n_dt)) {
-    stop(
-      "`n_dt` is required when `tiers` includes 2 and/or 3 (Tier 1 alone ",
-      "needs no per-dyad join).",
-      call. = FALSE
-    )
-  }
-  n_dt_tbl <- if (any(c(2L, 3L) %in% tiers)) .normalize_n_dt(n_dt) else NULL
 
-  stan_data <- .stan_data_from_fit(csv_files, stan_data, "diagnose_and_extract_bilatr()")
+  stan_data <- .stan_data_from_fit(csv_files, stan_data, caller)
+  stan_model <- .resolve_stan_model_for_fit(csv_files, stan_data, stan_model, caller)
+  n_dt_tbl <- .resolve_n_dt(n_dt, stan_data, tiers, caller)
   event_classes <- event_classes %||% attr(stan_data, "event_classes")
   dyad_ids <- attr(stan_data, "dyad_ids")
   if (is.null(dyad_ids)) {
@@ -130,13 +127,8 @@ diagnose_and_extract_bilatr <- function(
     )
   }
 
-  # 0.7.1: has_gamma/country_codes for .assemble_bilatr_diagnostics()'s
-  # gamma-vs-Tier-1 split (see R/diagnose_convergence.R). This function
-  # already has both stan_model and stan_data in scope, unlike plain
-  # diagnose_convergence(), so its gamma table gets human-readable
-  # country_code labels -- the runscripts call this function, not
-  # diagnose_convergence() directly, so this is where the labelled
-  # version matters most.
+  # has_gamma/country_codes for .assemble_bilatr_diagnostics()'s
+  # gamma-vs-Tier-1 split, with country_code labels on the gamma table.
   has_gamma <- .bilatr_model_has_gamma(stan_model)
   country_codes <- attr(stan_data, "country_codes")
 

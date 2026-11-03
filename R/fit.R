@@ -1,53 +1,191 @@
-#' Cache of compiled CmdStanModel objects, keyed by "<stan file>::<opt_level>"
+#' Cache of compiled CmdStanModel objects
+#'
+#' Keyed by "<copied .stan path>::<opt_level>::<stan_threads>"; see
+#' [.compile_stan_model()]. Emptied by [bilatr_clear_model_cache()].
 #' @keywords internal
 .bilatr_model_cache <- new.env(parent = emptyenv())
 
+#' Oldest supported cmdstanr version
+#'
+#' Kept equal to the `cmdstanr (>= x.y.z)` entry in `DESCRIPTION`'s
+#' Suggests. bilatr's own calls (`cmdstan_version(error_on_NA = )`,
+#' `cmdstan_model(cpp_options = , force_recompile = )`, `$sample()`,
+#' `$draws()`, `$metadata()`) need 0.4.0, the tests' `$init_model_methods()`
+#' needs 0.6.0, and 0.8.0 is the first release compatible with CmdStan
+#' 2.34 and 2.35, and the oldest bilatr has been checked with.
+#' @keywords internal
+.BILATR_MIN_CMDSTANR <- "0.8.0"
+
+#' Check that cmdstanr and CmdStan are available
+#'
+#' `cmdstanr` is in Suggests, so every code path that compiles or samples
+#' calls this first. Requires at least [.BILATR_MIN_CMDSTANR].
+#'
+#' @param caller The calling function's name, for the error message.
+#' @return `TRUE`, invisibly; errors otherwise.
+#' @keywords internal
+.require_cmdstan <- function(caller) {
+  rlang::check_installed(
+    "cmdstanr",
+    version = .BILATR_MIN_CMDSTANR,
+    reason = "to compile and fit bilatr models."
+  )
+  if (is.null(cmdstanr::cmdstan_version(error_on_NA = FALSE))) {
+    stop(
+      caller, ": CmdStan is not installed, or cmdstanr cannot find it. ",
+      "Install it with cmdstanr::install_cmdstan(), or point cmdstanr to an ",
+      "existing installation with cmdstanr::set_cmdstan_path().",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+#' The user cache directory of bilatr
+#'
+#' `tools::R_user_dir("bilatr", "cache")`; a function so tests can point
+#' it elsewhere.
+#' @return A directory path.
+#' @keywords internal
+.bilatr_cache_root <- function() {
+  tools::R_user_dir("bilatr", "cache")
+}
+
+#' Directory that compiled bilatr models are cached in
+#'
+#' `getOption("bilatr.model_dir")` if set, otherwise a per-version
+#' directory under the user cache directory,
+#' `file.path(tools::R_user_dir("bilatr", "cache"), "models",
+#' <package version>)`, so an upgrade never reuses an executable compiled
+#' by an older version. Created if it does not exist. Nothing is ever
+#' written into the installed package.
+#'
+#' @param create If `TRUE` (default), create the directory.
+#' @return A directory path.
+#' @keywords internal
+.bilatr_model_dir <- function(create = TRUE) {
+  dir <- getOption("bilatr.model_dir")
+  if (is.null(dir)) {
+    dir <- file.path(.bilatr_cache_root(), "models", as.character(utils::packageVersion("bilatr")))
+  } else if (!rlang::is_string(dir) || !nzchar(dir)) {
+    stop("`options(bilatr.model_dir = )` must be a single directory path.", call. = FALSE)
+  }
+  if (create && !dir.exists(dir)) {
+    ok <- dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    if (!ok && !dir.exists(dir)) {
+      stop(
+        "Could not create the model cache directory `", dir, "`. Set ",
+        "`options(bilatr.model_dir = )` to a writable directory.",
+        call. = FALSE
+      )
+    }
+  }
+  dir
+}
+
+#' Copy a registered model's `.stan` file into the model cache directory
+#'
+#' Copies only when the target is missing or its MD5 sum differs from the
+#' installed source, so an unchanged file keeps its modification time and
+#' `cmdstanr` keeps reusing the compiled executable next to it.
+#'
+#' @param stan_model A canonical registered name.
+#' @param dir The cache directory, from [.bilatr_model_dir()].
+#' @return The path of the copy.
+#' @keywords internal
+.bilatr_stage_stan_file <- function(stan_model, dir) {
+  src <- .resolve_stan_model(stan_model)
+  target <- file.path(dir, basename(src))
+  if (!file.exists(target) || !identical(unname(tools::md5sum(src)), unname(tools::md5sum(target)))) {
+    if (!file.copy(src, target, overwrite = TRUE)) {
+      stop("Could not copy `", src, "` to the model cache directory `", dir, "`.", call. = FALSE)
+    }
+    # an in-session object compiled from the old file is stale now
+    stale <- startsWith(ls(.bilatr_model_cache), paste0(target, "::"))
+    rm(list = ls(.bilatr_model_cache)[stale], envir = .bilatr_model_cache)
+  }
+  target
+}
+
 #' Compile (or fetch from cache) a registered Stan model
 #'
-#' Shared compilation path for both the exported [compile_bilatr_model()]
-#' (always the stable model) and the internal `_dev` fitters (any
-#' registered model; see `R/model_registry.R`). Compiled `CmdStanModel`
-#' objects are cached in `.bilatr_model_cache` by resolved file path and
-#' `opt_level`, so repeated calls (e.g. across dev iterations) don't pay
-#' `cmdstanr`'s own hash-checking/Makefile overhead every time.
+#' Shared compilation path behind [compile_bilatr_model()] and
+#' [fit_panel()]/[fit_dyad_ts()]. Copies the model's `.stan` file into
+#' [.bilatr_model_dir()] and compiles it there, so the executable is
+#' written next to the copy, never into the installed package. Compiled
+#' `CmdStanModel` objects are also kept in `.bilatr_model_cache` for the
+#' session, keyed by the copied path, `opt_level` and `stan_threads`.
 #'
-#' @param stan_model Name registered in `.bilatr_stan_models`.
+#' @param stan_model A registered model name.
 #' @param opt_level C++ compiler optimization level; see
 #'   [compile_bilatr_model()].
-#' @param force_recompile If `TRUE`, bypass the cache and rebuild.
+#' @param force_recompile If `TRUE`, bypass both caches and rebuild.
+#' @param stan_threads Whether to compile with `STAN_THREADS`. Always
+#'   `TRUE` for the package's own fits.
 #' @return A `CmdStanModel` object.
 #' @keywords internal
-.compile_stan_model <- function(
-  stan_model,
-  opt_level,
-  force_recompile = FALSE
-) {
-  stan_file <- .resolve_stan_model(stan_model)
-  cache_key <- paste(stan_file, opt_level, sep = "::")
+.compile_stan_model <- function(stan_model, opt_level, force_recompile = FALSE, stan_threads = TRUE) {
+  .require_cmdstan("compile_bilatr_model()")
+  stan_model <- .canonical_stan_model(stan_model)
+  stan_file <- .bilatr_stage_stan_file(stan_model, .bilatr_model_dir())
+  cache_key <- paste(stan_file, opt_level, stan_threads, sep = "::")
 
-  if (
-    !force_recompile &&
-      exists(cache_key, envir = .bilatr_model_cache, inherits = FALSE)
-  ) {
+  if (!force_recompile && exists(cache_key, envir = .bilatr_model_cache, inherits = FALSE)) {
     return(get(cache_key, envir = .bilatr_model_cache, inherits = FALSE))
   }
 
   mod <- cmdstanr::cmdstan_model(
     stan_file,
-    cpp_options = list(stan_threads = TRUE, O = opt_level),
+    cpp_options = list(stan_threads = stan_threads, O = opt_level),
     force_recompile = force_recompile
   )
   assign(cache_key, mod, envir = .bilatr_model_cache)
   mod
 }
 
-#' Compile the bilatr Stan model
+#' Compile a bilatr Stan model
 #'
-#' Compiles the package's registered `stable` Stan program (see
-#' `R/model_registry.R`), used by both [fit_dyad_ts()] and [fit_panel()].
-#' Compiled executables are cached internally by `opt_level`, so repeated
-#' calls with the same `opt_level` are cheap after the first.
+#' Compiles one of the package's Stan models with CmdStan, or returns the
+#' already compiled model. [fit_panel()] and [fit_dyad_ts()] call this
+#' themselves, so you only need it to compile ahead of time (for example,
+#' before submitting batch jobs) or with a non-default `opt_level`.
 #'
+#' @section Models:
+#' Three models are available:
+#'
+#' * `"stable"` (the default): the dynamic IRT model. Each dyad's latent
+#'   state `theta` follows a random walk; action counts follow a
+#'   Dirichlet-multinomial whose category probabilities depend on `theta`
+#'   through the discrimination vector `alpha` and the intercepts
+#'   `mu_intercept`. Process noise, the dispersion `phi` and the initial
+#'   state are partially pooled across dyads.
+#' * `"ou"` (experimental): as `"stable"`, but `theta` follows a
+#'   mean-reverting Ornstein-Uhlenbeck (AR(1)) process around a
+#'   dyad-specific level, with a shared persistence `rho` (prior
+#'   `beta(rho_prior_a, rho_prior_b)`; see [prepare_stan_data()]).
+#' * `"stable_gamma"` (experimental): as `"stable"`, plus a country-level
+#'   offset `gamma` on each action category, which absorbs a country's
+#'   habitual repertoire. Needs actor columns in the data; see
+#'   [extract_gamma()].
+#'
+#' The experimental models have not yet been calibrated or tested at
+#' scale as thoroughly as `"stable"`; fitting one shows a message once per
+#' session.
+#'
+#' @section Where compiled models are stored:
+#' The `.stan` file is copied into a cache directory and compiled there:
+#' by default `file.path(tools::R_user_dir("bilatr", "cache"), "models",
+#' <bilatr version>)`, so each package version compiles its own
+#' executables. Set `options(bilatr.model_dir = "<directory>")` to use
+#' another directory, for example one shared by the jobs of a cluster
+#' run. Compiled models are reused across sessions until the `.stan` file
+#' changes. [bilatr_clear_model_cache()] deletes them.
+#'
+#' Compiling needs the 'cmdstanr' package and a working CmdStan
+#' installation (see `cmdstanr::install_cmdstan()`).
+#'
+#' @param stan_model Which model to compile: `"stable"` (default), `"ou"`
+#'   or `"stable_gamma"`. See the Models section.
 #' @param opt_level C++ compiler optimization level passed to CmdStan's
 #'   `O` Makefile variable (0-3). The reduce_sum-based likelihood in this
 #'   model generates a lot of C++ template code; at the default `O = 3`,
@@ -57,17 +195,64 @@
 #'   somewhat slower sampling; `opt_level = 0` is fastest to compile but
 #'   slowest to sample and rarely worth it. If compilation is being
 #'   killed by the OOM killer, try `opt_level = 1` before anything else.
-#' @param force_recompile Set `TRUE` to force a rebuild (e.g. after
-#'   changing `opt_level`), bypassing the internal cache.
+#' @param force_recompile Set `TRUE` to force a rebuild, bypassing both
+#'   the in-session cache and the compiled executable on disk.
 #' @return A `CmdStanModel` object.
+#' @seealso [bilatr_clear_model_cache()]
 #' @examples
 #' \dontrun{
 #' mod <- compile_bilatr_model()
+#' mod_gamma <- compile_bilatr_model("stable_gamma")
 #' mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
 #' }
 #' @export
-compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
-  .compile_stan_model(.BILATR_DEFAULT_MODEL, opt_level, force_recompile)
+compile_bilatr_model <- function(stan_model = "stable", opt_level = 3, force_recompile = FALSE) {
+  stan_model <- .canonical_stan_model(stan_model)
+  .compile_stan_model(stan_model, opt_level, force_recompile)
+}
+
+#' Delete compiled bilatr models
+#'
+#' Deletes the compiled models that [compile_bilatr_model()],
+#' [fit_panel()] and [fit_dyad_ts()] cache on disk (see
+#' [compile_bilatr_model()], "Where compiled models are stored"), and
+#' forgets the models compiled in this session. The next fit compiles
+#' again.
+#'
+#' By default the cache directory of the installed bilatr version is
+#' deleted. If `options(bilatr.model_dir = )` is set, only the files
+#' bilatr put in that directory (the `.stan` copies and their compiled
+#' executables) are deleted, not the directory itself.
+#'
+#' @param all If `TRUE`, also delete the cached models of every other
+#'   bilatr version under `tools::R_user_dir("bilatr", "cache")`.
+#' @return The deleted paths, invisibly.
+#' @seealso [compile_bilatr_model()]
+#' @examples
+#' old <- options(bilatr.model_dir = tempfile("bilatr_models_"))
+#' bilatr_clear_model_cache()
+#' options(old)
+#' @export
+bilatr_clear_model_cache <- function(all = FALSE) {
+  if (!rlang::is_bool(all)) {
+    stop("bilatr_clear_model_cache(): `all` must be TRUE or FALSE.", call. = FALSE)
+  }
+  rm(list = ls(.bilatr_model_cache), envir = .bilatr_model_cache)
+
+  dir <- .bilatr_model_dir(create = FALSE)
+  targets <- if (is.null(getOption("bilatr.model_dir"))) {
+    dir
+  } else {
+    stems <- tools::file_path_sans_ext(vapply(.bilatr_stan_models, `[[`, "", "file"))
+    pattern <- paste0("^(", paste(stems, collapse = "|"), ")(\\.(stan|exe|hpp|o))?$")
+    list.files(dir, pattern = pattern, full.names = TRUE)
+  }
+  if (all) {
+    targets <- c(targets, file.path(.bilatr_cache_root(), "models"))
+  }
+  targets <- unique(targets[file.exists(targets)])
+  unlink(targets, recursive = TRUE)
+  invisible(targets)
 }
 
 #' A sign-biased sum-to-zero init draw for `sum_to_zero_vector[A]` alpha
@@ -111,27 +296,33 @@ compile_bilatr_model <- function(opt_level = 3, force_recompile = FALSE) {
 #' Initial values are model-specific: `stan_model` selects among the
 #' registered models' distinct parameter sets (a non-centered
 #' `process_noise` hierarchy vs. an OU/AR(1) `sd_stat` hierarchy, etc.).
-#' `stable_gamma` (0.7.0) gets its own branch: `stable`'s init list plus
-#' `gamma_z`/`sigma_gamma`, both started small (not exactly 0 -- same
-#' reasoning as `alpha_raw`'s non-zero start: an all-zero init is valid
-#' but leaves no spread to move away from the prior mode with).
-#' Unrecognised names are rejected upstream by [.resolve_stan_model()],
-#' so the `stop()` below should be unreachable in practice.
+#' `stable_gamma` gets `stable`'s init list plus `gamma_z`/`sigma_gamma`,
+#' both started small (not exactly 0 -- same reasoning as `alpha_raw`'s
+#' non-zero start: an all-zero init is valid but leaves no spread to move
+#' away from the prior mode with).
+#'
+#' The returned function draws fresh random values (`alpha_raw`,
+#' `z_theta0`/`mu_dyad_raw`, `gamma_z`) on every call, so calling it once
+#' per chain gives each chain its own starting point. It draws from the
+#' global random-number stream; [.bilatr_draw_inits()] seeds each call
+#' when the fit has a `seed`.
 #'
 #' @param stan_data A Stan data list as returned by [prepare_stan_data()]
 #'   (or attached to a fit by [fit_panel()]/[fit_dyad_ts()]).
-#' @param stan_model Name registered in `.bilatr_stan_models`.
-#' @return A zero-argument function suitable for `cmdstanr`'s `init`
-#'   argument.
+#' @param stan_model A registered model name.
+#' @return A zero-argument function returning a named list of initial
+#'   values.
 #' @keywords internal
 bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
+  stan_model <- .canonical_stan_model(stan_model)
   D <- stan_data$D
   Tn <- stan_data$T
   A <- stan_data$A
+  n_countries <- stan_data$n_countries
 
-  init_list <- switch(
-    stan_model,
-    stable = list(
+  # stable's parameters, shared by stable_gamma
+  stable_init <- function() {
+    list(
       theta_raw = matrix(0, D, Tn),
       mu_intercept = rep(0, A),
       alpha_raw = .alpha_raw_sum0_init(A),
@@ -147,28 +338,19 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
       phi = rep(1, D),
       mu_log_phi = 0,
       sigma_log_phi = 0.5
-    ),
-    stable_gamma = {
-      n_countries <- stan_data$n_countries
+    )
+  }
+
+  switch(
+    stan_model,
+    stable = stable_init,
+    stable_gamma = function() {
       c(
-        list(
-          theta_raw = matrix(0, D, Tn),
-          mu_intercept = rep(0, A),
-          alpha_raw = .alpha_raw_sum0_init(A),
-          sigma_theta0 = 0.5,
-          z_theta0 = stats::rnorm(D, 0, 0.5),
-          log_process_noise_raw = rep(0, D),
-          mu_log_noise = log(0.2),
-          sigma_log_noise = 0.3,
-          phi = rep(1, D),
-          mu_log_phi = 0,
-          sigma_log_phi = 0.5
-        ),
+        stable_init(),
         # gamma_z near (but not at) 0: an all-zero init is valid (gamma_z
         # is unconstrained) but, like alpha_raw above, leaves the
         # projected-out directions exactly at their prior mode with no
-        # spread to break out of -- a small non-zero draw is the more
-        # conservative default. sigma_gamma starts small (its
+        # spread to break out of. sigma_gamma starts small (its
         # half-normal(0, 0.3) prior means the data should pull it up if
         # warranted, not down from an over-confident large start).
         list(
@@ -177,41 +359,68 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
         )
       )
     },
-    ou = list(
-      theta_raw = matrix(0, D, Tn),
-      mu_intercept = rep(0, A),
-      alpha_raw = .alpha_raw_sum0_init(A),
-      sigma_mu = 0.5,
-      # real initial spread, not near 0 -- see the stable branch above
-      mu_dyad_raw = stats::rnorm(D, 0, 0.5),
-      rho = 0.8,
-      mu_log_sd_stat = log(1),
-      sigma_log_sd_stat = 0.3,
-      log_sd_stat_raw = rep(0, D),
-      phi = rep(1, D),
-      mu_log_phi = 0,
-      sigma_log_phi = 0.5
-    ),
+    ou = function() {
+      list(
+        theta_raw = matrix(0, D, Tn),
+        mu_intercept = rep(0, A),
+        alpha_raw = .alpha_raw_sum0_init(A),
+        sigma_mu = 0.5,
+        # real initial spread, not near 0 -- see stable_init() above
+        mu_dyad_raw = stats::rnorm(D, 0, 0.5),
+        rho = 0.8,
+        mu_log_sd_stat = log(1),
+        sigma_log_sd_stat = 0.3,
+        log_sd_stat_raw = rep(0, D),
+        phi = rep(1, D),
+        mu_log_phi = 0,
+        sigma_log_phi = 0.5
+      )
+    },
     stop(
       "bilatr_init_fn(): no init generator registered for stan_model '",
       stan_model, "'.",
       call. = FALSE
     )
   )
+}
 
-  function() {
-    init_list
+#' Draw one list of initial values per chain
+#'
+#' With a `seed`, chain `k`'s values are drawn under
+#' `.with_seed(seed + chain_ids[k], ...)`, so they are reproducible and
+#' the caller's own random-number stream is left untouched. With
+#' `seed = NULL`, they are drawn from the global stream.
+#'
+#' @param stan_data,stan_model As for [bilatr_init_fn()].
+#' @param chains Number of chains.
+#' @param seed The fit's `seed`, or `NULL`.
+#' @param chain_ids The `chain_ids` passed to `CmdStanModel$sample()`, or
+#'   `NULL` for `seq_len(chains)`.
+#' @return A list of `chains` named lists, as `cmdstanr`'s `init` accepts.
+#' @keywords internal
+.bilatr_draw_inits <- function(stan_data, stan_model, chains, seed, chain_ids = NULL) {
+  init_fn <- bilatr_init_fn(stan_data, stan_model)
+  ids <- chain_ids %||% seq_len(chains)
+  if (length(ids) != chains) {
+    stop(
+      "`chain_ids` has length ", length(ids), " but `chains` is ", chains, ".",
+      call. = FALSE
+    )
   }
+  lapply(ids, function(id) {
+    if (is.null(seed)) init_fn() else .with_seed(seed + id, init_fn())
+  })
 }
 
 #' Shared sampling logic behind fit_dyad_ts()/fit_panel()
 #'
-#' Compiles (or fetches from cache) the model and samples. Canonicalises
-#' `stan_model` again (idempotent), so [.compile_stan_model()] and
-#' [bilatr_init_fn()] agree on the same resolved name, and emits the
-#' once-per-session experimental-model message (see
-#' [.bilatr_warn_if_experimental()]). Every check on the data has
-#' already run in [.bilatr_fit_entry()].
+#' Compiles (or fetches from cache) the model and samples, after emitting
+#' the once-per-session experimental-model message (see
+#' [.bilatr_warn_if_experimental()]). Every check on the data, and the
+#' initial values, are handled by [.bilatr_fit_entry()].
+#'
+#' @param init A list of per-chain initial-value lists, or whatever the
+#'   user passed as `init`.
 #' @keywords internal
 fit_bilatr <- function(
   stan_data,
@@ -224,6 +433,7 @@ fit_bilatr <- function(
   opt_level,
   output_dir,
   stan_model = .BILATR_DEFAULT_MODEL,
+  init = NULL,
   ...
 ) {
   stan_model <- .canonical_stan_model(stan_model)
@@ -237,7 +447,7 @@ fit_bilatr <- function(
     iter_warmup = iter_warmup,
     iter_sampling = iter_sampling,
     seed = seed,
-    init = bilatr_init_fn(stan_data, stan_model = stan_model),
+    init = init,
     output_dir = output_dir,
     ...
   )
@@ -305,7 +515,7 @@ fit_bilatr <- function(
 #' need the compiled model, writes the `stan_data` sidecar file, samples
 #' via [fit_bilatr()], and attaches `stan_data` to the fit. In order:
 #'
-#' 1. canonicalises `stan_model`;
+#' 1. canonicalizes `stan_model`;
 #' 2. dispatches on `data`: a prepared `stan_data` list is used as-is
 #'    (error if any data-preparation argument was supplied); a data frame
 #'    goes through [prepare_stan_data()]; anything else is an error;
@@ -313,7 +523,11 @@ fit_bilatr <- function(
 #'    `fit_panel()`), then that a `stan_data` list has `T`, `A`, `Y` and
 #'    `is_obs`;
 #' 4. for `stable_gamma`: errors if the country fields are absent, and
-#'    warns if `w_send` was imputed.
+#'    warns if `w_send` was imputed;
+#' 5. records the model as `attr(stan_data, "stan_model")` (replacing,
+#'    with a `message()`, a different value already on a prepared list);
+#' 6. draws one list of initial values per chain with
+#'    [.bilatr_draw_inits()], unless `init` was passed through `...`.
 #'
 #' @param caller `"fit_dyad_ts()"` or `"fit_panel()"`.
 #' @param data The `data` argument.
@@ -323,7 +537,8 @@ fit_bilatr <- function(
 #' @param sampler Named list of the sampler arguments of [fit_bilatr()].
 #' @param stan_model The `stan_model` argument.
 #' @param ... Passed to `CmdStanModel$sample()`.
-#' @return The `CmdStanMCMC` fit, with `attr(fit, "stan_data")` set.
+#' @return The `CmdStanMCMC` fit, with `attr(fit, "stan_data")` and
+#'   `attr(fit, "stan_model")` set.
 #' @keywords internal
 .bilatr_fit_entry <- function(caller, data, prep, supplied, sampler, stan_model, ...) {
   # 1. stan_model
@@ -432,15 +647,36 @@ fit_bilatr <- function(
     }
   }
 
+  # 5. record the model, so the sidecar and the fit both carry it
+  recorded <- attr(stan_data, "stan_model", exact = TRUE)
+  if (!is.null(recorded) && !identical(recorded, stan_model)) {
+    message(
+      caller, ": `data` records stan_model = \"", recorded, "\"; replacing it with \"",
+      stan_model, "\", the model being fit."
+    )
+  }
+  attr(stan_data, "stan_model") <- stan_model
+
+  # 6. initial values: one list per chain, seeded when `seed` is given.
+  # A user-supplied `init` (through `...`) is used as given.
+  dots <- list(...)
+  if ("init" %in% names(dots)) {
+    init <- dots$init
+    dots$init <- NULL
+  } else {
+    init <- .bilatr_draw_inits(stan_data, stan_model, sampler$chains, sampler$seed, dots$chain_ids)
+  }
+
   # sidecar, before sampling, so a crashed run still leaves it
   output_dir <- sampler$output_dir
   if (!is.null(output_dir)) {
     dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-    basename <- list(...)$output_basename %||% "bilatr"
+    basename <- dots$output_basename %||% "bilatr"
     .write_rds_atomic(stan_data, file.path(output_dir, paste0(basename, "_stan_data.rds")))
   }
 
-  fit <- fit_bilatr(
+  fit <- rlang::exec(
+    fit_bilatr,
     stan_data,
     chains = sampler$chains,
     parallel_chains = sampler$parallel_chains,
@@ -451,9 +687,11 @@ fit_bilatr <- function(
     opt_level = sampler$opt_level,
     output_dir = output_dir,
     stan_model = stan_model,
-    ...
+    init = init,
+    !!!dots
   )
   attr(fit, "stan_data") <- stan_data
+  attr(fit, "stan_model") <- stan_model
   fit
 }
 
@@ -477,10 +715,10 @@ fit_bilatr <- function(
 
 #' Fit the bilatr model to a single dyad's time series
 #'
-#' Fits the collapsed dyadic IRT model (see the package's Stan file,
-#' `bilatr_alphanorm.stan`, registered as the `stable` model -- see
-#' `R/model_registry.R`) to a single dyad (`D == 1`), i.e. estimates
-#' one latent conflict trajectory `theta` with no cross-dyad pooling on
+#' Fits the dynamic IRT model (by default the `"stable"` model; see
+#' [compile_bilatr_model()] for the available models) to a single dyad
+#' (`D == 1`), i.e. estimates
+#' one latent bilateral-relations trajectory `theta` with no cross-dyad pooling on
 #' `theta0`, `phi`, or process noise (those hierarchical parameters still
 #' exist in the model but are estimated from a single unit, so their
 #' pooling has no effect). Use [fit_panel()] instead when fitting more
@@ -490,9 +728,8 @@ fit_bilatr <- function(
 #' e.g. the output of [aggregate_events()]), which is passed to
 #' [prepare_stan_data()] together with the data-preparation arguments
 #' (`time` through `filter_dyads`), or a Stan data list already built by
-#' [prepare_stan_data()] (or by `assemble_stan_data()` in bilatr 0.11.0
-#' and earlier), which is used as-is. With a prepared list, supplying any
-#' data-preparation argument is an error.
+#' [prepare_stan_data()], which is used as-is. With a prepared list,
+#' supplying any data-preparation argument is an error.
 #'
 #' Before compiling anything, `fit_dyad_ts()` checks that the data has
 #' exactly one dyad (after `min_n_events` filtering), and, for
@@ -504,6 +741,20 @@ fit_bilatr <- function(
 #' when `D == 1`, so `threads_per_chain` defaults to 1 here (raising it
 #' will not speed up sampling for a single-dyad fit).
 #'
+#' **Reproducibility.** Each chain starts from its own random initial
+#' values. With a `seed`, chain `k`'s initial values are drawn with seed
+#' `seed + k` (`seed + chain_ids[k]` if `chain_ids` is passed through
+#' `...`), and `seed` is also passed to CmdStan, so two calls with the
+#' same `seed` and data give identical draws (on the same machine and
+#' CmdStan version). With `seed = NULL`, the initial values come from R's
+#' current random-number stream. Pass `init` through `...` to supply your
+#' own initial values instead.
+#'
+#' The fitted model's name is recorded as `attr(fit, "stan_model")` and
+#' `attr(attr(fit, "stan_data"), "stan_model")`, so the post-fit functions
+#' ([diagnose_convergence()], [check_compositional_residuals()],
+#' [icc_curves()], ...) know which model was fit without being told.
+#'
 #' @param data A dyad-period data frame (see `?bilatr_dyad_period_data`)
 #'   or a Stan data list from [prepare_stan_data()]; see Details.
 #' @inheritParams prepare_stan_data
@@ -511,31 +762,31 @@ fit_bilatr <- function(
 #'   [prepare_stan_data()]. Defaults to `attr(data, "directed")` if set
 #'   (by [aggregate_events()]), else `TRUE`.
 #' @param chains Number of MCMC chains.
-#' @param parallel_chains Number of chains to run in parallel.
+#' @param parallel_chains Number of chains to run in parallel. Defaults
+#'   to 1 (chains run one after another); set it to `chains` to run them
+#'   all at once if you have the cores.
 #' @param threads_per_chain Threads per chain for within-chain
 #'   parallelization. Not useful for `D == 1`; left as an argument mainly
 #'   for consistency with [fit_panel()].
 #' @param iter_warmup Number of warmup iterations per chain.
 #' @param iter_sampling Number of post-warmup sampling iterations per
 #'   chain.
-#' @param seed Random seed, or `NULL` for `cmdstanr`'s default.
+#' @param seed Random seed for CmdStan and for the initial values (see
+#'   Details), or `NULL` for no seed.
 #' @param opt_level Compiler optimization level; see
 #'   [compile_bilatr_model()].
 #' @param output_dir Directory to write CmdStan's raw output CSVs to, or
 #'   `NULL` for a temporary directory. When given, the Stan data list is
 #'   also saved there (see Value).
-#' @param stan_model (0.10.1) Name registered in `.bilatr_stan_models`
-#'   (see [.canonical_stan_model()]); an unregistered name errors,
-#'   including the four names retired in 0.10.0. Defaults to
-#'   `"stable"` (`.BILATR_DEFAULT_MODEL`). Fitting a model whose registry
-#'   `status` is `"experimental"` (currently `ou`/`stable_gamma`) emits a
-#'   `message()` the first time it is fit in a session (see
-#'   [.bilatr_warn_if_experimental()]).
+#' @param stan_model Which model to fit: `"stable"` (default), or the
+#'   experimental `"ou"` or `"stable_gamma"`; see [compile_bilatr_model()].
+#'   Fitting an experimental model shows a `message()` once per session.
 #' @param ... Additional arguments passed to `CmdStanModel$sample()`
-#'   (e.g. `refresh`, `chain_ids`, `output_basename`).
+#'   (e.g. `refresh`, `chain_ids`, `output_basename`, `init`).
 #' @return A `CmdStanMCMC` fit object, with the Stan data list it was fit
 #'   to attached as `attr(fit, "stan_data")` (with its own attributes:
-#'   `dyad_ids`, `event_classes`, ...). The extractors ([extract_theta()],
+#'   `dyad_ids`, `event_classes`, `stan_model`, ...) and the model's name
+#'   as `attr(fit, "stan_model")`. The extractors ([extract_theta()],
 #'   [extract_gamma()], [diagnose_category_merges()],
 #'   [check_compositional_residuals()], ...) use it when their own
 #'   `stan_data` argument is not given. `CmdStanMCMC` objects are
@@ -556,7 +807,8 @@ fit_bilatr <- function(
 #'   dplyr::filter(events, Actor1CountryCode == "USA", Actor2CountryCode == "CHN"),
 #'   grouping_var = "PentaClass", start = "2015-01-01", end = "2020-12-31"
 #' )
-#' fit <- fit_dyad_ts(agg, reference_category = "0", chains = 4, iter_sampling = 1000)
+#' # reference "1" (verbal cooperation): higher theta = more cooperative
+#' fit <- fit_dyad_ts(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
 #' theta <- extract_theta(fit)
 #' }
 #' @export
@@ -572,7 +824,7 @@ fit_dyad_ts <- function(
   reference_category = NULL,
   min_n_events = 1,
   time_range = NULL,
-  chunk_size = 100,
+  chunk_size = 1,
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
@@ -580,14 +832,14 @@ fit_dyad_ts <- function(
   compute_theta_filtered = 0,
   filter_dyads = NULL,
   chains = 4,
-  parallel_chains = 4,
+  parallel_chains = 1,
   threads_per_chain = 1,
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
   opt_level = 3,
   output_dir = NULL,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = "stable",
   ...
 ) {
   supplied <- .bilatr_supplied_prep_args(environment())
@@ -630,9 +882,9 @@ fit_dyad_ts <- function(
 
 #' Fit the bilatr model to a panel of dyads with hierarchical pooling
 #'
-#' Fits the collapsed dyadic IRT model (see the package's Stan file,
-#' `bilatr_alphanorm.stan`, registered as the `stable` model -- see
-#' `R/model_registry.R`) across multiple dyads simultaneously (`D > 1`),
+#' Fits the dynamic IRT model (by default the `"stable"` model; see
+#' [compile_bilatr_model()] for the available models) across multiple
+#' dyads simultaneously (`D > 1`),
 #' with hierarchical partial pooling on process noise (via
 #' `mu_log_noise`/`sigma_log_noise`), the dispersion parameter `phi` (via
 #' `mu_log_phi`/`sigma_log_phi`), and the initial latent state `theta0`
@@ -641,21 +893,21 @@ fit_dyad_ts <- function(
 #' for a single dyad.
 #'
 #' `data` is either a dyad-period table or a prepared Stan data list,
-#' exactly as for [fit_dyad_ts()]; see its Details for the dispatch and
-#' the checks run before compiling. `fit_panel()` requires `D >= 2`.
+#' exactly as for [fit_dyad_ts()]; see its Details for the dispatch, the
+#' checks run before compiling, and reproducibility with `seed`.
+#' `fit_panel()` requires `D >= 2`.
 #'
 #' `threads_per_chain` controls `reduce_sum` parallelization across
 #' dyads within a chain, combined with `chunk_size` (`C` in the Stan
-#' data). 16 threads with `chunk_size = 600` was the Pareto-optimal
-#' setting found in this project's own benchmarking for panel-sized data;
-#' tune both together for your data size and hardware rather than one in
-#' isolation.
+#' data). The defaults (`threads_per_chain = 1`, `parallel_chains = 1`,
+#' `chunk_size = 1`) are conservative: they run on any machine, but use
+#' one core. On a multi-core machine, more threads per chain and a larger
+#' `chunk_size` can be much faster for large panels; tune them together
+#' for your data size and hardware, as described in `vignette("tuning")`.
 #'
 #' @inheritParams fit_dyad_ts
 #' @param threads_per_chain Threads per chain for `reduce_sum`
-#'   parallelization across dyads. Defaults to 16, the setting found to
-#'   be Pareto-optimal (together with `chunk_size = 600`) in this
-#'   project's own benchmarking; reduce it on machines with fewer cores.
+#'   parallelization across dyads. Defaults to 1; see Details.
 #' @return As for [fit_dyad_ts()]: a `CmdStanMCMC` fit object with
 #'   `attr(fit, "stan_data")` set, and the Stan data list saved to
 #'   `output_dir` when one is given.
@@ -665,9 +917,14 @@ fit_dyad_ts <- function(
 #'   events, grouping_var = "PentaClass", resolution = "yearly",
 #'   start = "2015-01-01", end = "2020-12-31"
 #' )
+#' # reference "1" (verbal cooperation): higher theta = more cooperative
+#' fit <- fit_panel(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
+#'
+#' # on a machine with 16 cores: 4 chains in parallel, 4 threads each
 #' fit <- fit_panel(
-#'   agg, reference_category = "0", chunk_size = 600,
-#'   chains = 4, threads_per_chain = 16, iter_sampling = 1000
+#'   agg, reference_category = "1", # verbal cooperation
+#'   chains = 4, parallel_chains = 4,
+#'   threads_per_chain = 4, chunk_size = 50
 #' )
 #' theta <- extract_theta(fit)
 #' }
@@ -684,7 +941,7 @@ fit_panel <- function(
   reference_category = NULL,
   min_n_events = 1,
   time_range = NULL,
-  chunk_size = 100,
+  chunk_size = 1,
   rho_prior_a = 8,
   rho_prior_b = 2,
   compute_log_lik = 0,
@@ -692,14 +949,14 @@ fit_panel <- function(
   compute_theta_filtered = 0,
   filter_dyads = NULL,
   chains = 4,
-  parallel_chains = 4,
-  threads_per_chain = 16,
+  parallel_chains = 1,
+  threads_per_chain = 1,
   iter_warmup = 1000,
   iter_sampling = 1000,
   seed = NULL,
   opt_level = 3,
   output_dir = NULL,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = "stable",
   ...
 ) {
   supplied <- .bilatr_supplied_prep_args(environment())

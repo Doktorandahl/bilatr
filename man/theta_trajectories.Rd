@@ -11,9 +11,13 @@ Tibbles with one row per dyad-year, sorted by \code{dyad} then
 \code{theta_undirected} has 195,106 rows (9,139 undirected dyads). Both
 cover the same 189 countries. Columns:
 \describe{
-\item{dyad}{Character. Three-letter country codes joined by \verb{_},
-e.g. \code{"SWE_NOR"}. Directed: \code{"SENDER_RECEIVER"} ???. Undirected:
-the two codes in alphabetical order, so \code{"NOR_SWE"} only.}
+\item{dyad}{Character. Two three-letter country codes joined by \verb{_}.
+The codes are GDELT's \code{Actor1CountryCode}/\code{Actor2CountryCode}
+values, which are CAMEO country codes; every code in these tables
+is also the country's ISO 3166-1 alpha-3 code. Directed:
+\code{"SENDER_RECEIVER"}, Actor1 then Actor2, so \code{"SWE_NOR"} is Sweden
+toward Norway. Undirected: the two codes in alphabetical (C-locale)
+order, so \code{"NOR_SWE"} only.}
 \item{year}{Integer, 1991-2025.}
 \item{mean}{Numeric. Posterior mean of the smoothed \eqn{\theta}.}
 \item{\code{5\%}, \code{95\%}}{Numeric. 5th and 95th percentiles of
@@ -28,16 +32,16 @@ filtered state means are averaged.}
 state mean. These reflect hyperparameter uncertainty only, not the
 filter's own state uncertainty (\code{theta_filtered_sd}), which is why
 they are much narrower than the smoothed interval and stay constant
-through years without events. ???}
+through years without events. They are not a credible interval for
+the filtered \eqn{\theta}.}
 }
 
 The interval columns have non-syntactic names, so they must be quoted
 with backticks in R code.
 }
 \source{
-Estimated from GDELT ??? (version, download date, actor and
-event filters) events between state actors of ??? countries, 1991-2025.
-Please cite ??? when using these data.
+GDELT 1.0 event data, The GDELT Project,
+\url{https://www.gdeltproject.org/}, accessed 2026-01-31.
 }
 \usage{
 theta_directed
@@ -47,18 +51,22 @@ theta_undirected
 \description{
 Yearly latent trajectories (\eqn{\theta}) of the level of bilateral
 relations for every country pair with at least one recorded event,
-estimated with bilatr from GDELT event data. \code{theta_directed} holds the
-directed model (one series per sender-receiver pair); \code{theta_undirected}
-holds the undirected model (one series per unordered pair, events in
-both directions pooled). Each row gives both the smoothed estimate --
-the posterior of \eqn{\theta_{dt}} given all years, 1991-2025 -- and
-the forward-filtered estimate, which uses only events up to and
-including year \eqn{t} and so is the quantity to use when no
-look-ahead is allowed (e.g. as a predictor in forecasting).
+estimated with bilatr from GDELT 1.0 event data. \code{theta_directed} holds
+the directed model (one series per sender-receiver pair);
+\code{theta_undirected} holds the undirected model (one series per unordered
+pair, events in both directions pooled). Each row gives both the
+smoothed estimate -- the posterior of \eqn{\theta_{dt}} given all
+years, 1991-2025 -- and the forward-filtered estimate, which uses only
+events up to and including year \eqn{t} and so is the quantity to use
+when no look-ahead is allowed (e.g. as a predictor in forecasting).
 }
 \details{
-Higher values of \eqn{\theta} indicate ??? (more cooperative / more
-conflictual) relations. The sign is fixed by the model's orientation
+\strong{Higher values of \eqn{\theta} mean more cooperative relations.} The
+reference category is \code{ModifiedRootCode} 5, "Consult: meet, discuss, or
+visit", a cooperative class, and \eqn{\theta} is oriented so that higher
+values make the reference category more likely relative to the other
+action types (see the \code{reference_category} argument of
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}). The sign is fixed by the model's orientation
 fold (\eqn{\alpha_1 \ge 0}; see the \code{stable_gamma} Stan program's
 header), the location by the \eqn{\theta_0} prior (mean exactly 0
 across dyads) and the scale by normalising the discrimination
@@ -77,15 +85,27 @@ end of a series, extrapolated by the random walk), so each dyad's
 series has no gaps and ends in 2025. All numeric columns are rounded
 to 3 significant digits.
 
-Both models were fitted with bilatr 0.10.2 (commit \verb{4a4ffd5})
-via \code{runscripts/submit_bilatr_16cat.R}: the \code{stable_gamma} Stan
-program, yearly resolution, events grouped by \code{ModifiedRootCode}
-(16 of its 18 classes occur in the data, so \eqn{A = 16}) with
-reference category 5 ("Consult: meet, discuss, or visit"),
-\code{min_n_events = 1}, and 4 chains of 1,000 warmup and 1,000 sampling
-iterations each. The theta summaries were then processed with
-\code{runscripts/process_theta_16cat.R} and saved here by
-\code{data-raw/theta_trajectories.R}.
+\strong{Events.} GDELT 1.0 events (the historical backfiles and the daily
+updates) dated 1991-01-01 through 2025-12-31, accessed 2026-01-31. An
+event is kept when both actors carry \code{GOV}, \code{MIL} or \code{SPY} in any of
+their \code{Type1Code}/\code{Type2Code}/\code{Type3Code} fields and the two actors'
+country codes differ. This is
+\code{read_gdelt(actor_types = c("GOV", "MIL", "SPY"), actor_type_match = "both", cross_border = TRUE)}, the defaults. All events are used, root
+events or not, with no filter on event codes. In addition, both actors'
+country codes map to a Correlates of War state, so GDELT's regional and
+other non-state codes (such as \code{"AFR"}, \code{"EUR"}, \code{"PSE"} or \code{"HKG"}) do
+not occur.
+
+\strong{Model.} The \code{stable_gamma} Stan program, at yearly resolution, with
+events grouped by \code{ModifiedRootCode} (16 of its 18 classes occur in the
+data, so \eqn{A = 16}), reference category 5 ("Consult: meet, discuss,
+or visit"), \code{min_n_events = 1}, and 4 chains of 1,000 warmup and 1,000
+sampling iterations each. Estimated with an earlier development version
+of bilatr; the Stan program and the data preparation are unchanged in
+this version.
+
+Please cite the bilatr methods article (forthcoming); see
+\code{citation("bilatr")}.
 }
 \examples{
 # Norway-Sweden, both directions
@@ -93,6 +113,14 @@ subset(theta_directed, dyad \%in\% c("NOR_SWE", "SWE_NOR"))
 
 # same pair in the undirected model
 subset(theta_undirected, dyad == "NOR_SWE")
+}
+\references{
+Leetaru, K. and Schrodt, P. A. (2013). "GDELT: Global Data on Events,
+Location and Tone, 1979–2012." Paper presented at the International
+Studies Association annual convention, San Francisco.
+
+The GDELT Project. Global Database of Events, Language, and Tone
+(GDELT). Accessed 31 January 2026, \url{https://gdeltproject.org/}.
 }
 \seealso{
 \link{cameo_lookup} for the \code{ModifiedRootCode} classes;

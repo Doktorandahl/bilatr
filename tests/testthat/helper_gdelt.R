@@ -255,3 +255,24 @@
     monthly_rows = monthly_rows
   )
 }
+
+#' One GDELT event row per CAMEO root code, with GDELT's own `QuadClass`
+#'
+#' Built from [.make_gdelt_fixture_rows()]'s first 20 rows: row `k` gets
+#' event code `sprintf("%02d0", k)` (root `k`) and the `QuadClass` GDELT
+#' itself distributes for that root, as observed in raw GDELT 1.0 files
+#' on 2026-11-03 (`data-raw/quadclass_gdelt_check.md`): roots 01-05 -> 1,
+#' 06-09 -> 2, 10-14 -> 3, 15-20 -> 4. Write it with
+#' [.write_gdelt_fixture_zip()].
+#'
+#' @param sqldate An 8-digit integer `SQLDATE` shared by every row.
+#' @keywords internal
+.make_gdelt_quadclass_rows <- function(sqldate = 20200101L) {
+  rows <- .make_gdelt_fixture_rows(sqldate = sqldate, id_offset = 700000000)
+  root <- sprintf("%02d", 1:20)
+  rows$EventRootCode <- root
+  rows$EventBaseCode <- paste0(root, "0")
+  rows$EventCode <- paste0(root, "0")
+  rows$QuadClass <- rep(1:4, times = c(5, 4, 5, 6))
+  rows
+}

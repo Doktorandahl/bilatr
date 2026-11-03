@@ -25,10 +25,9 @@ or a character vector of raw CmdStan CSV file paths.}
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
 \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
 \code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
-errors if neither is found. Stan data saved by \code{assemble_stan_data()}
-(bilatr 0.11.0 and earlier) works too.
+errors if neither is found.
 It must carry its \code{country_codes} attribute (built only from actor
-columns; \code{assemble_stan_data()} added it in 0.7.0).}
+columns).}
 
 \item{probs}{Posterior quantiles to report alongside the mean.}
 

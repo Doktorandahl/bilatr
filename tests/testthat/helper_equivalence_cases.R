@@ -9,11 +9,39 @@
 #   grouping_var, years, resolution, directed, actor1, actor2, date
 #   prep        named list of the Stan-data arguments shared by
 #               assemble_stan_data() and prepare_stan_data()
-#               (reference_category, min_n_events, chunk_size, ...)
+#               (reference_category, min_n_events, chunk_size, ...);
+#               chunk_size is 100 unless a case sets it
 # `years = a:b` maps to aggregate_events(start = "a-01-01", end = "b-12-31").
 #
 # Do not edit a case without regenerating the reference against a
 # <= 0.12.0b tree: the stored outputs only mean something for these inputs.
+
+# This is a regression test of aggregate_events()/prepare_stan_data(),
+# not of the CAMEO schemes. So the QuadClass/PentaClass columns of the
+# recoded cases come from the frozen copies below (the mappings the
+# reference was built with, keyed by root code), not from cameo_lookup:
+# a later change to the schemes must not change these inputs.
+.frozen_quad_class <- c(
+  "01" = 1L, "02" = 1L, "03" = 1L, "04" = 1L, "05" = 1L,
+  "06" = 2L, "07" = 2L, "08" = 2L, "09" = 2L,
+  "10" = 3L, "11" = 3L, "12" = 3L, "13" = 3L, "14" = 3L,
+  "15" = 4L, "16" = 4L, "17" = 4L, "18" = 4L, "19" = 4L, "20" = 4L
+)
+.frozen_penta_class <- c(
+  "01" = 0L, "02" = 0L, "03" = 1L, "04" = 1L, "05" = 1L,
+  "06" = 2L, "07" = 2L, "08" = 2L, "09" = 2L,
+  "10" = 3L, "11" = 3L, "12" = 3L, "13" = 3L, "14" = 4L,
+  "15" = 4L, "16" = 3L, "17" = 4L, "18" = 4L, "19" = 4L, "20" = 4L
+)
+
+# recode_cameo(), then QuadClass/PentaClass from the frozen mappings.
+recode_with_frozen_classes <- function(events) {
+  events <- suppressMessages(recode_cameo(events, code_col = "EventCode"))
+  root <- substr(events$EventCode, 1, 2)
+  events$QuadClass <- unname(.frozen_quad_class[root])
+  events$PentaClass <- unname(.frozen_penta_class[root])
+  events
+}
 
 fake_events_recoded <- function(...) {
   events <- make_fake_events(...)
@@ -24,7 +52,7 @@ fake_events_recoded <- function(...) {
     SQLDATE = c(20160315L, 20170704L, 20180101L),
     EventCode = c("040", "190", "040")
   ))
-  suppressMessages(recode_cameo(events, code_col = "EventCode"))
+  recode_with_frozen_classes(events)
 }
 
 # Events with an "action" column whose class "9" occurs only in 2010 and
@@ -70,7 +98,7 @@ iso_events <- function() {
     SQLDATE = 20180101L,
     EventCode = sample(bilatr::cameo_lookup$CAMEOEVENTCODE, 41, replace = TRUE)
   )
-  suppressMessages(recode_cameo(iso, code_col = "EventCode"))
+  recode_with_frozen_classes(iso)
 }
 
 mixed_case_events <- function() {
@@ -85,10 +113,16 @@ mixed_case_events <- function() {
 equivalence_case <- function(events, grouping_var, years, resolution, directed = TRUE, ...,
                              actor1 = "Actor1CountryCode", actor2 = "Actor2CountryCode",
                              date = "SQLDATE") {
+  prep <- list(...)
+  # The reference was built when chunk_size defaulted to 100; pass it
+  # explicitly now that the default is 1.
+  if (!"chunk_size" %in% names(prep)) {
+    prep <- c(list(chunk_size = 100), prep)
+  }
   list(
     events = events, grouping_var = grouping_var, years = years, resolution = resolution,
     directed = directed, actor1 = actor1, actor2 = actor2, date = date,
-    prep = list(...)
+    prep = prep
   )
 }
 

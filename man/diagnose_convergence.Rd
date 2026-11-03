@@ -13,7 +13,7 @@ diagnose_convergence(
   max_memory_mb = 8192,
   chunk_size = NULL,
   n_cores = 1L,
-  stan_model = .BILATR_DEFAULT_MODEL
+  stan_model = NULL
 )
 }
 \arguments{
@@ -46,11 +46,16 @@ into that one read instead of being separate. This is the path that
 matters for production Stan output too large to read normally
 (tested against panels with millions of Tier 3 columns).}
 
-\item{n_dt}{A data frame with a dyad-id column (matching \code{"dyad..."})
-and an observation-count column (matching \code{"n_dt"}/\code{"n_obs"}/
-\code{"n_events"}), or a named numeric vector of counts keyed by dyad id.
-Only required when \code{tiers} includes \code{2} and/or \code{3} (Tier 1 has no
-per-dyad structure to join against \code{n_dt}).}
+\item{n_dt}{Each dyad's total number of events, which tiers 2 and 3
+screen diagnostics against. \code{NULL} (default) computes it from the
+fit's Stan data (\code{apply(stan_data$Y, 1, sum)}), found as for
+\code{\link[=extract_theta]{extract_theta()}}: \code{attr(fit, "stan_data")}, or the
+\verb{*_stan_data.rds} file next to CSV paths. To pass your own: a data
+frame with a dyad column (\code{dyad_id}, or \code{dyad} with dyad names as in
+\code{attr(stan_data, "dyad_ids")}) and a count column (\code{n_dt}, \code{n_obs},
+\code{n_events} or \code{n}), or a numeric vector named by dyad id or name.
+Not used when \code{tiers = 1}. With a \code{draws} object, which carries no
+Stan data, \code{n_dt} must be supplied for tiers 2 and 3.}
 
 \item{rhat_threshold}{Rhat values strictly above this are flagged.
 Defaults to \code{1.01} (Vehtari et al. 2021).}
@@ -130,12 +135,14 @@ genuine memory/wall-time trade-off, not a free choice, so consider
 an explicit, moderate value for a memory-constrained job rather
 than the largest available.}
 
-\item{stan_model}{(0.7.1) Name registered in \code{.bilatr_stan_models}; see
-\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}. Used
-only to decide whether \code{gamma} (the experimental \code{stable_gamma}
-variant's country-level offset) gets its own report element instead
-of flooding Tier 1 -- see \verb{@return}'s \code{gamma} element. Rhat/ESS
-themselves need no orientation info regardless of \code{stan_model}.}
+\item{stan_model}{The model that was fit: \code{"stable"}, \code{"ou"} or
+\code{"stable_gamma"}. \code{NULL} (default) uses the model recorded on the fit
+(by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}), on its Stan data, or in the
+CmdStan CSV header, else assumes \code{"stable"} with a message. Giving a
+model that contradicts the recorded one is an error. Used only to
+decide whether \code{gamma} (the \code{stable_gamma} model's country-level
+offset) gets its own report element instead of flooding Tier 1 (see
+the \code{gamma} element below).}
 }
 \value{
 A list of class \code{bilatr_diagnostics} with elements:
@@ -213,17 +220,17 @@ of which kind of \code{fit} produced it.
 }
 \examples{
 \dontrun{
-diag <- diagnose_convergence(fit, n_dt = dplyr::count(events, dyad, wt = 1))
+diag <- diagnose_convergence(fit)
 diag
 diag$tier1
 
-# only the cheap, always-important global/shared parameters, and no
-# need to supply n_dt at all:
+# only the cheap, always-important global/shared parameters:
 diagnose_convergence(fit, tiers = 1)
 
-# a completed SLURM run, never read into this R session: Tier 3 is
-# read and summarised in memory-bounded chunks rather than all at once
+# CmdStan CSV files from an earlier run, with the *_stan_data.rds file
+# that fit_panel(output_dir = ) wrote next to them: Tier 3 is read and
+# summarized in memory-bounded chunks rather than all at once
 csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-diagnose_convergence(csv_files, n_dt = n_dt, max_memory_mb = 4096)
+diagnose_convergence(csv_files, max_memory_mb = 4096)
 }
 }

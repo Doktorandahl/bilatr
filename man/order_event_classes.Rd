@@ -16,11 +16,13 @@ Character vector of unique classes in anchor order.
 }
 \description{
 Puts \code{reference_category} first (if supplied and present), with all other
-classes sorted alphabetically after it. This ordering is what implements
+classes after it in C-locale, numeric-aware order (\code{"2"} before \code{"10"},
+digits before letters, upper case before lower case). This ordering is what implements
 the model's identification constraint on the R side: \code{stable}/\code{ou} fold
 \code{alpha[1]}'s (the first column's) sign into the reported \code{alpha}/\code{theta}
 (see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-so the reference/neutral class anchors alpha's sign and scale. All
+so the reference class anchors the sign of the latent scale (see the
+\code{reference_category} argument of \code{\link[=prepare_stan_data]{prepare_stan_data()}}). All
 remaining \code{alpha[2:A]} are freely estimated.
 }
 \keyword{internal}

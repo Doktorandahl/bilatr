@@ -29,12 +29,68 @@ test_that("quadclass_eventcodes lists the root codes feeding each class and NAs 
   expect_true(is.na(quadclass_eventcodes(5L)))
 })
 
-test_that("assign_penta carves out verbal cooperation, protest, and reduce-relations", {
+test_that("assign_penta splits out make statement and moves protest and reduce relations", {
   expect_equal(assign_penta(c("01", "02"), assign_quad(c("01", "02"))), c(0L, 0L))
   expect_equal(assign_penta("14", assign_quad("14")), 4L)
   expect_equal(assign_penta("16", assign_quad("16")), 3L)
   # everything else inherits quad
   expect_equal(assign_penta("19", assign_quad("19")), assign_quad("19"))
+})
+
+test_that("assign_quad() is GDELT's own QuadClass mapping", {
+  # As observed in raw GDELT 1.0 files (data-raw/quadclass_gdelt_check.md).
+  gdelt <- rep(1:4, times = c(5, 4, 5, 6))
+  expect_identical(assign_quad(sprintf("%02d", 1:20)), gdelt)
+})
+
+test_that("PentaClass is QuadClass except roots 01-02 (to 0), 14 (to 4) and 16 (to 3)", {
+  root <- sprintf("%02d", 1:20)
+  quad <- assign_quad(root)
+  expected <- dplyr::case_when(
+    root %in% c("01", "02") ~ 0L,
+    root == "14" ~ 4L,
+    root == "16" ~ 3L,
+    TRUE ~ quad
+  )
+  expect_identical(assign_penta(root, quad), expected)
+  expect_identical(
+    split(root, assign_penta(root, quad)),
+    list(
+      "0" = c("01", "02"), "1" = c("03", "04", "05"), "2" = c("06", "07", "08", "09"),
+      "3" = c("10", "11", "12", "13", "16"), "4" = c("14", "15", "17", "18", "19", "20")
+    )
+  )
+})
+
+test_that("cameo_lookup's QuadClass/PentaClass event codes are the roots each class holds", {
+  roots_by_class <- function(class) {
+    lk <- cameo_lookup
+    roots <- split(substr(lk$CAMEOEVENTCODE, 1, 2), lk[[class]])
+    vapply(roots, function(r) paste(sort(unique(r)), collapse = ", "), character(1))
+  }
+  for (scheme in c("QuadClass", "PentaClass")) {
+    derived <- roots_by_class(scheme)
+    stored <- unique(cameo_lookup[c(scheme, paste0(scheme, "EventCodes"))])
+    expect_identical(nrow(stored), length(derived), label = scheme)
+    expect_identical(
+      stored[[2]][match(names(derived), stored[[1]])], unname(derived),
+      label = paste0(scheme, "EventCodes")
+    )
+  }
+  expect_identical(
+    unname(roots_by_class("PentaClass")),
+    pentaclass_eventcodes(0:4)
+  )
+  expect_identical(
+    unname(roots_by_class("QuadClass")),
+    quadclass_eventcodes(1:4)
+  )
+})
+
+test_that("PentaClass_modified is PentaClass, with QuadClass-1 codes scoring at most 1 in class 0", {
+  lk <- cameo_lookup
+  expected <- ifelse(lk$QuadClass == 1L & lk$GoldsteinScore <= 1, 0L, lk$PentaClass)
+  expect_identical(lk$PentaClass_modified, expected)
 })
 
 test_that("pentaclass_name labels the 0-4 classes and NAs anything else", {

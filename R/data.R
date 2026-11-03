@@ -13,36 +13,44 @@
 #'     code.}
 #'   \item{GoldsteinScore}{Numeric. Goldstein conflict-cooperation score,
 #'     ranging from -10 (most conflictual) to 10 (most cooperative).}
-#'   \item{QuadClass}{Integer, 1-4. 1 = verbal cooperation, 2 = material
-#'     cooperation, 3 = verbal conflict, 4 = material conflict.}
+#'   \item{QuadClass}{Integer, 1-4. The same mapping as GDELT's own
+#'     `QuadClass` column: 1 = verbal cooperation (roots 01-05),
+#'     2 = material cooperation (06-09), 3 = verbal conflict (10-14),
+#'     4 = material conflict (15-20).}
 #'   \item{QuadClassName}{Character. Human-readable label for
 #'     `QuadClass`; see [quadclass_name()].}
 #'   \item{QuadClassEventCodes}{Character. Comma-separated CAMEO root
 #'     codes underlying each `QuadClass` class; see
 #'     [quadclass_eventcodes()].}
-#'   \item{PentaClass}{Integer, 0-4. As QuadClass, but with verbal
-#'     cooperation (0) split out from material cooperation (1), and
-#'     protest/reduce-relations events reassigned to their own classes.}
+#'   \item{PentaClass}{Integer, 0-4. As QuadClass, except that roots
+#'     01-02 (make public statement, appeal) form class 0, root 14
+#'     (protest) moves to class 4 (material conflict), and root 16
+#'     (reduce relations) moves to class 3 (verbal conflict): 0 = make
+#'     statement (roots 01-02), 1 = verbal cooperation (03-05),
+#'     2 = material cooperation (06-09), 3 = verbal conflict (10-13, 16),
+#'     4 = material conflict (14, 15, 17-20).}
 #'   \item{PentaClassName}{Character. Human-readable label for
 #'     `PentaClass`; see [pentaclass_name()].}
 #'   \item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
 #'     codes underlying each `PentaClass` class; see
 #'     [pentaclass_eventcodes()].}
-#'   \item{PentaClass_modified}{Integer, 0-4. As PentaClass, but low-
-#'     intensity verbal cooperation (Goldstein score <= 1) is folded into
-#'     class 0, useful as a near-neutral reference category.}
+#'   \item{PentaClass_modified}{Integer, 0-4. As PentaClass, except that
+#'     every code with `QuadClass` 1 and `GoldsteinScore` at most 1 is
+#'     class 0. Class 0 is therefore roots 01-02 plus the codes of roots
+#'     03-05 scoring at most 1 (in this table `04`, `040` and `041`).}
 #'   \item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
-#'     root codes that relocates `016` into the Reject class and
-#'     `018`/`019` into the diplomatic-cooperation class, splits root
-#'     `04` ("Consult") by kind of consultation, splits root `13`
-#'     ("Threaten") off from force posture only where noted, and merges
-#'     Investigate (root `09`) and Demand (root `10`) into a single
-#'     "Investigate or demand" class; see
-#'     [assign_modified_root_code()]. Blank (`NA`) on the top-level
-#'     (two-digit) row for a root whose own event codes don't all belong
-#'     to the same `ModifiedRootCode` class (currently roots `01` and
-#'     `04`); populated on that root's individual sub-codes as normal.
-#'     This scheme was previously named `ERC16NZ`.}
+#'     root codes that moves `016` (deny responsibility) into Reject
+#'     (class 13) and `018`/`019` (make empathetic comment, express
+#'     accord) into diplomatic cooperation (class 7); splits root `04`
+#'     (consult) into unspecified (`040`), meet, discuss, or visit
+#'     (`041`-`044`) and negotiate or mediate (`045`-`046`); merges
+#'     Investigate (`09`) and Demand (`10`); merges Threaten (`13`) and
+#'     Exhibit force posture (`15`); and merges `18`-`20` into "Assault,
+#'     fight, or mass violence". See [assign_modified_root_code()].
+#'     Blank (`NA`) on the top-level (two-digit) row for a root whose own
+#'     event codes don't all belong to the same `ModifiedRootCode` class
+#'     (roots `01` and `04`); populated on that root's individual
+#'     sub-codes as normal.}
 #'   \item{ModifiedRootCodeName}{Character. Human-readable label for
 #'     `ModifiedRootCode`; see [modified_root_code_name()]. `NA`
 #'     wherever `ModifiedRootCode` is blank.}
@@ -52,15 +60,8 @@
 #'     is blank.}
 #' }
 #'
-#' A handful of other classification schemes previously shipped in this
-#' table (`EventRootCode2`, `EventRootCode3`, `EventRootCode4`,
-#' `BilatrClass`, `BilatrClass2`, each with their `*Name`/`*RootCodes`
-#' columns) have been retired from it, and their `assign_*()`/`*_name()`
-#' functions removed entirely (0.10.1; they are no longer attached by
-#' [recode_cameo()], and reading pre-0.10.1 output that used them needs
-#' an older bilatr install). [event_class_labels()] is the current,
-#' data-driven way to get a class's human-readable label from a fitted
-#' model's `stan_data`, for any scheme that still has a `*Name` column
+#' [event_class_labels()] gives a class's human-readable label from a
+#' fitted model's `stan_data`, for each scheme with a `*Name` column
 #' here (`QuadClass`, `PentaClass`, `ModifiedRootCode`).
 #' @source Built by `data-raw/build_cameo_lookup.R` in the source
 #'   repository. CAMEO event codes and labels from Schrodt (2012), *CAMEO
@@ -73,17 +74,21 @@
 #'
 #' Yearly latent trajectories (\eqn{\theta}) of the level of bilateral
 #' relations for every country pair with at least one recorded event,
-#' estimated with bilatr from GDELT event data. `theta_directed` holds the
-#' directed model (one series per sender-receiver pair); `theta_undirected`
-#' holds the undirected model (one series per unordered pair, events in
-#' both directions pooled). Each row gives both the smoothed estimate --
-#' the posterior of \eqn{\theta_{dt}} given all years, 1991-2025 -- and
-#' the forward-filtered estimate, which uses only events up to and
-#' including year \eqn{t} and so is the quantity to use when no
-#' look-ahead is allowed (e.g. as a predictor in forecasting).
+#' estimated with bilatr from GDELT 1.0 event data. `theta_directed` holds
+#' the directed model (one series per sender-receiver pair);
+#' `theta_undirected` holds the undirected model (one series per unordered
+#' pair, events in both directions pooled). Each row gives both the
+#' smoothed estimate -- the posterior of \eqn{\theta_{dt}} given all
+#' years, 1991-2025 -- and the forward-filtered estimate, which uses only
+#' events up to and including year \eqn{t} and so is the quantity to use
+#' when no look-ahead is allowed (e.g. as a predictor in forecasting).
 #'
-#' Higher values of \eqn{\theta} indicate ??? (more cooperative / more
-#' conflictual) relations. The sign is fixed by the model's orientation
+#' **Higher values of \eqn{\theta} mean more cooperative relations.** The
+#' reference category is `ModifiedRootCode` 5, "Consult: meet, discuss, or
+#' visit", a cooperative class, and \eqn{\theta} is oriented so that higher
+#' values make the reference category more likely relative to the other
+#' action types (see the `reference_category` argument of
+#' [prepare_stan_data()]). The sign is fixed by the model's orientation
 #' fold (\eqn{\alpha_1 \ge 0}; see the `stable_gamma` Stan program's
 #' header), the location by the \eqn{\theta_0} prior (mean exactly 0
 #' across dyads) and the scale by normalising the discrimination
@@ -107,9 +112,13 @@
 #'   `theta_undirected` has 195,106 rows (9,139 undirected dyads). Both
 #'   cover the same 189 countries. Columns:
 #' \describe{
-#'   \item{dyad}{Character. Three-letter country codes joined by `_`,
-#'     e.g. `"SWE_NOR"`. Directed: `"SENDER_RECEIVER"` ???. Undirected:
-#'     the two codes in alphabetical order, so `"NOR_SWE"` only.}
+#'   \item{dyad}{Character. Two three-letter country codes joined by `_`.
+#'     The codes are GDELT's `Actor1CountryCode`/`Actor2CountryCode`
+#'     values, which are CAMEO country codes; every code in these tables
+#'     is also the country's ISO 3166-1 alpha-3 code. Directed:
+#'     `"SENDER_RECEIVER"`, Actor1 then Actor2, so `"SWE_NOR"` is Sweden
+#'     toward Norway. Undirected: the two codes in alphabetical (C-locale)
+#'     order, so `"NOR_SWE"` only.}
 #'   \item{year}{Integer, 1991-2025.}
 #'   \item{mean}{Numeric. Posterior mean of the smoothed \eqn{\theta}.}
 #'   \item{\code{5\%}, \code{95\%}}{Numeric. 5th and 95th percentiles of
@@ -124,25 +133,46 @@
 #'     state mean. These reflect hyperparameter uncertainty only, not the
 #'     filter's own state uncertainty (`theta_filtered_sd`), which is why
 #'     they are much narrower than the smoothed interval and stay constant
-#'     through years without events. ???}
+#'     through years without events. They are not a credible interval for
+#'     the filtered \eqn{\theta}.}
 #' }
 #'
 #' The interval columns have non-syntactic names, so they must be quoted
 #' with backticks in R code.
 #'
-#' @details Both models were fitted with bilatr 0.10.2 (commit `4a4ffd5`)
-#'   via `runscripts/submit_bilatr_16cat.R`: the `stable_gamma` Stan
-#'   program, yearly resolution, events grouped by `ModifiedRootCode`
-#'   (16 of its 18 classes occur in the data, so \eqn{A = 16}) with
-#'   reference category 5 ("Consult: meet, discuss, or visit"),
-#'   `min_n_events = 1`, and 4 chains of 1,000 warmup and 1,000 sampling
-#'   iterations each. The theta summaries were then processed with
-#'   `runscripts/process_theta_16cat.R` and saved here by
-#'   `data-raw/theta_trajectories.R`.
+#' @details
+#' **Events.** GDELT 1.0 events (the historical backfiles and the daily
+#' updates) dated 1991-01-01 through 2025-12-31, accessed 2026-01-31. An
+#' event is kept when both actors carry `GOV`, `MIL` or `SPY` in any of
+#' their `Type1Code`/`Type2Code`/`Type3Code` fields and the two actors'
+#' country codes differ. This is
+#' `read_gdelt(actor_types = c("GOV", "MIL", "SPY"), actor_type_match =
+#' "both", cross_border = TRUE)`, the defaults. All events are used, root
+#' events or not, with no filter on event codes. In addition, both actors'
+#' country codes map to a Correlates of War state, so GDELT's regional and
+#' other non-state codes (such as `"AFR"`, `"EUR"`, `"PSE"` or `"HKG"`) do
+#' not occur.
 #'
-#' @source Estimated from GDELT ??? (version, download date, actor and
-#'   event filters) events between state actors of ??? countries, 1991-2025.
-#'   Please cite ??? when using these data.
+#' **Model.** The `stable_gamma` Stan program, at yearly resolution, with
+#' events grouped by `ModifiedRootCode` (16 of its 18 classes occur in the
+#' data, so \eqn{A = 16}), reference category 5 ("Consult: meet, discuss,
+#' or visit"), `min_n_events = 1`, and 4 chains of 1,000 warmup and 1,000
+#' sampling iterations each. Estimated with an earlier development version
+#' of bilatr; the Stan program and the data preparation are unchanged in
+#' this version.
+#'
+#' Please cite the bilatr methods article (forthcoming); see
+#' `citation("bilatr")`.
+#'
+#' @source GDELT 1.0 event data, The GDELT Project,
+#'   <https://www.gdeltproject.org/>, accessed 2026-01-31.
+#' @references
+#' Leetaru, K. and Schrodt, P. A. (2013). "GDELT: Global Data on Events,
+#' Location and Tone, 1979–2012." Paper presented at the International
+#' Studies Association annual convention, San Francisco.
+#'
+#' The GDELT Project. Global Database of Events, Language, and Tone
+#' (GDELT). Accessed 31 January 2026, <https://gdeltproject.org/>.
 #' @seealso [cameo_lookup] for the `ModifiedRootCode` classes;
 #'   [diagnose_and_extract_bilatr()] for how the theta summaries are
 #'   extracted from a fit.

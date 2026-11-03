@@ -13,6 +13,8 @@ first post-warmup data row -- replaces \code{cmdstanr:::read_csv_metadata()}}
 \value{
 A list with \code{skip} (integer: number of lines to pass so the
 next line is the first post-warmup draw -- i.e. \code{fread(skip = this)}'s first row), \code{header_line} (the raw, unparsed header line),
+\code{model} (CmdStan's model name from the \verb{model = } config line, e.g.
+\code{"bilatr_alphanorm_model"}, or \code{NA} if absent),
 \code{num_samples}/\code{num_warmup}/\code{thin} (integers) and \code{save_warmup}
 (logical), parsed from the config block, and \code{num_post_warmup_draws}
 (\code{ceiling(num_samples / thin)}, the same arithmetic

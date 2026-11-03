@@ -134,3 +134,32 @@ test_that("icc_curves()/icc_crossings() run end to end on a real CmdStan fixture
   expect_s3_class(p1, "ggplot")
   expect_s3_class(p2, "ggplot")
 })
+
+test_that("icc_curves() range-checks integer categories and an integer country", {
+  fx <- .make_icc_fixture(A = 4)
+  A <- 4
+  n_countries <- 3
+  gamma_names <- as.vector(outer(seq_len(A), seq_len(n_countries), function(k, c) sprintf("gamma[%d,%d]", k, c)))
+  gamma <- posterior::as_draws_array(array(
+    0.1, dim = c(50, 1, length(gamma_names)), dimnames = list(NULL, NULL, gamma_names)
+  ))
+  fit <- list(draws = function(variables) {
+    if (identical(variables, "gamma")) gamma else fx$fit$draws(variables)
+  })
+  icc <- function(...) icc_curves(fit, theta_range = c(-1, 1), n_grid = 3, ...)
+
+  expect_error(icc(categories = c(1, 5)), "icc_curves\\(\\): integer `categories` must be action indices in 1:4")
+  expect_error(icc(categories = 0), "in 1:4")
+  expect_error(icc(categories = 1.5), "in 1:4")
+  expect_identical(unique(suppressMessages(icc(categories = c(4, 2)))$action_index), c(4L, 2L))
+
+  # n_countries from the gamma draws when there is no stan_data ...
+  expect_error(icc(stan_model = "stable_gamma", country = 4), "an integer `country` must be a single country index in 1:3")
+  expect_error(icc(stan_model = "stable_gamma", country = 0), "in 1:3")
+  expect_error(icc(stan_model = "stable_gamma", country = c(1, 2)), "in 1:3")
+  expect_s3_class(icc(stan_model = "stable_gamma", country = 3), "bilatr_icc_curves")
+  # ... and from stan_data when given
+  sd <- fx$truth$stan_data
+  sd$n_countries <- 2L
+  expect_error(icc(stan_data = sd, stan_model = "stable_gamma", country = 3), "in 1:2")
+})

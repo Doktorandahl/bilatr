@@ -23,12 +23,12 @@ Name-vector presets over the full 58-column schema (\code{?bilatr_gdelt_layout})
 for use as \code{\link[=read_gdelt]{read_gdelt()}}'s \code{columns} argument.
 }
 \details{
-GDELT's own \code{QuadClass} is deliberately left out of \code{"core"}:
-\code{\link[=recode_cameo]{recode_cameo()}} attaches its own \code{QuadClass} derived from \code{EventCode},
-and if both are present it keeps the existing column and warns --
-correct, but easy to trip over if you expect \code{"core"} to include
-GDELT's \code{QuadClass}. Request it explicitly (or via \code{"all"}) if you want
-GDELT's own value instead of \code{recode_cameo()}'s.
+\code{"core"} leaves out GDELT's own \code{QuadClass} only because
+\code{\link[=recode_cameo]{recode_cameo()}} supplies it: \code{recode_cameo()}'s \code{QuadClass} is the same
+mapping from the root code (see \link{cameo_lookup}), so the two columns
+agree row for row. Requesting GDELT's column as well (explicitly, or
+via \code{"all"}) gives \code{recode_cameo()} an existing \code{QuadClass}, which it
+keeps, with a warning.
 }
 \examples{
 gdelt_columns("core")

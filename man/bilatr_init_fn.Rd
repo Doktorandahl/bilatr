@@ -10,21 +10,26 @@ bilatr_init_fn(stan_data, stan_model = .BILATR_DEFAULT_MODEL)
 \item{stan_data}{A Stan data list as returned by \code{\link[=prepare_stan_data]{prepare_stan_data()}}
 (or attached to a fit by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}).}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}.}
+\item{stan_model}{A registered model name.}
 }
 \value{
-A zero-argument function suitable for \code{cmdstanr}'s \code{init}
-argument.
+A zero-argument function returning a named list of initial
+values.
 }
 \description{
 Initial values are model-specific: \code{stan_model} selects among the
 registered models' distinct parameter sets (a non-centered
 \code{process_noise} hierarchy vs. an OU/AR(1) \code{sd_stat} hierarchy, etc.).
-\code{stable_gamma} (0.7.0) gets its own branch: \code{stable}'s init list plus
-\code{gamma_z}/\code{sigma_gamma}, both started small (not exactly 0 -- same
-reasoning as \code{alpha_raw}'s non-zero start: an all-zero init is valid
-but leaves no spread to move away from the prior mode with).
-Unrecognised names are rejected upstream by \code{\link[=.resolve_stan_model]{.resolve_stan_model()}},
-so the \code{stop()} below should be unreachable in practice.
+\code{stable_gamma} gets \code{stable}'s init list plus \code{gamma_z}/\code{sigma_gamma},
+both started small (not exactly 0 -- same reasoning as \code{alpha_raw}'s
+non-zero start: an all-zero init is valid but leaves no spread to move
+away from the prior mode with).
+}
+\details{
+The returned function draws fresh random values (\code{alpha_raw},
+\code{z_theta0}/\code{mu_dyad_raw}, \code{gamma_z}) on every call, so calling it once
+per chain gives each chain its own starting point. It draws from the
+global random-number stream; \code{\link[=.bilatr_draw_inits]{.bilatr_draw_inits()}} seeds each call
+when the fit has a \code{seed}.
 }
 \keyword{internal}

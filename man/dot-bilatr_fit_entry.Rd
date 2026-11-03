@@ -23,7 +23,8 @@
 \item{...}{Passed to \code{CmdStanModel$sample()}.}
 }
 \value{
-The \code{CmdStanMCMC} fit, with \code{attr(fit, "stan_data")} set.
+The \code{CmdStanMCMC} fit, with \code{attr(fit, "stan_data")} and
+\code{attr(fit, "stan_model")} set.
 }
 \description{
 Resolves \code{data} to a Stan data list, runs every check that does not
@@ -32,7 +33,7 @@ via \code{\link[=fit_bilatr]{fit_bilatr()}}, and attaches \code{stan_data} to th
 }
 \details{
 \enumerate{
-\item canonicalises \code{stan_model};
+\item canonicalizes \code{stan_model};
 \item dispatches on \code{data}: a prepared \code{stan_data} list is used as-is
 (error if any data-preparation argument was supplied); a data frame
 goes through \code{\link[=prepare_stan_data]{prepare_stan_data()}}; anything else is an error;
@@ -40,7 +41,11 @@ goes through \code{\link[=prepare_stan_data]{prepare_stan_data()}}; anything els
 \code{fit_panel()}), then that a \code{stan_data} list has \code{T}, \code{A}, \code{Y} and
 \code{is_obs};
 \item for \code{stable_gamma}: errors if the country fields are absent, and
-warns if \code{w_send} was imputed.
+warns if \code{w_send} was imputed;
+\item records the model as \code{attr(stan_data, "stan_model")} (replacing,
+with a \code{message()}, a different value already on a prepared list);
+\item draws one list of initial values per chain with
+\code{\link[=.bilatr_draw_inits]{.bilatr_draw_inits()}}, unless \code{init} was passed through \code{...}.
 }
 }
 \keyword{internal}

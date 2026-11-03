@@ -461,3 +461,42 @@ test_that("read_gdelt() output passes validate_bilatr_events() after recode_came
   sd <- suppressMessages(prepare_stan_data(agg, min_n_events = 1))
   expect_gt(sd$D, 0L)
 })
+
+test_that("read_gdelt() and count_gdelt_actor_types() error clearly on an empty file, naming it", {
+  dir <- withr::local_tempdir()
+  for (f in c("20200101.export.CSV.zip", "20200102.export.CSV", "200501.zip")) {
+    path <- file.path(dir, f)
+    file.create(path)
+    pattern <- paste0("'[^']*", gsub(".", "\\.", f, fixed = TRUE), "' is empty \\(no rows\\)")
+    expect_error(read_gdelt(path), paste0("read_gdelt\\(\\): ", pattern))
+    expect_error(count_gdelt_actor_types(path), paste0("count_gdelt_actor_types\\(\\): ", pattern))
+  }
+})
+
+test_that("recode_cameo()'s QuadClass equals GDELT's own QuadClass for every row", {
+  if (!nzchar(Sys.which("zip"))) {
+    skip("no `zip` binary on PATH; cannot build GDELT test fixtures")
+  }
+  fx <- .build_gdelt_fixtures()
+  dir <- withr::local_tempdir()
+  quad_zip <- file.path(dir, "20200101.export.CSV.zip")
+  .write_gdelt_fixture_zip(.make_gdelt_quadclass_rows(), quad_zip, n_cols = 58L)
+  files <- c(
+    file.path(fx$dir, fx$daily_file), file.path(fx$dir, fx$monthly_file), quad_zip
+  )
+
+  for (f in files) {
+    raw <- read_gdelt(
+      f,
+      columns = c("EventRootCode", "EventCode", "QuadClass"),
+      actor_types = NULL, cross_border = FALSE
+    )
+    # recode_cameo() leaves an existing QuadClass alone (with a warning),
+    # so keep GDELT's under another name.
+    raw <- dplyr::rename(raw, gdelt_quad_class = "QuadClass")
+    recoded <- recode_cameo(raw)
+    expect_identical(recoded$QuadClass, recoded$gdelt_quad_class, label = basename(f))
+  }
+  # the per-root fixture covers all 20 roots
+  expect_setequal(recoded$EventRootCode, sprintf("%02d", 1:20))
+})

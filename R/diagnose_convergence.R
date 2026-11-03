@@ -72,9 +72,6 @@
 #' Computed inside the function body, not as a top-level constant, so it
 #' doesn't depend on `R/model_registry.R` having been sourced first.
 #'
-#' This function's name and output must not change across versions: the
-#' runscripts call `bilatr:::.bilatr_sign_ambiguous_raw_names()` directly.
-#'
 #' @return Character vector of variable base names.
 #' @keywords internal
 .bilatr_sign_ambiguous_raw_names <- function() {
@@ -162,43 +159,134 @@
 
 #' Normalize the `n_dt` argument to a two-column tibble
 #'
-#' @param n_dt A data frame with `dyad`/`n_dt`-like columns, or a named
-#'   numeric vector keyed by dyad id.
+#' Accepts a data frame with a dyad column and a count column, or a named
+#' numeric vector. The dyads may be given by integer `dyad_id` or by
+#' dyad name (as in the `dyad` column of `attr(stan_data, "dyad_ids")`);
+#' names are mapped to `dyad_id` through `stan_data`, and names not found
+#' there are an error.
+#'
+#' @param n_dt A data frame with a dyad column (`dyad_id`, else the first
+#'   column whose name starts with `"dyad"`) and a count column (matching
+#'   `"n_dt"`/`"n_obs"`/`"n_events"`, or named `n`, as from
+#'   [dplyr::count()]), or a named numeric vector keyed by dyad id or
+#'   name.
+#' @param stan_data The Stan data list, or `NULL`. Needed only for
+#'   name-keyed input.
 #' @return A tibble with columns `dyad_id` (integer) and `n_dt` (numeric).
 #' @keywords internal
-.normalize_n_dt <- function(n_dt) {
+.normalize_n_dt <- function(n_dt, stan_data = NULL) {
   if (is.data.frame(n_dt)) {
     nm <- names(n_dt)
-    dyad_col <- nm[stringr::str_detect(tolower(nm), "^dyad")][1]
+    dyad_col <- if ("dyad_id" %in% nm) "dyad_id" else nm[stringr::str_detect(tolower(nm), "^dyad")][1]
     n_dt_col <- nm[stringr::str_detect(tolower(nm), "n_dt|n_obs|n_events")][1]
+    if (is.na(n_dt_col) && "n" %in% nm) {
+      n_dt_col <- "n"
+    }
     if (is.na(dyad_col) || is.na(n_dt_col)) {
       stop(
-        "`n_dt` must have a dyad-id-like column (matching \"dyad...\") and ",
-        "an observation-count-like column (matching \"n_dt\"/\"n_obs\"/\"n_events\").",
+        "`n_dt` must have a dyad column (`dyad_id`, or a name starting with \"dyad\") and ",
+        "a count column (matching \"n_dt\"/\"n_obs\"/\"n_events\", or named \"n\").",
         call. = FALSE
       )
     }
-    out <- tibble::tibble(
-      dyad_id = as.integer(n_dt[[dyad_col]]),
-      n_dt = as.numeric(n_dt[[n_dt_col]])
-    )
+    key <- n_dt[[dyad_col]]
+    if (is.factor(key)) key <- as.character(key)
+    counts <- n_dt[[n_dt_col]]
   } else if (is.numeric(n_dt) && !is.null(names(n_dt))) {
-    out <- tibble::tibble(
-      dyad_id = as.integer(names(n_dt)),
-      n_dt = as.numeric(n_dt)
-    )
+    key <- names(n_dt)
+    counts <- n_dt
   } else {
     stop(
-      "`n_dt` must be a data frame with dyad-id and n_dt columns, or a ",
-      "named numeric vector keyed by dyad id.",
+      "`n_dt` must be a data frame with dyad and count columns, or a ",
+      "numeric vector named by dyad id or dyad name.",
       call. = FALSE
     )
   }
 
-  if (anyNA(out$dyad_id)) {
+  dyad_id <- suppressWarnings(as.integer(key))
+  if (anyNA(dyad_id[!is.na(key)]) && is.character(key)) {
+    dyad_id <- .dyad_names_to_ids(key, stan_data)
+  }
+  if (anyNA(dyad_id)) {
     stop("`n_dt` has dyad ids that could not be coerced to integers.", call. = FALSE)
   }
-  out
+  tibble::tibble(dyad_id = dyad_id, n_dt = as.numeric(counts))
+}
+
+#' Map dyad names to `dyad_id` through a Stan data list's `dyad_ids`
+#'
+#' @param dyads Character vector of dyad names.
+#' @param stan_data The Stan data list, or `NULL`.
+#' @return An integer vector of `dyad_id`s, aligned with `dyads`.
+#' @keywords internal
+.dyad_names_to_ids <- function(dyads, stan_data) {
+  ids <- attr(stan_data, "dyad_ids", exact = TRUE)
+  if (is.null(ids)) {
+    stop(
+      "`n_dt` is keyed by dyad name, which needs the Stan data (its `dyad_ids` ",
+      "attribute) to map names to `dyad_id`. Key `n_dt` by `dyad_id` instead, ",
+      "or use a fit that carries its Stan data.",
+      call. = FALSE
+    )
+  }
+  lookup <- dplyr::distinct(ids, .data$dyad, .data$dyad_id)
+  out <- lookup$dyad_id[match(dyads, lookup$dyad)]
+  not_found <- unique(dyads[is.na(out)])
+  if (length(not_found) > 0) {
+    stop(
+      "`n_dt` names dyad(s) not found in the Stan data: ",
+      paste(utils::head(not_found, 10), collapse = ", "),
+      if (length(not_found) > 10) sprintf(" (and %d more)", length(not_found) - 10),
+      ".",
+      call. = FALSE
+    )
+  }
+  as.integer(out)
+}
+
+#' Per-dyad event totals from a Stan data list
+#'
+#' The default `n_dt` of [diagnose_convergence()] and
+#' [diagnose_and_extract_bilatr()]: `apply(stan_data$Y, 1, sum)`, keyed by
+#' `dyad_id`.
+#'
+#' @param stan_data A Stan data list with `D` and `Y`.
+#' @return A tibble with columns `dyad_id` and `n_dt`.
+#' @keywords internal
+.n_dt_from_stan_data <- function(stan_data) {
+  tibble::tibble(
+    dyad_id = seq_len(stan_data$D),
+    n_dt = as.numeric(apply(stan_data$Y, 1, sum))
+  )
+}
+
+#' Resolve the `n_dt` table for tiers 2 and 3
+#'
+#' @param n_dt The caller's `n_dt`, or `NULL`.
+#' @param stan_data The resolved Stan data list, or `NULL`.
+#' @param tiers Validated tiers.
+#' @param caller The calling function's name, for the error.
+#' @return A tibble from [.normalize_n_dt()], or `NULL` when neither tier
+#'   2 nor 3 is requested.
+#' @keywords internal
+.resolve_n_dt <- function(n_dt, stan_data, tiers, caller) {
+  if (!any(c(2L, 3L) %in% tiers)) {
+    return(NULL)
+  }
+  if (!is.null(n_dt)) {
+    return(.normalize_n_dt(n_dt, stan_data))
+  }
+  if (is.null(stan_data) || is.null(stan_data$Y)) {
+    stop(
+      caller, ": `n_dt` (each dyad's number of events) is needed when `tiers` ",
+      "includes 2 or 3, and there is no Stan data to compute it from. Pass `n_dt`, ",
+      "e.g. tibble::tibble(dyad_id = 1:D, n_dt = apply(stan_data$Y, 1, sum)); pass ",
+      "a fit from fit_panel()/fit_dyad_ts(), or CSV files with their ",
+      "*_stan_data.rds, which carry the Stan data; or use `tiers = 1`.",
+      call. = FALSE
+    )
+  }
+  .n_dt_from_stan_data(stan_data)
 }
 
 #' Flag diagnostics that are worse than a smooth sparsity trend predicts
@@ -415,9 +503,9 @@
     dplyr::group_by(dyad_id, n_dt) %>%
     dplyr::summarise(
       n_theta = dplyr::n(),
-      min_ess_bulk = min(ess_bulk, na.rm = TRUE),
-      min_ess_tail = min(ess_tail, na.rm = TRUE),
-      max_rhat = max(rhat, na.rm = TRUE),
+      min_ess_bulk = .min_or_na(ess_bulk),
+      min_ess_tail = .min_or_na(ess_tail),
+      max_rhat = .max_or_na(rhat),
       share_ess_below_threshold = mean(ess_flag, na.rm = TRUE),
       share_rhat_above_threshold = mean(rhat_flag, na.rm = TRUE),
       .groups = "drop"
@@ -431,14 +519,32 @@
       n = dplyr::n(),
       n_rhat_above = sum(.data$rhat_flag, na.rm = TRUE),
       n_ess_below = sum(.data$ess_flag, na.rm = TRUE),
-      max_rhat = max(.data$rhat, na.rm = TRUE),
-      min_ess_bulk = min(.data$ess_bulk, na.rm = TRUE),
-      min_ess_tail = min(.data$ess_tail, na.rm = TRUE),
+      max_rhat = .max_or_na(.data$rhat),
+      min_ess_bulk = .min_or_na(.data$ess_bulk),
+      min_ess_tail = .min_or_na(.data$ess_tail),
       .groups = "drop"
     ) %>%
     dplyr::arrange(.data$base_name)
 
   list(tier3 = tier3, tier3_other = tier3_other)
+}
+
+#' `max()`/`min()` that return `NA` for an all-`NA` input
+#'
+#' For per-group summaries: a group whose values are all `NA` (e.g.
+#' R-hat of constant draws) gives `NA`, not -Inf/Inf with a warning.
+#'
+#' @param x A numeric vector.
+#' @return A single number, or `NA_real_`.
+#' @keywords internal
+.max_or_na <- function(x) {
+  if (all(is.na(x))) NA_real_ else max(x, na.rm = TRUE)
+}
+
+#' @rdname dot-max_or_na
+#' @keywords internal
+.min_or_na <- function(x) {
+  if (all(is.na(x))) NA_real_ else min(x, na.rm = TRUE)
 }
 
 #' Assemble a `bilatr_diagnostics` object from a tier-classified summary
@@ -1186,11 +1292,16 @@
 #'   into that one read instead of being separate. This is the path that
 #'   matters for production Stan output too large to read normally
 #'   (tested against panels with millions of Tier 3 columns).
-#' @param n_dt A data frame with a dyad-id column (matching `"dyad..."`)
-#'   and an observation-count column (matching `"n_dt"`/`"n_obs"`/
-#'   `"n_events"`), or a named numeric vector of counts keyed by dyad id.
-#'   Only required when `tiers` includes `2` and/or `3` (Tier 1 has no
-#'   per-dyad structure to join against `n_dt`).
+#' @param n_dt Each dyad's total number of events, which tiers 2 and 3
+#'   screen diagnostics against. `NULL` (default) computes it from the
+#'   fit's Stan data (`apply(stan_data$Y, 1, sum)`), found as for
+#'   [extract_theta()]: `attr(fit, "stan_data")`, or the
+#'   `*_stan_data.rds` file next to CSV paths. To pass your own: a data
+#'   frame with a dyad column (`dyad_id`, or `dyad` with dyad names as in
+#'   `attr(stan_data, "dyad_ids")`) and a count column (`n_dt`, `n_obs`,
+#'   `n_events` or `n`), or a numeric vector named by dyad id or name.
+#'   Not used when `tiers = 1`. With a `draws` object, which carries no
+#'   Stan data, `n_dt` must be supplied for tiers 2 and 3.
 #' @param rhat_threshold Rhat values strictly above this are flagged.
 #'   Defaults to `1.01` (Vehtari et al. 2021).
 #' @param ess_threshold ESS_bulk/ESS_tail values strictly below this are
@@ -1263,12 +1374,14 @@
 #'   genuine memory/wall-time trade-off, not a free choice, so consider
 #'   an explicit, moderate value for a memory-constrained job rather
 #'   than the largest available.
-#' @param stan_model (0.7.1) Name registered in `.bilatr_stan_models`; see
-#'   [.canonical_stan_model()]. Used
-#'   only to decide whether `gamma` (the experimental `stable_gamma`
-#'   variant's country-level offset) gets its own report element instead
-#'   of flooding Tier 1 -- see `@return`'s `gamma` element. Rhat/ESS
-#'   themselves need no orientation info regardless of `stan_model`.
+#' @param stan_model The model that was fit: `"stable"`, `"ou"` or
+#'   `"stable_gamma"`. `NULL` (default) uses the model recorded on the fit
+#'   (by [fit_panel()]/[fit_dyad_ts()]), on its Stan data, or in the
+#'   CmdStan CSV header, else assumes `"stable"` with a message. Giving a
+#'   model that contradicts the recorded one is an error. Used only to
+#'   decide whether `gamma` (the `stable_gamma` model's country-level
+#'   offset) gets its own report element instead of flooding Tier 1 (see
+#'   the `gamma` element below).
 #' @return A list of class `bilatr_diagnostics` with elements:
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
@@ -1309,18 +1422,18 @@
 #'   }
 #' @examples
 #' \dontrun{
-#' diag <- diagnose_convergence(fit, n_dt = dplyr::count(events, dyad, wt = 1))
+#' diag <- diagnose_convergence(fit)
 #' diag
 #' diag$tier1
 #'
-#' # only the cheap, always-important global/shared parameters, and no
-#' # need to supply n_dt at all:
+#' # only the cheap, always-important global/shared parameters:
 #' diagnose_convergence(fit, tiers = 1)
 #'
-#' # a completed SLURM run, never read into this R session: Tier 3 is
-#' # read and summarised in memory-bounded chunks rather than all at once
+#' # CmdStan CSV files from an earlier run, with the *_stan_data.rds file
+#' # that fit_panel(output_dir = ) wrote next to them: Tier 3 is read and
+#' # summarized in memory-bounded chunks rather than all at once
 #' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' diagnose_convergence(csv_files, n_dt = n_dt, max_memory_mb = 4096)
+#' diagnose_convergence(csv_files, max_memory_mb = 4096)
 #' }
 #' @export
 diagnose_convergence <- function(
@@ -1332,25 +1445,23 @@ diagnose_convergence <- function(
   max_memory_mb = 8192,
   chunk_size = NULL,
   n_cores = 1L,
-  stan_model = .BILATR_DEFAULT_MODEL
+  stan_model = NULL
 ) {
-  # stan_model (0.7.1) is used ONLY to decide has_gamma below (via
-  # .bilatr_model_has_gamma()) -- Rhat/ESS are already invariant to the
-  # alpha/theta reflection symmetry's sign flip (see
-  # .chunked_summarise_csv()'s own docs), so this adds no orientation
-  # logic here, unlike extract_theta()/extract_alpha()/etc.
-  has_gamma <- .bilatr_model_has_gamma(stan_model)
+  caller <- "diagnose_convergence()"
   max_memory_mb_missing <- missing(max_memory_mb)
-
   tiers <- .validate_tiers(tiers)
-  if (any(c(2L, 3L) %in% tiers) && is.null(n_dt)) {
-    stop(
-      "`n_dt` is required when `tiers` includes 2 and/or 3 (Tier 1 alone ",
-      "needs no per-dyad join).",
-      call. = FALSE
-    )
+
+  # The Stan data is looked up only when it is needed: for the model
+  # (when not given) and for the default n_dt.
+  needs_n_dt <- any(c(2L, 3L) %in% tiers) && is.null(n_dt)
+  stan_data <- if (needs_n_dt || is.null(stan_model) || !is.null(n_dt)) {
+    .stan_data_from_fit(fit, NULL, caller, required = FALSE)
   }
-  n_dt_tbl <- if (any(c(2L, 3L) %in% tiers)) .normalize_n_dt(n_dt) else NULL
+  # stan_model only decides has_gamma below: Rhat/ESS are invariant to
+  # the alpha/theta reflection's sign flip, so no orientation logic here.
+  stan_model <- .resolve_stan_model_for_fit(fit, stan_data, stan_model, caller)
+  has_gamma <- .bilatr_model_has_gamma(stan_model)
+  n_dt_tbl <- .resolve_n_dt(n_dt, stan_data, tiers, caller)
 
   if (is.character(fit)) {
     summ <- .read_diagnostics_summary_from_csv(
@@ -1373,7 +1484,10 @@ diagnose_convergence <- function(
     summ <- dplyr::left_join(summ, var_tiers, by = "variable")
   }
 
-  .assemble_bilatr_diagnostics(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold, has_gamma = has_gamma)
+  .assemble_bilatr_diagnostics(
+    summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
+    has_gamma = has_gamma, country_codes = attr(stan_data, "country_codes")
+  )
 }
 
 #' Print a `bilatr_diagnostics` object

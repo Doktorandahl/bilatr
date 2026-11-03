@@ -8,7 +8,7 @@ offset}
 check_compositional_residuals(
   fit,
   stan_data = NULL,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = NULL,
   n_dyads = 1500,
   n_strata = 8,
   n_draws = 200,
@@ -29,13 +29,15 @@ CmdStan CSV file paths (one per chain) -- the same forms
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
 \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} attached to \code{fit} (\code{attr(fit, "stan_data")}), or, when
 \code{fit} is CSV paths, the single \verb{*_stan_data.rds} file next to them;
-errors if neither is found. Stan data saved by \code{assemble_stan_data()}
-(bilatr 0.11.0 and earlier) works too.
+errors if neither is found.
 It must carry its \code{dyad_ids} attribute. Supplies \code{Y}, \code{is_obs},
 \code{D}, \code{T}, \code{A}.}
 
-\item{stan_model}{Name registered in \code{.bilatr_stan_models}; see
-\code{\link[=.canonical_stan_model]{.canonical_stan_model()}}.}
+\item{stan_model}{The model that was fit. \code{NULL} (default) uses the
+model recorded on the fit, on \code{stan_data}, or in the CmdStan CSV
+header, else assumes \code{"stable"} with a message; see
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}. For \code{"stable_gamma"}, \code{eta} includes the
+country offset \code{g_d}.}
 
 \item{n_dyads}{Target size of the stratified dyad subsample (capped at
 the number of eligible -- i.e. \code{n_d > 0} -- dyads). Default \code{1500}.}

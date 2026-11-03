@@ -18,7 +18,9 @@ dot-form CSV column name, e.g. \code{"theta.3.12"}), \code{col_index} (named
 integer vector: bracket name -> 1-based column position in the raw
 CSV header -- sampler-diagnostic columns like \code{accept_stat__}
 occupy earlier positions and are counted in this numbering even
-though they're never named in \code{variables}), \code{num_post_warmup_draws},
+though they're never named in \code{variables}), \code{sampler_col_index} (the
+same, for the sampler-diagnostic columns such as \code{accept_stat__},
+named as in the header), \code{num_post_warmup_draws},
 \code{n_chains}, \code{data_skip} (integer vector, one per \code{csv_files} entry,
 for \code{fread(skip = )}), and \code{file_mb} (the LARGEST \code{csv_files} entry's
 size in MB -- \code{fread()} reads one file at a time, so this is the

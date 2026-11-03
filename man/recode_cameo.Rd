@@ -20,28 +20,29 @@ were already present).
 }
 \description{
 Joins \code{data} against the package's built-in \link{cameo_lookup} table to
-attach \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass}, \code{QuadClassName},
-\code{QuadClassEventCodes}, \code{PentaClass}, \code{PentaClassName},
+attach 12 columns: \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass},
+\code{QuadClassName}, \code{QuadClassEventCodes}, \code{PentaClass}, \code{PentaClassName},
 \code{PentaClassEventCodes}, \code{PentaClass_modified}, \code{ModifiedRootCode},
-\code{ModifiedRootCodeName}, and \code{ModifiedRootCodeEventCodes} columns.
-\code{PentaClass_modified} folds low-intensity verbal cooperation
-(Goldstein score <= 1) into its own class, which can be useful as a
-near-neutral reference category. \code{ModifiedRootCode} /
-\code{ModifiedRootCodeName} / \code{ModifiedRootCodeEventCodes} (see
-\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}, \code{\link[=modified_root_code_name]{modified_root_code_name()}}, and
-\code{\link[=modified_root_code_eventcodes]{modified_root_code_eventcodes()}}) is an 18-level regrouping of the
-CAMEO root codes (formerly named \code{ERC16NZ}).
+\code{ModifiedRootCodeName}, and \code{ModifiedRootCodeEventCodes}. See
+\link{cameo_lookup} for the schemes:
 }
 \details{
-A handful of other classification schemes
-(\code{EventRootCode2}/\code{EventRootCode3}/\code{EventRootCode4}, \code{BilatrClass}/
-\code{BilatrClass2}) previously shipped in \link{cameo_lookup} have been retired
-from it, and their \verb{assign_*()}/\verb{*_name()} functions removed entirely
-(0.10.1); they are no longer attached by this function. See
-\code{\link[=event_class_labels]{event_class_labels()}} for the current, data-driven way to label a
-class from a fitted model's \code{stan_data} (covers \code{QuadClass},
-\code{PentaClass}, and \code{ModifiedRootCode}, the schemes still labeled in
-\link{cameo_lookup}).
+\itemize{
+\item \code{QuadClass} is the same mapping as GDELT's own \code{QuadClass} (roots
+01-05 verbal cooperation, 06-09 material cooperation, 10-14 verbal
+conflict, 15-20 material conflict);
+\item \code{PentaClass} is QuadClass, except that roots 01-02 form class 0
+"Make statement", root 14 (protest) moves to class 4 (material
+conflict), and root 16 (reduce relations) moves to class 3 (verbal
+conflict);
+\item \code{PentaClass_modified} is \code{PentaClass}, except that codes with
+QuadClass 1 and a Goldstein score of at most 1 are class 0;
+\item \code{ModifiedRootCode} is an 18-class regrouping of the root codes (see
+\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}).
+}
+
+\code{\link[=event_class_labels]{event_class_labels()}} labels the classes of a fitted model's
+\code{stan_data} from these columns.
 
 Any of these columns that already exist in \code{data} are left as they are
 (not overwritten, no \code{.x}/\code{.y} suffixing), with a warning naming them.

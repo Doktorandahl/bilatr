@@ -387,12 +387,14 @@
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
 #'   `fit` is CSV paths, the single `*_stan_data.rds` file next to them;
-#'   errors if neither is found. Stan data saved by `assemble_stan_data()`
-#'   (bilatr 0.11.0 and earlier) works too.
+#'   errors if neither is found.
 #'   It must carry its `dyad_ids` attribute. Supplies `Y`, `is_obs`,
 #'   `D`, `T`, `A`.
-#' @param stan_model Name registered in `.bilatr_stan_models`; see
-#'   [.canonical_stan_model()].
+#' @param stan_model The model that was fit. `NULL` (default) uses the
+#'   model recorded on the fit, on `stan_data`, or in the CmdStan CSV
+#'   header, else assumes `"stable"` with a message; see
+#'   [diagnose_convergence()]. For `"stable_gamma"`, `eta` includes the
+#'   country offset `g_d`.
 #' @param n_dyads Target size of the stratified dyad subsample (capped at
 #'   the number of eligible -- i.e. `n_d > 0` -- dyads). Default `1500`.
 #' @param n_strata Number of volume strata for [.stratified_dyad_sample()].
@@ -438,7 +440,7 @@
 check_compositional_residuals <- function(
   fit,
   stan_data = NULL,
-  stan_model = .BILATR_DEFAULT_MODEL,
+  stan_model = NULL,
   n_dyads = 1500,
   n_strata = 8,
   n_draws = 200,
@@ -449,8 +451,8 @@ check_compositional_residuals <- function(
   event_classes = NULL,
   class_labels = NULL
 ) {
-  stan_model <- .canonical_stan_model(stan_model)
   stan_data <- .stan_data_from_fit(fit, stan_data, "check_compositional_residuals()")
+  stan_model <- .resolve_stan_model_for_fit(fit, stan_data, stan_model, "check_compositional_residuals()")
   event_classes <- event_classes %||% attr(stan_data, "event_classes")
 
   dyad_ids <- attr(stan_data, "dyad_ids")
@@ -473,10 +475,7 @@ check_compositional_residuals <- function(
     stop(
       "`stan_data` is missing `ctry_a`/`ctry_b`/`w_send`, needed to ",
       "compute stable_gamma's country offset g_d. prepare_stan_data() ",
-      "builds them only from actor columns (`actor1`/`actor2`); a ",
-      "stan_data.rds saved by assemble_stan_data() before 0.7.0 lacks them ",
-      "too. Rebuild it with actor columns before checking a stable_gamma ",
-      "fit; see NEWS.md.",
+      "builds them only from actor columns (`actor1`/`actor2`).",
       call. = FALSE
     )
   }

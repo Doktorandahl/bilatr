@@ -114,14 +114,14 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   dir.create(outdir1)
   outdir2 <- tempfile()
   dir.create(outdir2)
-  fit_stable <- mod_stable$sample(
+  fit_stable <- muffle_short_fit_warnings(mod_stable$sample(
     data = base_data, chains = 1, iter_warmup = 1, iter_sampling = 1, seed = 1,
     refresh = 0, show_messages = FALSE, output_dir = outdir1, threads_per_chain = 1
-  )
-  fit_gamma <- mod_gamma$sample(
+  ))
+  fit_gamma <- muffle_short_fit_warnings(mod_gamma$sample(
     data = gamma_data, chains = 1, iter_warmup = 1, iter_sampling = 1, seed = 1,
     refresh = 0, show_messages = FALSE, output_dir = outdir2, threads_per_chain = 1
-  )
+  ))
   suppressMessages(fit_stable$init_model_methods())
   suppressMessages(fit_gamma$init_model_methods())
 
@@ -618,20 +618,20 @@ test_that("diagnose_and_extract_bilatr()'s gamma table has country_code for stab
   }
 
   fx_gamma <- build_fixture("stable_gamma")
-  res_gamma <- diagnose_and_extract_bilatr(
+  res_gamma <- muffle_short_fit_warnings(diagnose_and_extract_bilatr(
     fx_gamma$csv_files, fx_gamma$stan_data, n_dt = fx_gamma$n_dt,
     stan_model = "stable_gamma", tiers = 1
-  )
+  ))
   expect_false(is.null(res_gamma$diagnostics$gamma))
   expect_true("country_code" %in% names(res_gamma$diagnostics$gamma))
   expect_setequal(res_gamma$diagnostics$gamma$country_code, c("USA", "RUS"))
   expect_false(any(grepl("^gamma\\[", res_gamma$diagnostics$tier1$variable)))
 
   fx_stable <- build_fixture("stable")
-  res_stable <- diagnose_and_extract_bilatr(
+  res_stable <- muffle_short_fit_warnings(diagnose_and_extract_bilatr(
     fx_stable$csv_files, fx_stable$stan_data, n_dt = fx_stable$n_dt,
     stan_model = "stable", tiers = 1
-  )
+  ))
   expect_null(res_stable$diagnostics$gamma)
 })
 

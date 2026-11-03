@@ -132,7 +132,62 @@ test_that(".normalize_n_dt accepts a named numeric vector keyed by dyad id", {
 })
 
 test_that(".normalize_n_dt errors when it can't find the expected columns", {
-  expect_error(.normalize_n_dt(tibble::tibble(foo = 1, bar = 2)), "dyad-id-like")
+  expect_error(.normalize_n_dt(tibble::tibble(foo = 1, bar = 2)), "must have a dyad column")
+})
+
+# a hand-built stan_data whose dyad names map dyad_id 1..5 to "d1".."d5"
+fake_named_stan_data <- function() {
+  sd <- list(D = 5L)
+  attr(sd, "dyad_ids") <- tibble::tibble(
+    dyad_id = rep(1:5, each = 2), time_index = rep(1:2, 5), dyad = rep(paste0("d", 1:5), each = 2)
+  )
+  sd
+}
+
+test_that(".normalize_n_dt() accepts a table or vector keyed by dyad name, joined through dyad_ids", {
+  sd <- fake_named_stan_data()
+  by_id <- .normalize_n_dt(make_fake_n_dt())
+  by_name <- .normalize_n_dt(tibble::tibble(dyad = paste0("d", 1:5), n_dt = by_id$n_dt), sd)
+  expect_identical(by_name, by_id)
+  # dplyr::count()-style output: a `dyad` column and an `n` column
+  counted <- .normalize_n_dt(tibble::tibble(dyad = c("d3", "d1"), n = c(7L, 9L)), sd)
+  expect_identical(counted, tibble::tibble(dyad_id = c(3L, 1L), n_dt = c(7, 9)))
+  # a factor is matched by its labels, not its codes
+  expect_identical(.normalize_n_dt(tibble::tibble(dyad = factor(c("d5", "d2")), n_dt = 1:2), sd)$dyad_id, c(5L, 2L))
+  # a named vector
+  expect_identical(.normalize_n_dt(c(d2 = 4, d4 = 8), sd)$dyad_id, c(2L, 4L))
+  # a `dyad_id` column wins over a `dyad` column
+  both <- tibble::tibble(dyad = c("d9", "d9"), dyad_id = c(1, 2), n_dt = c(1, 2))
+  expect_identical(.normalize_n_dt(both)$dyad_id, c(1L, 2L))
+})
+
+test_that(".normalize_n_dt() errors on dyad names not in the Stan data, or without Stan data", {
+  sd <- fake_named_stan_data()
+  expect_error(
+    .normalize_n_dt(tibble::tibble(dyad = c("d1", "x", "y"), n_dt = 1:3), sd),
+    "`n_dt` names dyad\\(s\\) not found in the Stan data: x, y\\."
+  )
+  expect_error(
+    .normalize_n_dt(tibble::tibble(dyad = c("d1", "d2"), n_dt = 1:2)),
+    "keyed by dyad name, which needs the Stan data"
+  )
+})
+
+test_that(".max_or_na()/.min_or_na() give NA for an all-NA group, silently", {
+  expect_identical(.max_or_na(c(NA, NA)), NA_real_)
+  expect_identical(.min_or_na(NA_real_), NA_real_)
+  expect_identical(.max_or_na(c(1, NA, 3)), 3)
+  expect_identical(.min_or_na(c(1, NA, 3)), 1)
+})
+
+test_that("Tier 3 summaries are NA, without warnings, for a dyad whose R-hat is all NA", {
+  draws <- make_fake_draws()
+  # constant draws: R-hat and ESS are NA for every theta[2, ] element
+  draws[, , c("theta[2,1]", "theta[2,2]")] <- 1
+  expect_no_warning(diag <- suppressMessages(diagnose_convergence(draws, n_dt = make_fake_n_dt())))
+  row <- diag$tier3[diag$tier3$dyad_id == 2L, ]
+  expect_true(is.na(row$max_rhat))
+  expect_true(is.finite(diag$tier3$max_rhat[diag$tier3$dyad_id == 1L]))
 })
 
 test_that("diagnose_convergence() joins Tier 2 against n_dt and surfaces both-sided mismatches", {
@@ -249,14 +304,15 @@ test_that("diagnose_convergence(tiers = 1) computes only Tier 1 and needs no n_d
   expect_true("mu_theta0" %in% diag$tier1$variable[diag$tier1$flagged])
 })
 
-test_that("diagnose_convergence() errors if n_dt is missing but Tier 2/3 were requested", {
+test_that("diagnose_convergence() on a draws object errors if n_dt is missing but Tier 2/3 were requested", {
+  # a draws object carries no Stan data to compute n_dt from
   expect_error(
-    diagnose_convergence(make_fake_draws(), tiers = 2),
-    "n_dt.*required"
+    suppressMessages(diagnose_convergence(make_fake_draws(), tiers = 2)),
+    "`n_dt` .* is needed when `tiers` includes 2 or 3, and there is no Stan data.*Pass `n_dt`"
   )
   expect_error(
-    diagnose_convergence(make_fake_draws(), tiers = c(1, 3)),
-    "n_dt.*required"
+    suppressMessages(diagnose_convergence(make_fake_draws(), tiers = c(1, 3))),
+    "`n_dt` .* is needed when `tiers` includes 2 or 3"
   )
 })
 
@@ -661,3 +717,32 @@ test_that("diagnose_convergence() from CSV files messages about the max_memory_m
   )
 })
 
+
+test_that("n_dt defaults to the per-dyad event totals of the fit's Stan data (identical diagnostics)", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+
+  fx <- make_csv_diagnostics_fixture()
+  # the hand-built n_dt the vignettes used to build
+  hand <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, stan_model = "stable"))
+  attr(fx$fit, "stan_data") <- fx$stan_data
+  attr(fx$fit, "stan_model") <- "stable"
+  default <- suppressWarnings(diagnose_convergence(fx$fit))
+  expect_identical(default, hand)
+
+  # by dyad name, as in the dyad_ids attribute
+  by_name <- tibble::tibble(dyad = paste0("dyad", fx$n_dt$dyad_id), n_dt = fx$n_dt$n_dt)
+  expect_identical(suppressWarnings(diagnose_convergence(fx$fit, n_dt = by_name)), hand)
+
+  # CSV paths: the sidecar supplies the Stan data
+  saveRDS(fx$stan_data, file.path(dirname(fx$csv_files[1]), "bilatr_stan_data.rds"))
+  csv_default <- suppressWarnings(suppressMessages(diagnose_convergence(fx$csv_files)))
+  csv_hand <- suppressWarnings(suppressMessages(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt)))
+  expect_identical(csv_default, csv_hand)
+
+  # a draws object has no Stan data: still an error for tiers 2/3
+  expect_error(
+    suppressMessages(diagnose_convergence(fx$fit$draws(), tiers = 1:3)),
+    "`n_dt` .* is needed when `tiers` includes 2 or 3"
+  )
+})
