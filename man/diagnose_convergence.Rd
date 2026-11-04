@@ -133,7 +133,9 @@ unlike \code{parallel::detectCores()}, it respects
 rather than reporting the whole node's core count -- but this is a
 genuine memory/wall-time trade-off, not a free choice, so consider
 an explicit, moderate value for a memory-constrained job rather
-than the largest available.}
+than the largest available. On Unix-alikes, a session that fits a
+model between two \code{n_cores > 1} calls can print "Error while
+shutting down parallel" when R exits; this is harmless.}
 
 \item{stan_model}{The model that was fit: \code{"stable"}, \code{"ou"} or
 \code{"stable_gamma"}. \code{NULL} (default) uses the model recorded on the fit
@@ -219,18 +221,19 @@ here) -- so the tibble you get back has the same columns regardless
 of which kind of \code{fit} produced it.
 }
 \examples{
-\dontrun{
-diag <- diagnose_convergence(fit)
+# CmdStan CSV files from an earlier run, with the *_stan_data.rds file
+# that fit_panel(output_dir = ) wrote next to them (here, the example
+# fit shipped with bilatr): Tier 3 is read and summarized in
+# memory-bounded chunks rather than all at once. The example fit is far
+# too short to converge, so most of Tier 1 is flagged.
+csv_files <- bilatr_example_fit()
+diag <- diagnose_convergence(csv_files, max_memory_mb = 4096)
 diag
 diag$tier1
 
 # only the cheap, always-important global/shared parameters:
-diagnose_convergence(fit, tiers = 1)
+diagnose_convergence(csv_files, tiers = 1)
 
-# CmdStan CSV files from an earlier run, with the *_stan_data.rds file
-# that fit_panel(output_dir = ) wrote next to them: Tier 3 is read and
-# summarized in memory-bounded chunks rather than all at once
-csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-diagnose_convergence(csv_files, max_memory_mb = 4096)
-}
+# a stable_gamma fit gets its own `gamma` report element
+diagnose_convergence(bilatr_example_fit("stable_gamma"), tiers = 1)$gamma
 }

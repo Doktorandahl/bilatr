@@ -24,3 +24,10 @@ the structure is visible rather than alphabetical), action categories
 on the y-axis, posterior median as fill (falling back to the mean if
 \code{x} was built with quantiles that don't include the median).
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+  ggplot2::autoplot(gamma)
+  plot(gamma)
+}
+}

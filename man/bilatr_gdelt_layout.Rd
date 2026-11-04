@@ -39,9 +39,9 @@ the DATEADDED field... will carry today's date"). This matters for
 
 The index also links two verification files, confirmed by fetching them
 directly: \code{md5sums} (\verb{https://data.gdeltproject.org/events/md5sums},
-one \verb{<md5>␣␣<filename>} pair per line, standard \code{md5sum} format) and
+one \verb{<md5>  <filename>} pair per line, two spaces between them, standard \code{md5sum} format) and
 \code{filesizes} (\verb{https://data.gdeltproject.org/events/filesizes}, one
-\verb{<bytes>␣<filename>} pair per line).
+\verb{<bytes> <filename>} pair per line, one space between them).
 
 \verb{https://data.gdeltproject.org/events/} serves the files directly
 (confirmed: \verb{curl -sS https://data.gdeltproject.org/events/index.html}

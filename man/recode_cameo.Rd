@@ -20,10 +20,10 @@ were already present).
 }
 \description{
 Joins \code{data} against the package's built-in \link{cameo_lookup} table to
-attach 12 columns: \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass},
+attach 11 columns: \code{CAMEOLabel}, \code{GoldsteinScore}, \code{QuadClass},
 \code{QuadClassName}, \code{QuadClassEventCodes}, \code{PentaClass}, \code{PentaClassName},
-\code{PentaClassEventCodes}, \code{PentaClass_modified}, \code{ModifiedRootCode},
-\code{ModifiedRootCodeName}, and \code{ModifiedRootCodeEventCodes}. See
+\code{PentaClassEventCodes}, \code{ModifiedRootCode}, \code{ModifiedRootCodeName},
+and \code{ModifiedRootCodeEventCodes}. See
 \link{cameo_lookup} for the schemes:
 }
 \details{
@@ -35,8 +35,6 @@ conflict, 15-20 material conflict);
 "Make statement", root 14 (protest) moves to class 4 (material
 conflict), and root 16 (reduce relations) moves to class 3 (verbal
 conflict);
-\item \code{PentaClass_modified} is \code{PentaClass}, except that codes with
-QuadClass 1 and a Goldstein score of at most 1 are class 0;
 \item \code{ModifiedRootCode} is an 18-class regrouping of the root codes (see
 \code{\link[=assign_modified_root_code]{assign_modified_root_code()}}).
 }
@@ -58,8 +56,6 @@ are a bare top-level root (e.g. \code{"01"}, \code{"04"}; see \link{cameo_lookup
 docs) -- one line each, nothing when both are zero.
 }
 \examples{
-\dontrun{
 events <- data.frame(EventCode = c("01", "190", "0862"))
 recode_cameo(events)
-}
 }

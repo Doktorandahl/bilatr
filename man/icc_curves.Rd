@@ -154,3 +154,16 @@ not an average or a "typical country". \code{type = "information"} is
 unaffected beyond this: it is computed downstream of the (now
 possibly offset) \code{p_mat}, so no separate change was needed there.
 }
+\examples{
+csv_files <- bilatr_example_fit()
+curves <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41)
+curves
+
+# item information instead of response probabilities
+info <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41, type = "information")
+attr(info, "total_information")
+
+# one country's curves in a stable_gamma fit
+icc_curves(bilatr_example_fit("stable_gamma"), theta_range = c(-2, 2),
+  n_grid = 41, country = "USA")
+}

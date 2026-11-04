@@ -25,3 +25,9 @@ reusing \code{x}'s stored per-draw \code{alpha}/shares rather than re-reading th
 fit -- so a scheme already in mind can be priced directly, without
 walking the greedy ladder.
 }
+\examples{
+merges <- diagnose_category_merges(bilatr_example_fit())
+# PentaClass: merge the two cooperation classes, and the two conflict
+# classes, keeping "Make statement" (0) on its own
+merge_cost(merges, groups = list(c("1", "2"), c("3", "4")))
+}

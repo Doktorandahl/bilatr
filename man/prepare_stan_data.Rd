@@ -85,7 +85,7 @@ numbers, if \code{min > max}, or if no rows fall inside it.}
 across dyads: a single whole number, at least 1. The default, 1, is
 conservative and fine for single-threaded fits; with several threads
 per chain a larger value is usually faster for large panels. See
-\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning")}.}
+\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning", package = "bilatr")}.}
 
 \item{rho_prior_a, rho_prior_b}{Shape parameters (single positive
 numbers) of the \code{beta(rho_prior_a, rho_prior_b)} prior on the

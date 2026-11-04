@@ -17,3 +17,7 @@
 \description{
 Print a \code{bilatr_icc_curves} object
 }
+\examples{
+curves <- icc_curves(bilatr_example_fit(), theta_range = c(-2, 2), n_grid = 41)
+print(curves, n = 3)
+}

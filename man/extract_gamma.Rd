@@ -66,8 +66,7 @@ Tier 1 (small: \verb{A x n_countries}, see \code{.bilatr_tier1_names} in
 the chunked Tier 3 machinery \code{extract_theta()} needs.
 }
 \examples{
-\dontrun{
-gamma <- extract_gamma(fit)
+gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+gamma
 gamma_norm(gamma)
-}
 }

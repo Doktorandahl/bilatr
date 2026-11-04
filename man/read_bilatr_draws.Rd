@@ -38,9 +38,7 @@ chain), with the same settings and columns; that is checked, as is that
 no chain stopped early.
 }
 \examples{
-\dontrun{
-csv_files <- list.files("model_output", pattern = "\\\\.csv$", full.names = TRUE)
+csv_files <- bilatr_example_fit()
 draws <- read_bilatr_draws(csv_files, c("alpha", "theta[1,1]", "divergent__"))
 posterior::summarise_draws(draws)
-}
 }

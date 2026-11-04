@@ -83,12 +83,12 @@
 #'   `alpha` and `mu_intercept` come from Tier 1 and are empty unless
 #'   `tiers` includes 1.
 #' @examples
-#' \dontrun{
-#' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' result <- diagnose_and_extract_bilatr(csv_files)
+#' # CmdStan CSVs with the *_stan_data.rds file that fit_panel(output_dir = )
+#' # wrote next to them; here, the example fit shipped with bilatr
+#' result <- diagnose_and_extract_bilatr(bilatr_example_fit())
 #' result$diagnostics
 #' result$theta
-#' }
+#' result$alpha
 #' @export
 diagnose_and_extract_bilatr <- function(
   csv_files, stan_data = NULL, n_dt = NULL,

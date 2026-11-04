@@ -41,7 +41,7 @@ with backticks in R code.
 }
 \source{
 GDELT 1.0 event data, The GDELT Project,
-\url{https://www.gdeltproject.org/}, accessed 2026-01-31.
+\url{https://gdeltproject.org/}, accessed 2026-01-31.
 }
 \usage{
 theta_directed
@@ -116,7 +116,7 @@ subset(theta_undirected, dyad == "NOR_SWE")
 }
 \references{
 Leetaru, K. and Schrodt, P. A. (2013). "GDELT: Global Data on Events,
-Location and Tone, 1979–2012." Paper presented at the International
+Location and Tone, 1979--2012." Paper presented at the International
 Studies Association annual convention, San Francisco.
 
 The GDELT Project. Global Database of Events, Language, and Tone

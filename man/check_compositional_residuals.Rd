@@ -188,3 +188,10 @@ subsampled (\code{n_draws}; a PPC does not need the full posterior). Only
 pooled statistic is reported per sampled dyad (\code{D_sample}, in
 \code{settings}) so results are comparable across subsample sizes.
 }
+\examples{
+# the example fit has only 6 dyads and 120 draws; real fits use the
+# defaults (1500 dyads, 200 draws)
+rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+rc
+rc$global$beta_signal_ratio
+}

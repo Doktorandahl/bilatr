@@ -164,6 +164,18 @@
 #'   [autoplot()]/[plot()] method and usable directly by
 #'   [icc_crossings()]) of `theta`, `action_index`, `event_class`,
 #'   `class_label`, `median`, `lower`, `upper`.
+#' @examples
+#' csv_files <- bilatr_example_fit()
+#' curves <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41)
+#' curves
+#'
+#' # item information instead of response probabilities
+#' info <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41, type = "information")
+#' attr(info, "total_information")
+#'
+#' # one country's curves in a stable_gamma fit
+#' icc_curves(bilatr_example_fit("stable_gamma"), theta_range = c(-2, 2),
+#'   n_grid = 41, country = "USA")
 #' @export
 icc_curves <- function(
   fit,
@@ -346,6 +358,9 @@ icc_curves <- function(
 #' @param x A `bilatr_icc_curves` object.
 #' @param ... Passed on to the underlying tibble print method.
 #' @return `x`, invisibly.
+#' @examples
+#' curves <- icc_curves(bilatr_example_fit(), theta_range = c(-2, 2), n_grid = 41)
+#' print(curves, n = 3)
 #' @export
 print.bilatr_icc_curves <- function(x, ...) {
   cat(sprintf(
@@ -407,6 +422,14 @@ print.bilatr_icc_curves <- function(x, ...) {
 #'   `type = "probability"`.
 #' @param ... Ignored; present for S3 consistency.
 #' @return A `ggplot` object.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   csv_files <- bilatr_example_fit()
+#'   curves <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41)
+#'   ggplot2::autoplot(curves)
+#'   info <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41, type = "information")
+#'   plot(info, show_total = TRUE)
+#' }
 #' @exportS3Method ggplot2::autoplot
 autoplot.bilatr_icc_curves <- function(object, show_total = TRUE, ...) {
   rlang::check_installed("ggplot2", "for autoplot.bilatr_icc_curves()")
@@ -444,6 +467,9 @@ plot.bilatr_icc_curves <- function(x, show_total = TRUE, ...) {
 #'   `label_a`, `label_b`, `crossing_median`, `crossing_lower`,
 #'   `crossing_upper`, `in_range` (whether `crossing_median` falls inside
 #'   `x`'s `theta_range`).
+#' @examples
+#' curves <- icc_curves(bilatr_example_fit(), theta_range = c(-2, 2), n_grid = 41)
+#' icc_crossings(curves)
 #' @export
 icc_crossings <- function(x) {
   stopifnot(inherits(x, "bilatr_icc_curves"))

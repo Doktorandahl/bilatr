@@ -32,9 +32,9 @@
 #'
 #' The index also links two verification files, confirmed by fetching them
 #' directly: `md5sums` (`https://data.gdeltproject.org/events/md5sums`,
-#' one `<md5>␣␣<filename>` pair per line, standard `md5sum` format) and
+#' one `<md5>  <filename>` pair per line, two spaces between them, standard `md5sum` format) and
 #' `filesizes` (`https://data.gdeltproject.org/events/filesizes`, one
-#' `<bytes>␣<filename>` pair per line).
+#' `<bytes> <filename>` pair per line, one space between them).
 #'
 #' `https://data.gdeltproject.org/events/` serves the files directly
 #' (confirmed: `curl -sS https://data.gdeltproject.org/events/index.html`
@@ -511,10 +511,13 @@ gdelt_files <- function(start, end = start) {
 #'   run to millions of rows.
 #' @return A tibble of event-level rows, `columns` plus `source_file` (the
 #'   file's basename), row-bound across `files`.
-#' @examples
-#' \dontrun{
-#' events <- read_gdelt("data/gdelt_raw/20200101.export.CSV.zip")
-#' }
+#' @examplesIf interactive()
+#' # downloads one daily file (about 6 MB) into a temporary directory
+#' dir <- tempfile("gdelt_")
+#' status <- download_gdelt("2020-01-01", dest_dir = dir)
+#' events <- read_gdelt(status$path)
+#' events
+#' unlink(dir, recursive = TRUE)
 #' @export
 read_gdelt <- function(
   files,
@@ -890,15 +893,15 @@ read_gdelt <- function(
 #' @param ... In temp mode, passed through to `read_gdelt()`. Ignored in
 #'   cache mode.
 #' @return See "Details" above.
-#' @examples
-#' \dontrun{
+#' @examplesIf interactive()
 #' # temp mode: a quick look, nothing kept on disk
 #' events <- download_gdelt("2020-01-01")
 #'
 #' # cache mode: for real work -- keep the zips, read them yourself
-#' status <- download_gdelt("2020-01-01", "2020-01-31", dest_dir = "data/gdelt_raw")
+#' dir <- tempfile("gdelt_")
+#' status <- download_gdelt("2020-01-01", "2020-01-03", dest_dir = dir)
 #' events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
-#' }
+#' unlink(dir, recursive = TRUE)
 #' @export
 download_gdelt <- function(
   start,
@@ -1017,10 +1020,11 @@ download_gdelt <- function(
 #' @inheritParams read_gdelt
 #' @return A tibble of `actor1_type`, `actor2_type`, `n`, sorted by `n`
 #'   descending.
-#' @examples
-#' \dontrun{
-#' count_gdelt_actor_types("data/gdelt_raw/20200101.export.CSV.zip")
-#' }
+#' @examplesIf interactive()
+#' dir <- tempfile("gdelt_")
+#' status <- download_gdelt("2020-01-01", dest_dir = dir)
+#' count_gdelt_actor_types(status$path)
+#' unlink(dir, recursive = TRUE)
 #' @export
 count_gdelt_actor_types <- function(
   files,

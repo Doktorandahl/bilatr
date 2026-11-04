@@ -8,7 +8,8 @@
   stan_model,
   opt_level,
   force_recompile = FALSE,
-  stan_threads = TRUE
+  stan_threads = TRUE,
+  profile = FALSE
 )
 }
 \arguments{
@@ -21,6 +22,10 @@
 
 \item{stan_threads}{Whether to compile with \code{STAN_THREADS}. Always
 \code{TRUE} for the package's own fits.}
+
+\item{profile}{Whether to compile the copy whose \code{reduce_sum}
+likelihood is profiled (see \code{\link[=.bilatr_stage_stan_file]{.bilatr_stage_stan_file()}}), as
+\code{\link[=benchmark_bilatr]{benchmark_bilatr()}} does.}
 }
 \value{
 A \code{CmdStanModel} object.

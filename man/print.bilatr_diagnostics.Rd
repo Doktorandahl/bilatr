@@ -35,3 +35,7 @@ first. Tier 3 (per-dyad-period latent states) is expected to be noisy
 for sparse dyads, so it is reported only as aggregate one-line
 statistics rather than flooding the console with per-dyad-period rows.
 }
+\examples{
+diag <- diagnose_convergence(bilatr_example_fit(), tiers = 1:2)
+print(diag, n_tier2 = 3)
+}

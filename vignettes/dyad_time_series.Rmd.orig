@@ -1,0 +1,215 @@
+---
+title: "Single-dyad time series with bilatr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Single-dyad time series with bilatr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<!-- dyad_time_series.Rmd is generated from dyad_time_series.Rmd.orig by vignettes/precompile.R,
+which needs CmdStan. Edit the .Rmd.orig file, then re-knit. -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/dyad_time_series-",
+  fig.width = 6,
+  fig.height = 3.5,
+  dpi = 96,
+  dev = "ragg_png",
+  out.width = "100%"
+)
+```
+
+This vignette walks through fitting `bilatr`'s dyadic IRT model to a
+**single dyad's** event time series: data prep, fitting, posterior
+extraction, and basic convergence diagnostics. For fitting across many
+dyads at once with hierarchical pooling, see `vignette("panel_model")`.
+
+## 1. Data prep
+
+In a real workflow you'd start from raw GDELT event data, or any other
+event table in the format documented at `?bilatr_event_data`:
+
+```{r, eval = FALSE}
+library(bilatr)
+
+# a quick look: download, filter, and read one day's events, keeping
+# nothing on disk
+events <- download_gdelt("2020-01-01")
+events <- recode_cameo(events)
+
+# for real work: keep the zips as a cache and read them yourself
+status <- download_gdelt("2020-01-01", "2020-01-31", dest_dir = "data/gdelt_raw")
+events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
+events <- recode_cameo(events)
+```
+
+For this vignette we simulate a small, self-contained event set for one
+dyad so the example runs without a network connection or a local GDELT
+archive:
+
+```{r}
+library(bilatr)
+library(dplyr)
+
+set.seed(42)
+n_events <- 400
+dates <- format(
+  sample(seq(as.Date("2015-01-01"), as.Date("2019-12-31"), by = "day"), n_events, replace = TRUE),
+  "%Y%m%d"
+)
+events <- tibble::tibble(
+  Actor1CountryCode = "USA",
+  Actor2CountryCode = "CHN",
+  SQLDATE = as.integer(dates),
+  EventCode = sample(cameo_lookup$CAMEOEVENTCODE, n_events, replace = TRUE)
+)
+events <- recode_cameo(events, code_col = "EventCode")
+```
+
+`recode_cameo()` attaches 11 columns from the package's built-in
+[cameo_lookup] table (no external CAMEO reference package required):
+`CAMEOLabel`, `GoldsteinScore`, and three event-class schemes with their
+labels and underlying codes: `QuadClass`, `QuadClassName`,
+`QuadClassEventCodes`; `PentaClass`, `PentaClassName`,
+`PentaClassEventCodes`; and `ModifiedRootCode`,
+`ModifiedRootCodeName`, `ModifiedRootCodeEventCodes`. `QuadClass` is the
+same mapping as GDELT's own `QuadClass`; see `?cameo_lookup` for the
+schemes.
+
+## 2. Aggregate to a dyad-period table
+
+[aggregate_events()] collapses events to one row per dyad and period,
+with one count column per event class (the format documented at
+`?bilatr_dyad_period_data`). Any other source of already aggregated
+dyad-period counts can be used instead; see `vignette("panel_model")`,
+"Using your own aggregated data".
+
+```{r}
+agg <- aggregate_events(
+  events,
+  grouping_var = "PentaClass",
+  resolution = "yearly",
+  start = "2015-01-01",
+  end = "2019-12-31"
+)
+agg
+```
+
+## 3. Fit
+
+[fit_dyad_ts()] takes the table directly. It builds the Stan data with
+[prepare_stan_data()], checks that there is exactly one dyad, and fits
+the model with `threads_per_chain = 1` by default (reduce_sum has
+nothing to chunk across when there's only one dyad).
+
+`reference_category` orients the latent scale: θ is oriented so that
+higher values make `reference_category` more likely relative to the
+other action types. With a cooperative reference category, higher θ
+means more cooperative relations, so here we use PentaClass 1 (verbal
+cooperation). It becomes `alpha[1]`, the discrimination parameter the
+model always reports as non-negative via an orientation fold (see
+`inst/stan/bilatr_alphanorm.stan`'s header, "IDENTIFICATION: ORIENTATION
+FOLD"); the `reference_category` argument of `?prepare_stan_data` has
+the details. Every other action class's discrimination is
+freely estimated subject to `alpha` summing to exactly 0 across all
+classes (RMS normalized to 1) -- there is no single fixed-at-1 element.
+
+The example below uses a short warmup/sampling run (this vignette was
+computed ahead of time, with CmdStan, and is kept quick to re-run); real
+analyses should use `iter_warmup`/`iter_sampling`
+in the low thousands and check the diagnostics below before trusting
+the result.
+
+```{r, results = "hide", message = FALSE}
+fit <- fit_dyad_ts(
+  agg,
+  reference_category = "1", # verbal cooperation
+  chains = 2,
+  parallel_chains = 2,
+  iter_warmup = 300,
+  iter_sampling = 300,
+  seed = 1,
+  refresh = 0
+)
+```
+
+The fit carries the Stan data it was fit to:
+
+```{r}
+stan_data <- attr(fit, "stan_data")
+stan_data$D # a single dyad
+stan_data$T # number of years
+stan_data$A # number of action classes
+```
+
+## 4. Extract
+
+[extract_theta()] reattaches human-readable dyad identifiers to the
+posterior summary of the latent bilateral-relations trajectory. It finds them in
+the Stan data attached to `fit`, so no second argument is needed:
+
+```{r}
+theta <- extract_theta(fit)
+theta
+```
+
+```{r theta-trajectory, fig.cap = "The latent relations of USA_CHN by year: posterior median and 90% interval.", fig.alt = "The posterior median of theta for USA_CHN by year, with a shaded 90% interval."}
+library(ggplot2)
+ggplot(theta, aes(year, `50%`)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), alpha = 0.25) +
+  geom_line() +
+  labs(x = NULL, y = "theta (posterior median, 90% interval)", title = "USA_CHN") +
+  theme_minimal()
+```
+
+The simulated event codes are drawn at random, so there is no real
+trend to find here: the intervals are wide and overlap from year to
+year.
+
+[extract_alpha()] and [extract_mu_intercept()] extract the action-type
+discrimination and intercept parameters, labeled with the event-class
+values (again taken from the attached Stan data):
+
+```{r}
+extract_alpha(fit)
+extract_mu_intercept(fit)
+```
+
+Note `sum(alpha)` and `sum(mu_intercept)` are exactly 0: both are
+sum-to-zero by construction (the model's identification anchors), rather
+than a single element fixed to a constant. `alpha[1]`'s *sign* is
+always reported positive too, via an orientation fold (`alpha` and
+`theta` are both multiplied by `sign(alpha_raw[1])` in `transformed
+parameters` -- exact and Jacobian-free, since the likelihood only ever
+sees their product) rather than a hard constraint on the sampled
+parameter, so every fit already reports `theta` oriented toward the
+reference category (here, higher `theta` means more verbal cooperation
+relative to the other classes) with no post-hoc relabeling needed.
+
+## 5. Diagnose
+
+`cmdstanr`'s default posterior summary already includes R-hat and both
+bulk and tail effective sample size; check these before drawing
+conclusions from `theta`:
+
+```{r}
+fit$summary(variables = c("alpha", "mu_intercept", "phi", "process_noise"))
+```
+
+Look for `rhat` close to 1 (below ~1.01) and `ess_bulk`/`ess_tail` in the
+hundreds or more per chain. `fit$diagnostic_summary()` reports any
+divergent transitions or tree-depth saturation, which for a real fit
+should be zero or reported here:
+
+```{r}
+fit$diagnostic_summary()
+```
+
+If ESS is low or R-hat is elevated, the usual fixes are more sampling
+iterations, tighter priors informed by domain knowledge, or (for
+single-dyad fits especially, since there's no cross-dyad pooling to help
+identify `theta0`/`phi`) more data.

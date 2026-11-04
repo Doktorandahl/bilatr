@@ -183,6 +183,20 @@ NULL
 #' @param actor1,actor2 Names of the sender/target actor columns.
 #' @param date Name of the event-date column.
 #' @return `data`, invisibly and unmodified, if every rule passes.
+#' @examples
+#' events <- tibble::tibble(
+#'   Actor1CountryCode = c("USA", "RUS", "CHN"),
+#'   Actor2CountryCode = c("RUS", "USA", "USA"),
+#'   SQLDATE = c(20180105L, 20190302L, 20200101L),
+#'   PentaClass = c(0, 1, 3)
+#' )
+#' validate_bilatr_events(events, grouping_var = "PentaClass")
+#'
+#' # a self-directed event and a missing event class are both rejected
+#' bad <- events
+#' bad$Actor2CountryCode[1] <- "USA"
+#' bad$PentaClass[2] <- NA
+#' try(validate_bilatr_events(bad, grouping_var = "PentaClass"))
 #' @export
 validate_bilatr_events <- function(
   data,

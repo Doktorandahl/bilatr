@@ -33,10 +33,6 @@ statement (roots 01-02), 1 = verbal cooperation (03-05),
 \item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
 codes underlying each \code{PentaClass} class; see
 \code{\link[=pentaclass_eventcodes]{pentaclass_eventcodes()}}.}
-\item{PentaClass_modified}{Integer, 0-4. As PentaClass, except that
-every code with \code{QuadClass} 1 and \code{GoldsteinScore} at most 1 is
-class 0. Class 0 is therefore roots 01-02 plus the codes of roots
-03-05 scoring at most 1 (in this table \code{04}, \code{040} and \code{041}).}
 \item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
 root codes that moves \code{016} (deny responsibility) into Reject
 (class 13) and \code{018}/\code{019} (make empathetic comment, express
@@ -79,5 +75,13 @@ conflict-cooperation score, a human-readable label, and the
 QuadClass/PentaClass/ModifiedRootCode recoding used throughout the
 package. Built by \code{data-raw/build_cameo_lookup.R}; see
 \code{\link[=recode_cameo]{recode_cameo()}} for how it is applied to event data.
+}
+\examples{
+# the root-level rows of the verbal-conflict PentaClass
+subset(cameo_lookup, PentaClass == 3 & nchar(CAMEOEVENTCODE) == 2,
+  select = c(CAMEOEVENTCODE, CAMEOLabel, GoldsteinScore))
+
+# how the 310 codes spread over QuadClass and PentaClass
+table(cameo_lookup$QuadClassName, cameo_lookup$PentaClass)
 }
 \keyword{datasets}

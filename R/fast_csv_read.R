@@ -411,11 +411,9 @@
 #'   order; duplicates are dropped). Errors, naming them, if any requested
 #'   variable is not in the files.
 #' @examples
-#' \dontrun{
-#' csv_files <- list.files("model_output", pattern = "\\.csv$", full.names = TRUE)
+#' csv_files <- bilatr_example_fit()
 #' draws <- read_bilatr_draws(csv_files, c("alpha", "theta[1,1]", "divergent__"))
 #' posterior::summarise_draws(draws)
-#' }
 #' @export
 read_bilatr_draws <- function(csv_files, variables) {
   fn <- "read_bilatr_draws()"

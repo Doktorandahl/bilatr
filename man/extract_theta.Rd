@@ -80,12 +80,13 @@ rather than re-reading data already summarised once; pass an
 in-memory \code{fit} if you need other quantiles.
 }
 \examples{
-\dontrun{
-theta <- extract_theta(fit)
+# CmdStan CSVs from a completed run, never read into this R session (here,
+# the example fit shipped with bilatr); the *_stan_data.rds that
+# fit_panel() wrote next to the CSVs is found
+csv_files <- bilatr_example_fit()
+theta <- extract_theta(csv_files, max_memory_mb = 4096)
+theta
 
-# a completed SLURM run, never read into this R session; the
-# *_stan_data.rds that fit_panel() wrote next to the CSVs is found
-csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-theta <- extract_theta(csv_files, max_memory_mb = 16384)
-}
+# one dyad's trajectory
+theta[theta$dyad == "USA_CHN", c("year", "mean", "5\%", "95\%")]
 }

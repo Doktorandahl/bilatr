@@ -91,7 +91,7 @@ numbers, if \code{min > max}, or if no rows fall inside it.}
 across dyads: a single whole number, at least 1. The default, 1, is
 conservative and fine for single-threaded fits; with several threads
 per chain a larger value is usually faster for large panels. See
-\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning")}.}
+\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning", package = "bilatr")}.}
 
 \item{rho_prior_a, rho_prior_b}{Shape parameters (single positive
 numbers) of the \code{beta(rho_prior_a, rho_prior_b)} prior on the
@@ -230,13 +230,29 @@ The fitted model's name is recorded as \code{attr(fit, "stan_model")} and
 \code{\link[=icc_curves]{icc_curves()}}, ...) know which model was fit without being told.
 }
 \examples{
-\dontrun{
+\dontshow{if (bilatr_cmdstan_available()) withAutoprint(\{ # examplesIf}
+# 300 simulated USA -> CHN events over 2015-2020
+set.seed(1)
+days <- seq(as.Date("2015-01-01"), as.Date("2020-12-31"), by = "day")
+events <- recode_cameo(tibble::tibble(
+  Actor1CountryCode = "USA",
+  Actor2CountryCode = "CHN",
+  SQLDATE = as.integer(format(sample(days, 300, replace = TRUE), "\%Y\%m\%d")),
+  EventCode = sample(cameo_lookup$CAMEOEVENTCODE, 300, replace = TRUE)
+))
 agg <- aggregate_events(
-  dplyr::filter(events, Actor1CountryCode == "USA", Actor2CountryCode == "CHN"),
+  events,
   grouping_var = "PentaClass", start = "2015-01-01", end = "2020-12-31"
 )
-# reference "1" (verbal cooperation): higher theta = more cooperative
-fit <- fit_dyad_ts(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
-theta <- extract_theta(fit)
+\donttest{
+# reference "1" (verbal cooperation): higher theta = more cooperative.
+# Far too short for real use; the defaults are 4 chains of 1000 + 1000.
+fit <- fit_dyad_ts(
+  agg,
+  reference_category = "1",
+  chains = 2, iter_warmup = 200, iter_sampling = 200, seed = 1, refresh = 0
+)
+extract_theta(fit)
 }
+\dontshow{\}) # examplesIf}
 }

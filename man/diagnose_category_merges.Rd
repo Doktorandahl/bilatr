@@ -137,3 +137,8 @@ deliberately (unchanged computation, documented meaning): a
 country-specific merge analysis is a coherent further extension but is
 not implemented here.
 }
+\examples{
+merges <- diagnose_category_merges(bilatr_example_fit())
+merges
+merges$ladder
+}

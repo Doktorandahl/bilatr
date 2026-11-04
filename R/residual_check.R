@@ -436,6 +436,12 @@
 #'   and `phi_min`, the minimum of `dyads$phi_min`), and `settings` (the
 #'   resolved arguments, including `sampled_dyad_ids` and
 #'   `n_draws_dropped`).
+#' @examples
+#' # the example fit has only 6 dyads and 120 draws; real fits use the
+#' # defaults (1500 dyads, 200 draws)
+#' rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+#' rc
+#' rc$global$beta_signal_ratio
 #' @export
 check_compositional_residuals <- function(
   fit,
@@ -762,6 +768,9 @@ check_compositional_residuals <- function(
 #' @param n_categories Maximum number of category rows to print.
 #' @param ... Ignored; present for S3 consistency.
 #' @return `x`, invisibly.
+#' @examples
+#' rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+#' print(rc, n_categories = 3)
 #' @export
 print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
   g <- x$global
@@ -853,6 +862,12 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
 #' @param ... Ignored; present for S3 consistency.
 #' @return A `ggplot` object, or (for `which = "all"`) a named list of
 #'   three.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+#'   ggplot2::autoplot(rc, which = "ppp_hist")
+#'   plot(rc, which = "category")
+#' }
 #' @exportS3Method ggplot2::autoplot
 autoplot.bilatr_residual_check <- function(object, which = c("all", "perp_vs_n", "ppp_hist", "category"), ...) {
   rlang::check_installed("ggplot2", "for autoplot.bilatr_residual_check()")
@@ -892,6 +907,14 @@ plot.bilatr_residual_check <- function(x, which = c("all", "perp_vs_n", "ppp_his
 #' @param x A `bilatr_residual_check` object.
 #' @param dir Output directory (created if it does not exist).
 #' @return `x`, invisibly.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+#'   out_dir <- tempfile("residual_check_")
+#'   write_residual_check(rc, out_dir)
+#'   list.files(out_dir)
+#'   unlink(out_dir, recursive = TRUE)
+#' }
 #' @export
 write_residual_check <- function(x, dir) {
   stopifnot(inherits(x, "bilatr_residual_check"))

@@ -14,6 +14,7 @@
 }
 \description{
 \code{cmdstanr} is in Suggests, so every code path that compiles or samples
-calls this first. Requires at least \link{.BILATR_MIN_CMDSTANR}.
+calls this first. Requires at least \link{.BILATR_MIN_CMDSTANR}. Shares its
+checks with \code{\link[=bilatr_cmdstan_available]{bilatr_cmdstan_available()}} through \code{\link[=.cmdstan_problem]{.cmdstan_problem()}}.
 }
 \keyword{internal}

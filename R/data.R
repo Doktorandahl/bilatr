@@ -34,10 +34,6 @@
 #'   \item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
 #'     codes underlying each `PentaClass` class; see
 #'     [pentaclass_eventcodes()].}
-#'   \item{PentaClass_modified}{Integer, 0-4. As PentaClass, except that
-#'     every code with `QuadClass` 1 and `GoldsteinScore` at most 1 is
-#'     class 0. Class 0 is therefore roots 01-02 plus the codes of roots
-#'     03-05 scoring at most 1 (in this table `04`, `040` and `041`).}
 #'   \item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
 #'     root codes that moves `016` (deny responsibility) into Reject
 #'     (class 13) and `018`/`019` (make empathetic comment, express
@@ -68,6 +64,13 @@
 #'   Conflict and Mediation Event Observations Event and Actor Codebook*,
 #'   version 1.1b3. Goldstein scale from Goldstein (1992), "A
 #'   Conflict-Cooperation Scale for WEIS Events Data".
+#' @examples
+#' # the root-level rows of the verbal-conflict PentaClass
+#' subset(cameo_lookup, PentaClass == 3 & nchar(CAMEOEVENTCODE) == 2,
+#'   select = c(CAMEOEVENTCODE, CAMEOLabel, GoldsteinScore))
+#'
+#' # how the 310 codes spread over QuadClass and PentaClass
+#' table(cameo_lookup$QuadClassName, cameo_lookup$PentaClass)
 "cameo_lookup"
 
 #' Estimated bilateral-relations trajectories, 1991-2025
@@ -165,10 +168,10 @@
 #' `citation("bilatr")`.
 #'
 #' @source GDELT 1.0 event data, The GDELT Project,
-#'   <https://www.gdeltproject.org/>, accessed 2026-01-31.
+#'   <https://gdeltproject.org/>, accessed 2026-01-31.
 #' @references
 #' Leetaru, K. and Schrodt, P. A. (2013). "GDELT: Global Data on Events,
-#' Location and Tone, 1979–2012." Paper presented at the International
+#' Location and Tone, 1979--2012." Paper presented at the International
 #' Studies Association annual convention, San Francisco.
 #'
 #' The GDELT Project. Global Database of Events, Language, and Tone

@@ -22,3 +22,12 @@ non-exported-computation wrapper writing \code{dyads}/\code{categories}/
 \code{global}/\code{eps_sensitivity} as CSVs and the three \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}
 diagnostics as PNGs into \code{dir}.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+  out_dir <- tempfile("residual_check_")
+  write_residual_check(rc, out_dir)
+  list.files(out_dir)
+  unlink(out_dir, recursive = TRUE)
+}
+}

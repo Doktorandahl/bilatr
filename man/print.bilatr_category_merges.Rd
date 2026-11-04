@@ -22,3 +22,7 @@
 \description{
 Print a \code{bilatr_category_merges} object
 }
+\examples{
+merges <- diagnose_category_merges(bilatr_example_fit())
+print(merges, n_pairwise = 3, n_ladder = 2)
+}

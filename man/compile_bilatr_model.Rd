@@ -75,11 +75,18 @@ installation (see \code{cmdstanr::install_cmdstan()}).
 }
 
 \examples{
-\dontrun{
+\dontshow{if (bilatr_cmdstan_available()) withAutoprint(\{ # examplesIf}
+\donttest{
+# compiling takes a minute or more the first time; later calls reuse
+# the compiled model
 mod <- compile_bilatr_model()
 mod_gamma <- compile_bilatr_model("stable_gamma")
-mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
+
 }
+# less memory for compiling, somewhat slower sampling (rebuilds, so it
+# takes as long as the first compile):
+# mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}}

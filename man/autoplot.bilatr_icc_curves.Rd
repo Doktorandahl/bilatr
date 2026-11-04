@@ -28,3 +28,12 @@ A line + pointwise-interval-ribbon plot, one series per category. For
 (\code{attr(x, "total_information")}) is overlaid as a dashed reference
 line unless \code{show_total = FALSE}.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  csv_files <- bilatr_example_fit()
+  curves <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41)
+  ggplot2::autoplot(curves)
+  info <- icc_curves(csv_files, theta_range = c(-2, 2), n_grid = 41, type = "information")
+  plot(info, show_total = TRUE)
+}
+}

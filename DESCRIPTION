@@ -39,14 +39,16 @@ Imports:
     tidyselect,
     stats,
     tools,
-    utils
+    utils,
+    parallel
 Suggests:
     cmdstanr (>= 0.8.0),
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
     ggplot2,
-    withr
+    withr,
+    parallelly
 Additional_repositories: https://stan-dev.r-universe.dev
 SystemRequirements: CmdStan (https://mc-stan.org/users/interfaces/cmdstan)
 VignetteBuilder: knitr

@@ -265,6 +265,10 @@
 #'   `A`, standard for agglomerative methods), `summary` (scalars for
 #'   `print()`), and `probs` (this call's `probs`, as used by
 #'   [merge_cost()]).
+#' @examples
+#' merges <- diagnose_category_merges(bilatr_example_fit())
+#' merges
+#' merges$ladder
 #' @export
 diagnose_category_merges <- function(
   fit,
@@ -412,6 +416,11 @@ diagnose_category_merges <- function(
 #' @return A tibble with one row: `pct_info_lost` (mean), `pct_info_lost_lower`,
 #'   `pct_info_lost_upper` (a posterior interval, `probs`' outer bounds as
 #'   used by `x`).
+#' @examples
+#' merges <- diagnose_category_merges(bilatr_example_fit())
+#' # PentaClass: merge the two cooperation classes, and the two conflict
+#' # classes, keeping "Make statement" (0) on its own
+#' merge_cost(merges, groups = list(c("1", "2"), c("3", "4")))
 #' @export
 merge_cost <- function(x, groups) {
   stopifnot(inherits(x, "bilatr_category_merges"))
@@ -453,6 +462,9 @@ merge_cost <- function(x, groups) {
 #' @param n_ladder Maximum number of ladder steps to print.
 #' @param ... Ignored; present for S3 consistency.
 #' @return `x`, invisibly.
+#' @examples
+#' merges <- diagnose_category_merges(bilatr_example_fit())
+#' print(merges, n_pairwise = 3, n_ladder = 2)
 #' @export
 print.bilatr_category_merges <- function(x, n_pairwise = 10, n_ladder = 10, ...) {
   cat("<bilatr_category_merges>\n\n")

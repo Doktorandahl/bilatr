@@ -33,3 +33,7 @@ pair whose crossing falls outside the observed \code{theta_range}
 over the range dyads occupy, regardless of how different their
 discriminations look in the abstract.
 }
+\examples{
+curves <- icc_curves(bilatr_example_fit(), theta_range = c(-2, 2), n_grid = 41)
+icc_crossings(curves)
+}

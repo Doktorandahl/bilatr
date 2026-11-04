@@ -64,12 +64,14 @@ file. Downloads run sequentially (GDELT is a shared public server), with
 a one-line progress \code{message()} per file.
 }
 \examples{
-\dontrun{
+\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
 # temp mode: a quick look, nothing kept on disk
 events <- download_gdelt("2020-01-01")
 
 # cache mode: for real work -- keep the zips, read them yourself
-status <- download_gdelt("2020-01-01", "2020-01-31", dest_dir = "data/gdelt_raw")
+dir <- tempfile("gdelt_")
+status <- download_gdelt("2020-01-01", "2020-01-03", dest_dir = dir)
 events <- read_gdelt(status$path[status$status \%in\% c("downloaded", "cached")])
-}
+unlink(dir, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

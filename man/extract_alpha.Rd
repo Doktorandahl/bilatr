@@ -49,11 +49,10 @@ here -- just one plain read (via \link{.get_draws}) across all
 of \code{fit}, then the same extraction logic either way.
 }
 \examples{
-\dontrun{
-alpha <- extract_alpha(fit) # labelled from attr(fit, "stan_data")
-
-# cross-chain roll-up from saved CSVs, no in-memory fit
-csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-alpha <- extract_alpha(csv_files, event_classes = event_classes)
-}
+# cross-chain roll-up from saved CSVs, no in-memory fit (here, the
+# example fit shipped with bilatr). A fit object from fit_panel() is
+# labelled from attr(fit, "stan_data"); CSVs need `event_classes`.
+csv_files <- bilatr_example_fit()
+stan_data <- readRDS(file.path(dirname(csv_files[1]), "example_stan_data.rds"))
+extract_alpha(csv_files, event_classes = attr(stan_data, "event_classes"))
 }

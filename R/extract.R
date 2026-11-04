@@ -58,14 +58,15 @@
 #'   `actor2`, the time column and its labels), the posterior `mean`
 #'   of theta, and one column per requested quantile.
 #' @examples
-#' \dontrun{
-#' theta <- extract_theta(fit)
+#' # CmdStan CSVs from a completed run, never read into this R session (here,
+#' # the example fit shipped with bilatr); the *_stan_data.rds that
+#' # fit_panel() wrote next to the CSVs is found
+#' csv_files <- bilatr_example_fit()
+#' theta <- extract_theta(csv_files, max_memory_mb = 4096)
+#' theta
 #'
-#' # a completed SLURM run, never read into this R session; the
-#' # *_stan_data.rds that fit_panel() wrote next to the CSVs is found
-#' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' theta <- extract_theta(csv_files, max_memory_mb = 16384)
-#' }
+#' # one dyad's trajectory
+#' theta[theta$dyad == "USA_CHN", c("year", "mean", "5%", "95%")]
 #' @export
 extract_theta <- function(
   fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95),
@@ -184,13 +185,12 @@ extract_theta <- function(
 #'   (and `event_class` if `event_classes` is supplied), the posterior
 #'   `mean` of alpha, and one column per requested quantile.
 #' @examples
-#' \dontrun{
-#' alpha <- extract_alpha(fit) # labelled from attr(fit, "stan_data")
-#'
-#' # cross-chain roll-up from saved CSVs, no in-memory fit
-#' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' alpha <- extract_alpha(csv_files, event_classes = event_classes)
-#' }
+#' # cross-chain roll-up from saved CSVs, no in-memory fit (here, the
+#' # example fit shipped with bilatr). A fit object from fit_panel() is
+#' # labelled from attr(fit, "stan_data"); CSVs need `event_classes`.
+#' csv_files <- bilatr_example_fit()
+#' stan_data <- readRDS(file.path(dirname(csv_files[1]), "example_stan_data.rds"))
+#' extract_alpha(csv_files, event_classes = attr(stan_data, "event_classes"))
 #' @export
 extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
   event_classes <- event_classes %||% .attached_event_classes(fit)
@@ -235,9 +235,7 @@ extract_alpha <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95))
 #'   (and `event_class` if `event_classes` is supplied), the posterior
 #'   `mean` of mu_intercept, and one column per requested quantile.
 #' @examples
-#' \dontrun{
-#' mu_intercept <- extract_mu_intercept(fit)
-#' }
+#' extract_mu_intercept(bilatr_example_fit())
 #' @export
 extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5, 0.95)) {
   event_classes <- event_classes %||% .attached_event_classes(fit)
@@ -304,10 +302,9 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #'   `event_class`/`class_label` if supplied), the posterior `mean` of
 #'   `gamma`, and one column per requested quantile.
 #' @examples
-#' \dontrun{
-#' gamma <- extract_gamma(fit)
+#' gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+#' gamma
 #' gamma_norm(gamma)
-#' }
 #' @export
 extract_gamma <- function(
   fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95),
@@ -368,6 +365,9 @@ extract_gamma <- function(
 #' @param x An [extract_gamma()] tibble.
 #' @return A tibble, one row per country, `country_code`, `country_index`,
 #'   `gamma_norm`, sorted descending by `gamma_norm`.
+#' @examples
+#' gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+#' gamma_norm(gamma)
 #' @export
 gamma_norm <- function(x) {
   stopifnot(inherits(x, "bilatr_gamma"))
@@ -411,6 +411,12 @@ gamma_norm <- function(x) {
 #'   [extract_gamma()].
 #' @param ... Ignored; present for S3 consistency.
 #' @return A `ggplot` object.
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+#'   ggplot2::autoplot(gamma)
+#'   plot(gamma)
+#' }
 #' @exportS3Method ggplot2::autoplot
 autoplot.bilatr_gamma <- function(object, ...) {
   rlang::check_installed("ggplot2", "for autoplot.bilatr_gamma()")

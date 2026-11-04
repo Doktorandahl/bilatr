@@ -33,3 +33,18 @@ with a bulleted message naming each broken rule, the number of
 offending rows, and up to five example row numbers. Called first thing
 by \code{\link[=aggregate_events]{aggregate_events()}}.
 }
+\examples{
+events <- tibble::tibble(
+  Actor1CountryCode = c("USA", "RUS", "CHN"),
+  Actor2CountryCode = c("RUS", "USA", "USA"),
+  SQLDATE = c(20180105L, 20190302L, 20200101L),
+  PentaClass = c(0, 1, 3)
+)
+validate_bilatr_events(events, grouping_var = "PentaClass")
+
+# a self-directed event and a missing event class are both rejected
+bad <- events
+bad$Actor2CountryCode[1] <- "USA"
+bad$PentaClass[2] <- NA
+try(validate_bilatr_events(bad, grouping_var = "PentaClass"))
+}

@@ -1373,7 +1373,9 @@
 #'   rather than reporting the whole node's core count -- but this is a
 #'   genuine memory/wall-time trade-off, not a free choice, so consider
 #'   an explicit, moderate value for a memory-constrained job rather
-#'   than the largest available.
+#'   than the largest available. On Unix-alikes, a session that fits a
+#'   model between two `n_cores > 1` calls can print "Error while
+#'   shutting down parallel" when R exits; this is harmless.
 #' @param stan_model The model that was fit: `"stable"`, `"ou"` or
 #'   `"stable_gamma"`. `NULL` (default) uses the model recorded on the fit
 #'   (by [fit_panel()]/[fit_dyad_ts()]), on its Stan data, or in the
@@ -1421,20 +1423,21 @@
 #'       `n_tier3_other_rhat_above`, `n_tier3_other_ess_below` (0.10.2).}
 #'   }
 #' @examples
-#' \dontrun{
-#' diag <- diagnose_convergence(fit)
+#' # CmdStan CSV files from an earlier run, with the *_stan_data.rds file
+#' # that fit_panel(output_dir = ) wrote next to them (here, the example
+#' # fit shipped with bilatr): Tier 3 is read and summarized in
+#' # memory-bounded chunks rather than all at once. The example fit is far
+#' # too short to converge, so most of Tier 1 is flagged.
+#' csv_files <- bilatr_example_fit()
+#' diag <- diagnose_convergence(csv_files, max_memory_mb = 4096)
 #' diag
 #' diag$tier1
 #'
 #' # only the cheap, always-important global/shared parameters:
-#' diagnose_convergence(fit, tiers = 1)
+#' diagnose_convergence(csv_files, tiers = 1)
 #'
-#' # CmdStan CSV files from an earlier run, with the *_stan_data.rds file
-#' # that fit_panel(output_dir = ) wrote next to them: Tier 3 is read and
-#' # summarized in memory-bounded chunks rather than all at once
-#' csv_files <- list.files("model_output/some_spec", pattern = "\\.csv$", full.names = TRUE)
-#' diagnose_convergence(csv_files, max_memory_mb = 4096)
-#' }
+#' # a stable_gamma fit gets its own `gamma` report element
+#' diagnose_convergence(bilatr_example_fit("stable_gamma"), tiers = 1)$gamma
 #' @export
 diagnose_convergence <- function(
   fit,
@@ -1514,6 +1517,9 @@ diagnose_convergence <- function(
 #'   fewer flagged elements than that).
 #' @param ... Ignored; present for S3 consistency.
 #' @return `x`, invisibly.
+#' @examples
+#' diag <- diagnose_convergence(bilatr_example_fit(), tiers = 1:2)
+#' print(diag, n_tier2 = 3)
 #' @export
 print.bilatr_diagnostics <- function(x, n_tier2 = 20, n_gamma = 10, ...) {
   cat("<bilatr_diagnostics>\n\n")

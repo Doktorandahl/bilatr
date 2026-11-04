@@ -87,10 +87,16 @@ test_that("cameo_lookup's QuadClass/PentaClass event codes are the roots each cl
   )
 })
 
-test_that("PentaClass_modified is PentaClass, with QuadClass-1 codes scoring at most 1 in class 0", {
-  lk <- cameo_lookup
-  expected <- ifelse(lk$QuadClass == 1L & lk$GoldsteinScore <= 1, 0L, lk$PentaClass)
-  expect_identical(lk$PentaClass_modified, expected)
+test_that("cameo_lookup has exactly the documented 12 columns", {
+  expect_identical(
+    names(cameo_lookup),
+    c(
+      "CAMEOEVENTCODE", "CAMEOLabel", "GoldsteinScore",
+      "QuadClass", "QuadClassName", "QuadClassEventCodes",
+      "PentaClass", "PentaClassName", "PentaClassEventCodes",
+      "ModifiedRootCode", "ModifiedRootCodeName", "ModifiedRootCodeEventCodes"
+    )
+  )
 })
 
 test_that("pentaclass_name labels the 0-4 classes and NAs anything else", {
@@ -118,7 +124,6 @@ test_that("cameo_lookup has no missing recodes or duplicate codes", {
   expect_false(any(is.na(cameo_lookup$PentaClass)))
   expect_false(any(is.na(cameo_lookup$PentaClassName)))
   expect_false(any(is.na(cameo_lookup$PentaClassEventCodes)))
-  expect_false(any(is.na(cameo_lookup$PentaClass_modified)))
   expect_true(all(cameo_lookup$ModifiedRootCode %in% c(1:18, NA)))
   expect_false(any(duplicated(cameo_lookup$CAMEOEVENTCODE)))
 })
@@ -172,7 +177,10 @@ test_that("recode_cameo attaches QuadClass/PentaClass by joining on a named code
   events <- tibble::tibble(EventCode = c("044", "19", "010"))
   out <- recode_cameo(events, code_col = "EventCode")
   expect_equal(out$QuadClass, c(1L, 4L, 1L))
-  expect_true(all(c("PentaClass", "PentaClass_modified", "GoldsteinScore") %in% names(out)))
+  expect_true(all(c("PentaClass", "GoldsteinScore") %in% names(out)))
+  # the 11 lookup columns besides the join key, and nothing else
+  expect_identical(setdiff(names(out), names(events)), setdiff(names(cameo_lookup), "CAMEOEVENTCODE"))
+  expect_length(setdiff(names(out), names(events)), 11L)
 })
 
 test_that("recode_cameo also attaches QuadClassName/PentaClassName/EventCodes columns", {

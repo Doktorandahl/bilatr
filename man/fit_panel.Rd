@@ -91,7 +91,7 @@ numbers, if \code{min > max}, or if no rows fall inside it.}
 across dyads: a single whole number, at least 1. The default, 1, is
 conservative and fine for single-threaded fits; with several threads
 per chain a larger value is usually faster for large panels. See
-\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning")}.}
+\code{\link[=fit_panel]{fit_panel()}}'s \code{threads_per_chain} and \code{vignette("tuning", package = "bilatr")}.}
 
 \item{rho_prior_a, rho_prior_b}{Shape parameters (single positive
 numbers) of the \code{beta(rho_prior_a, rho_prior_b)} prior on the
@@ -194,23 +194,44 @@ data). The defaults (\code{threads_per_chain = 1}, \code{parallel_chains = 1},
 \code{chunk_size = 1}) are conservative: they run on any machine, but use
 one core. On a multi-core machine, more threads per chain and a larger
 \code{chunk_size} can be much faster for large panels; tune them together
-for your data size and hardware, as described in \code{vignette("tuning")}.
+for your data size and hardware, as described in \code{vignette("tuning", package = "bilatr")}.
 }
 \examples{
-\dontrun{
+\dontshow{if (bilatr_cmdstan_available()) withAutoprint(\{ # examplesIf}
+# 600 simulated events among three countries over 2015-2020
+set.seed(1)
+countries <- c("USA", "CHN", "RUS")
+days <- seq(as.Date("2015-01-01"), as.Date("2020-12-31"), by = "day")
+pairs <- expand.grid(a1 = countries, a2 = countries, stringsAsFactors = FALSE)
+pairs <- pairs[pairs$a1 != pairs$a2, ]
+idx <- sample(nrow(pairs), 600, replace = TRUE)
+events <- recode_cameo(tibble::tibble(
+  Actor1CountryCode = pairs$a1[idx],
+  Actor2CountryCode = pairs$a2[idx],
+  SQLDATE = as.integer(format(sample(days, 600, replace = TRUE), "\%Y\%m\%d")),
+  EventCode = sample(cameo_lookup$CAMEOEVENTCODE, 600, replace = TRUE)
+))
 agg <- aggregate_events(
   events, grouping_var = "PentaClass", resolution = "yearly",
   start = "2015-01-01", end = "2020-12-31"
 )
-# reference "1" (verbal cooperation): higher theta = more cooperative
-fit <- fit_panel(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
-
-# on a machine with 16 cores: 4 chains in parallel, 4 threads each
+\donttest{
+# reference "1" (verbal cooperation): higher theta = more cooperative.
+# Far too short for real use; the defaults are 4 chains of 1000 + 1000.
 fit <- fit_panel(
-  agg, reference_category = "1", # verbal cooperation
-  chains = 4, parallel_chains = 4,
-  threads_per_chain = 4, chunk_size = 50
+  agg,
+  reference_category = "1",
+  chains = 2, iter_warmup = 200, iter_sampling = 200, seed = 1, refresh = 0
 )
-theta <- extract_theta(fit)
+extract_theta(fit)
+
+# on a machine with 16 cores and a large panel: 4 chains in parallel,
+# 4 threads each (see vignette("tuning", package = "bilatr"))
+# fit <- fit_panel(
+#   agg, reference_category = "1",
+#   chains = 4, parallel_chains = 4,
+#   threads_per_chain = 4, chunk_size = 50
+# )
 }
+\dontshow{\}) # examplesIf}
 }

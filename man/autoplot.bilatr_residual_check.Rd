@@ -30,3 +30,10 @@ the per-dyad PPP distribution against Uniform(0,1); and each
 category's contribution to the pooled statistic, observed versus
 replicate.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+  ggplot2::autoplot(rc, which = "ppp_hist")
+  plot(rc, which = "category")
+}
+}

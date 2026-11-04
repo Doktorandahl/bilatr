@@ -68,6 +68,45 @@ test_that(".require_cmdstan() names install_cmdstan() when CmdStan is missing", 
   expect_error(compile_bilatr_model(), "cmdstanr::install_cmdstan\\(\\)")
 })
 
+test_that("bilatr_cmdstan_available() is FALSE, without erroring, whatever is missing", {
+  # cmdstanr too old (or, here also without cmdstanr, absent)
+  local({
+    local_mocked_bindings(.BILATR_MIN_CMDSTANR = "999.0.0")
+    expect_false(bilatr_cmdstan_available())
+    expect_identical(.cmdstan_problem(), "cmdstanr")
+  })
+
+  skip_if_not_installed("cmdstanr")
+  local({
+    local_mocked_bindings(cmdstan_version = function(...) NULL, .package = "cmdstanr")
+    expect_false(bilatr_cmdstan_available())
+    expect_identical(.cmdstan_problem(), "cmdstan")
+  })
+  local({
+    local_mocked_bindings(cmdstan_version = function(...) stop("boom"), .package = "cmdstanr")
+    expect_false(bilatr_cmdstan_available())
+  })
+  local({
+    local_mocked_bindings(
+      cmdstan_version = function(...) {
+        warning("no path")
+        NULL
+      },
+      .package = "cmdstanr"
+    )
+    expect_no_warning(expect_false(bilatr_cmdstan_available()))
+  })
+})
+
+test_that("bilatr_cmdstan_available() agrees with whether CmdStan runs", {
+  has_cmdstan <- rlang::is_installed("cmdstanr", version = .BILATR_MIN_CMDSTANR) &&
+    !is.null(tryCatch(cmdstanr::cmdstan_version(error_on_NA = FALSE), error = function(e) NULL))
+  expect_identical(bilatr_cmdstan_available(), has_cmdstan)
+  if (has_cmdstan) {
+    expect_true(.require_cmdstan("test"))
+  }
+})
+
 test_that("bilatr_clear_model_cache() deletes only bilatr's files in a bilatr.model_dir, and empties the session cache", {
   dir <- withr::local_tempdir(pattern = "model dir ")
   withr::local_options(bilatr.model_dir = dir)

@@ -24,3 +24,7 @@ adequate for ranking/ordering (e.g. \code{\link[=autoplot.bilatr_gamma]{autoplot
 country axis) but not itself a posterior quantity -- no interval is
 reported.
 }
+\examples{
+gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))
+gamma_norm(gamma)
+}

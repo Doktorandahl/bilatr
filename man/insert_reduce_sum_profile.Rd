@@ -2,29 +2,44 @@
 % Please edit documentation in R/benchmark.R
 \name{insert_reduce_sum_profile}
 \alias{insert_reduce_sum_profile}
-\title{Wrap the reduce_sum likelihood in a Stan \code{profile()} block}
+\title{Wrap a model's \code{reduce_sum} likelihood in a Stan \code{profile()} block}
 \usage{
 insert_reduce_sum_profile(stan_code, profile_name = "reduce_sum_likelihood")
 }
 \arguments{
-\item{stan_code}{Character scalar, the full Stan program source.}
+\item{stan_code}{Character scalar, the full Stan program, for example
+\code{paste(readLines(f), collapse = "\\n")} of a bilatr \code{.stan} file.}
 
-\item{profile_name}{Name for the \code{profile()} block. Default
-\code{"reduce_sum_likelihood"}.}
+\item{profile_name}{Name of the \code{profile()} block.}
 }
 \value{
 Character scalar, the modified Stan program.
 }
 \description{
-Takes the source of \code{inst/stan/bilatr_alphanorm.stan} (the \code{stable}
-model since 0.4.0's promotion; see NEWS.md) or an equivalent model
-whose \code{model} block contains the exact
-\verb{array[D] int dyad_seq = linspaced_int_array(D, 1, D);} +
-\verb{target += reduce_sum(...);} pair) and returns a copy with that pair
-wrapped in \verb{profile("<profile_name>") \{ ... \}}, so a fit of the
-returned model reports per-call timing for the parallel region via
-\code{CmdStanMCMC$profiles()}. Errors if the statement pair is not found
-exactly once, so a drifted upstream model fails loudly rather than
-benchmarking an unprofiled program.
+Returns a copy of a bilatr Stan program in which the \code{reduce_sum}
+likelihood statement (with the \code{dyad_seq} line before it) is wrapped in
+\verb{profile("<profile_name>") \{ ... \}}. A fit of the returned program
+reports the time spent in the parallel region through
+\code{CmdStanMCMC$profiles()}, which separates the likelihood from the rest
+of each gradient evaluation. \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} uses it with
+\code{profile = TRUE}; for a cluster sweep, write the result to a \code{.stan}
+file and compile that (see \code{vignette("tuning", package = "bilatr")}).
 }
-\keyword{internal}
+\details{
+The statement is found by pattern, and the same pattern matches all
+three registered models (\code{"stable"}, \code{"stable_gamma"} and \code{"ou"}). It
+errors if the statement is not found exactly once, so a changed model
+fails loudly rather than being benchmarked unprofiled.
+}
+\examples{
+stan_file <- system.file("stan", "bilatr_alphanorm.stan", package = "bilatr")
+src <- paste(readLines(stan_file), collapse = "\n")
+profiled <- insert_reduce_sum_profile(src)
+# the wrapped statement
+lines <- strsplit(profiled, "\n")[[1]]
+i <- grep("profile(", lines, fixed = TRUE)
+writeLines(lines[i:(i + 4)])
+}
+\seealso{
+\code{\link[=benchmark_bilatr]{benchmark_bilatr()}}
+}

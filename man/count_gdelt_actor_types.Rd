@@ -64,7 +64,10 @@ on Actor1 and \code{SPY} on Actor2 contributes to both \verb{(GOV, SPY)} and
 \code{actor_types}, since its purpose is to tune that argument.
 }
 \examples{
-\dontrun{
-count_gdelt_actor_types("data/gdelt_raw/20200101.export.CSV.zip")
-}
+\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
+dir <- tempfile("gdelt_")
+status <- download_gdelt("2020-01-01", dest_dir = dir)
+count_gdelt_actor_types(status$path)
+unlink(dir, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

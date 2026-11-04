@@ -20,3 +20,7 @@
 \description{
 Print a \code{bilatr_residual_check} object
 }
+\examples{
+rc <- check_compositional_residuals(bilatr_example_fit(), n_dyads = 6, n_draws = 40)
+print(rc, n_categories = 3)
+}

@@ -23,8 +23,9 @@ again.
 \details{
 By default the cache directory of the installed bilatr version is
 deleted. If \code{options(bilatr.model_dir = )} is set, only the files
-bilatr put in that directory (the \code{.stan} copies and their compiled
-executables) are deleted, not the directory itself.
+bilatr put in that directory (the \code{.stan} copies, the profiled copies
+that \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} compiles, and their compiled executables) are
+deleted, not the directory itself.
 }
 \examples{
 old <- options(bilatr.model_dir = tempfile("bilatr_models_"))

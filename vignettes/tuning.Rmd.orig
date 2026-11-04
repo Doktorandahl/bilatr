@@ -1,0 +1,386 @@
+---
+title: "Tuning threads, chunk size and chains"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tuning threads, chunk size and chains}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+<!-- tuning.Rmd is generated from tuning.Rmd.orig by vignettes/precompile.R,
+which needs CmdStan. Edit the .Rmd.orig file, then re-knit. The sweep
+takes several minutes and describes the machine it runs on. -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/tuning-",
+  fig.width = 6,
+  fig.height = 3.5,
+  dpi = 96,
+  dev = "ragg_png",
+  out.width = "100%"
+)
+```
+
+A bilatr fit can use many cores, in two ways: several chains at once,
+and several threads within each chain. How many of each, and how the
+work within a chain is split, decides how long a large panel takes to
+fit. The best settings depend on the size of your data and on your
+hardware, so this vignette shows how to measure them rather than
+prescribing values.
+
+## The four settings
+
+* **`chains`** is the number of independent Markov chains. It is a
+  statistical choice, not a speed one: R-hat needs several chains (4 is
+  usual), and more chains give more draws.
+* **`parallel_chains`** is how many of those chains run at the same
+  time, each in its own process. With `chains = 4, parallel_chains = 4`
+  all four run at once; with `parallel_chains = 1` they run one after
+  another.
+* **`threads_per_chain`** is the number of threads each chain uses for
+  the likelihood. The models evaluate the likelihood with Stan's
+  `reduce_sum`, which splits the dyads into tasks and runs the tasks in
+  parallel, so a chain with 8 threads can work on 8 tasks at once.
+* **`chunk_size`** is the `reduce_sum` grainsize: roughly how many dyads
+  go into one task. It is stored as `C` in the Stan data. Small chunks
+  mean many tasks, which share the work evenly across threads but cost
+  scheduling overhead; large chunks mean little overhead but, with fewer
+  tasks than threads, idle threads.
+
+A fit uses about `parallel_chains * threads_per_chain` cores at its peak.
+
+## Why the defaults are 1, 1 and 1
+
+[fit_panel()] defaults to `threads_per_chain = 1`, `parallel_chains = 1`
+and `chunk_size = 1`. These are conservative: they run on any machine,
+including a laptop that is doing other work, a CI runner with two
+cores, and a cluster job that was given one core, and they never
+oversubscribe the CPU. They are also slow for a large panel. bilatr
+cannot know how many cores you want it to use, so it does not guess;
+choose the settings for your machine and data, using the steps below.
+
+`chunk_size = 1` makes every dyad its own `reduce_sum` task. That is the
+safest choice when nothing is known about the data, but it is rarely the
+fastest, even with one thread: each task has a fixed cost, so measure a
+larger value (see the sweep below).
+
+## How they trade off
+
+**Threads within a chain versus chains in parallel.** With 16 cores and
+4 chains, you can run the 4 chains in parallel with 4 threads each, or
+one at a time with 16 threads. Chains in parallel are nearly perfectly
+efficient: four chains on four cores take about as long as one. Threads
+within a chain are not: the parts of each iteration outside the
+likelihood run on one thread, and the threads have to be coordinated.
+So with cores to spare, first run the chains in parallel
+(`parallel_chains = chains`), then give each chain the remaining cores
+as threads. Threads matter most when you have more cores than chains,
+or when one long chain is the bottleneck (for example, one chain per
+cluster job).
+
+**Chunk size versus scheduling overhead.** For a given number of
+threads, throughput usually rises as `chunk_size` grows from 1 (less
+overhead per task), levels off, and falls again once there are too few
+tasks to keep every thread busy. The useful range scales with the
+number of dyads: [benchmark_grid()] by default tries values from
+`D / 200` to `D / 6`.
+
+**Throughput versus cost.** More threads give more iterations per
+second, but each extra thread adds less than the one before. Measured
+in core-seconds per 1,000 iterations, the cost per draw rises with the
+thread count. Which point to choose depends on whether wall time or
+core time is scarcer: on a laptop it is wall time; on a shared cluster
+with a core-hour budget, it may be core time. The Pareto front (the
+settings for which no other setting is both faster and cheaper) is the
+short list to choose from.
+
+**Memory.** Each chain in parallel holds its own copy of the data and
+its own output, so memory grows with `parallel_chains`; threads within
+a chain share them. The model's memory is dominated by the latent
+states, about `D * T` per draw. On a memory-limited machine, fewer
+parallel chains with more threads each can fit where more parallel
+chains cannot.
+
+## Measuring on your own machine
+
+[benchmark_bilatr()] runs a small sweep of `threads_per_chain` x
+`chunk_size` on your data: one short chain per setting, timed. The
+example below simulates a yearly panel of a few hundred directed dyads.
+
+```{r simulate}
+library(bilatr)
+library(dplyr)
+
+set.seed(2026)
+countries <- sprintf("C%02d", 1:20)
+years <- 2011:2020
+classes <- c("0", "1", "2", "3", "4")
+alpha <- c(0.3, 1, 1.2, -0.9, -1.6) # how each class responds to theta
+mu <- c(0.2, 0.3, 0, 0, -0.3)
+
+pairs <- expand.grid(actor1 = countries, actor2 = countries, stringsAsFactors = FALSE) %>%
+  filter(actor1 != actor2)
+panel <- purrr::pmap(pairs, function(actor1, actor2) {
+  rate <- exp(runif(1, log(3), log(60))) # events per year
+  theta <- cumsum(c(rnorm(1), rnorm(length(years) - 1, 0, 0.3)))
+  counts <- t(vapply(theta, function(th) {
+    p <- exp(alpha * th + mu)
+    rmultinom(1, rpois(1, rate), p / sum(p))[, 1]
+  }, numeric(length(classes))))
+  colnames(counts) <- classes
+  bind_cols(tibble::tibble(actor1 = actor1, actor2 = actor2, year = years), tibble::as_tibble(counts))
+}) %>%
+  bind_rows() %>%
+  filter(rowSums(across(all_of(classes))) > 0)
+
+n_distinct(panel$actor1, panel$actor2) # dyads
+```
+
+The machine this vignette was computed on:
+
+```{r machine}
+cpu <- if (Sys.info()[["sysname"]] == "Darwin") {
+  system("sysctl -n machdep.cpu.brand_string", intern = TRUE)
+} else {
+  sub(".*: ", "", grep("model name", readLines("/proc/cpuinfo"), value = TRUE)[1])
+}
+cpu
+parallel::detectCores()
+R.version.string
+cmdstanr::cmdstan_version()
+```
+
+The sweep: four thread counts, five chunk sizes, three replicates, each
+run one chain of 50 warmup and 50 sampling iterations (with
+`max_treedepth = 6`, so that every iteration of these short runs does a
+similar amount of work; see `?benchmark_bilatr`). `...` passes
+`time`, `action_cols` and `reference_category` on to
+[prepare_stan_data()], as for [fit_panel()].
+
+```{r sweep}
+bench <- benchmark_bilatr(
+  panel,
+  threads_per_chain = c(1, 2, 4, 8),
+  chunk_size = c(1, 5, 15, 40, 100),
+  replicates = 3,
+  iter_warmup = 50,
+  iter_sampling = 50,
+  time = "year",
+  action_cols = all_of(classes),
+  reference_category = "1"
+)
+bench
+```
+
+`sampling_sec` is the wall time of the sampling phase, `iter_per_sec`
+the throughput and `core_sec_per_1k_iter` its cost in core-seconds.
+`reduce_sum_wall_sec` is the time spent in the likelihood (warmup
+included), from a copy of the model with the likelihood wrapped in a
+Stan `profile()` block; the rest of each run is the single-threaded
+part. `n_leapfrog` counts the gradient evaluations of the sampling
+phase: the runs should all do about the same number, and
+`benchmark_bilatr()` names any run that does not (its trajectory
+drifted, so its `iter_per_sec` is not comparable). The medians over the
+replicates below are robust to one such run.
+
+[summarise_benchmark()] collapses the replicates, and
+[benchmark_pareto()] marks the settings on the Pareto front of
+throughput and cost:
+
+```{r summarise}
+summ <- bench %>%
+  summarise_benchmark() %>%
+  benchmark_pareto()
+
+summ %>%
+  select(threads_per_chain, chunk_size, iter_per_sec_median, core_sec_per_1k_iter_median, pareto) %>%
+  arrange(desc(iter_per_sec_median))
+```
+
+[plot_benchmark()] shows the throughput over the grid, with the Pareto
+front outlined (`autoplot(bench)` draws the same plot):
+
+```{r heatmap, fig.cap = "Throughput (median iterations per second) over the grid; the Pareto front is outlined.", fig.alt = "Heatmap of sampling iterations per second over threads per chain (rows) and chunk size (columns), with Pareto-optimal cells outlined."}
+plot_benchmark(summ)
+```
+
+and the trade-off itself is clearer as throughput against cost:
+
+```{r pareto, fig.cap = "Throughput against cost, one point per setting; filled points are on the Pareto front.", fig.alt = "Throughput against cost per thousand iterations, one point per setting, colored by threads per chain; Pareto-optimal settings are labeled with their chunk size."}
+library(ggplot2)
+ggplot(summ, aes(core_sec_per_1k_iter_median, iter_per_sec_median, colour = factor(threads_per_chain))) +
+  geom_point(aes(shape = pareto), size = 2.5) +
+  geom_text(
+    data = filter(summ, pareto),
+    aes(label = paste0("chunk ", chunk_size)),
+    nudge_y = 0.04 * diff(range(summ$iter_per_sec_median)), size = 3, show.legend = FALSE
+  ) +
+  scale_shape_manual(values = c(`FALSE` = 1, `TRUE` = 16)) +
+  labs(
+    x = "core-seconds per 1,000 iterations (cost)",
+    y = "iterations per second (throughput)",
+    colour = "threads_per_chain", shape = "Pareto front"
+  ) +
+  theme_minimal()
+```
+
+```{r best, include = FALSE}
+fastest <- summ %>% slice_max(iter_per_sec_median, n = 1, with_ties = FALSE)
+one_thread <- summ %>%
+  filter(threads_per_chain == 1) %>%
+  slice_max(iter_per_sec_median, n = 1, with_ties = FALSE)
+speedup <- fastest$iter_per_sec_median / one_thread$iter_per_sec_median
+default <- summ %>% filter(threads_per_chain == 1, chunk_size == 1)
+```
+
+On this machine (`r cpu`, `r parallel::detectCores()` cores) and this
+panel, the fastest setting was `threads_per_chain = `r fastest$threads_per_chain``
+with `chunk_size = `r fastest$chunk_size``, `r sprintf("%.1f", speedup)`
+times the throughput of the best single-thread setting, at
+`r sprintf("%.1f", fastest$core_sec_per_1k_iter_median / one_thread$core_sec_per_1k_iter_median)`
+times the cost in core-seconds. Even on one thread, `chunk_size` mattered:
+`chunk_size = `r one_thread$chunk_size`` ran
+`r sprintf("%.1f", one_thread$iter_per_sec_median / default$iter_per_sec_median)`
+times as fast as the default `chunk_size = 1`. Your numbers will differ: these runs are
+short and timings are noisy, which is why the sweep has replicates.
+
+To turn this into a fit with 4 chains, keep `chains = 4`, run as many
+chains in parallel as your cores allow at the chosen thread count, and
+pass the chosen `chunk_size`:
+
+```{r, eval = FALSE}
+fit <- fit_panel(
+  panel,
+  time = "year", action_cols = all_of(classes), reference_category = "1",
+  chains = 4, parallel_chains = 2,
+  threads_per_chain = 4, chunk_size = 15
+)
+```
+
+## Measuring on a cluster
+
+For a panel large enough to need a cluster, run the sweep there, with
+one job per setting. The pieces:
+
+1. [benchmark_grid()] defines the jobs. Its rows are ordered by thread
+   count, so each thread count is one contiguous block, and one job
+   array per thread count asks the scheduler for exactly that many
+   cores.
+2. [insert_reduce_sum_profile()] gives a copy of the model with the
+   likelihood profiled. Write it to a `.stan` file and compile it once,
+   before submitting.
+3. Each job fits one chain and writes one row with the columns described
+   in `?summarise_benchmark` ("Benchmark results").
+4. Bind the rows and summarise them as above.
+
+The preparation, on a login node:
+
+```{r, eval = FALSE}
+library(bilatr)
+
+stan_data <- prepare_stan_data(panel, reference_category = "1")
+saveRDS(stan_data, "bench/stan_data.rds")
+
+grid <- benchmark_grid(stan_data$D, threads_per_chain = c(4, 8, 16, 32), replicates = 3)
+readr::write_csv(grid, "bench/grid.csv")
+
+src <- paste(readLines(system.file("stan", "bilatr_alphanorm.stan", package = "bilatr")), collapse = "\n")
+writeLines(insert_reduce_sum_profile(src), "bench/bilatr_profiled.stan")
+cmdstanr::cmdstan_model("bench/bilatr_profiled.stan", cpp_options = list(stan_threads = TRUE))
+```
+
+A worker script, `bench/worker.R`, run by each array task:
+
+```{r, eval = FALSE}
+library(bilatr)
+threads <- as.integer(Sys.getenv("BENCH_THREADS"))
+task <- as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))
+
+grid <- readr::read_csv("bench/grid.csv", show_col_types = FALSE)
+job <- grid[grid$threads_per_chain == threads, ][task, ]
+
+stan_data <- readRDS("bench/stan_data.rds")
+stan_data$C <- job$chunk_size
+mod <- cmdstanr::cmdstan_model("bench/bilatr_profiled.stan", cpp_options = list(stan_threads = TRUE))
+fit <- mod$sample(
+  data = stan_data, chains = 1, threads_per_chain = threads,
+  iter_warmup = 100, iter_sampling = 100, seed = job$replicate, refresh = 0
+)
+
+sampling_sec <- fit$time()$chains$sampling
+profiles <- fit$profiles()[[1]]
+rs <- profiles[profiles$name == "reduce_sum_likelihood", ]
+job$sampling_sec <- sampling_sec
+job$iter_per_sec <- 100 / sampling_sec
+job$core_sec_per_1k_iter <- threads * sampling_sec * 1000 / 100
+job$reduce_sum_wall_sec <- sum(rs$total_time) / length(unique(rs$thread_id))
+readr::write_csv(job, sprintf("bench/results/job_%04d.csv", job$job_id))
+```
+
+A SLURM array per thread count (here, the 8-thread block; with 9 chunk
+sizes and 3 replicates it has 27 tasks):
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=bench_t08
+#SBATCH --cpus-per-task=8
+#SBATCH --array=1-27
+#SBATCH --time=02:00:00
+export BENCH_THREADS=8
+Rscript bench/worker.R
+```
+
+When the arrays have finished:
+
+```{r, eval = FALSE}
+results <- purrr::map(list.files("bench/results", full.names = TRUE), readr::read_csv) %>%
+  dplyr::bind_rows()
+summ <- benchmark_pareto(summarise_benchmark(results))
+plot_benchmark(summ)
+```
+
+If you benchmark several data sets at once, add a `scenario` column to
+each job's row; [summarise_benchmark()] and [plot_benchmark()] group
+and facet by it, and `benchmark_pareto(by = "scenario")` finds each
+one's front.
+
+## A worked result from a production panel
+
+As an example of what a cluster sweep can show: for a yearly GDELT
+panel of 16,750 directed dyads (the panel behind `?theta_directed`), a
+sweep of this kind put `threads_per_chain = 16` with `chunk_size = 600`
+on the Pareto front. That is about 28 chunks, a little under two tasks
+per thread, a fairly coarse split, which suggests that on that cluster
+the overhead of many small tasks outweighed the cost of uneven work.
+
+This is an example, not a recommendation. The best settings depend on
+the number of dyads and periods, the number of action types, the model,
+the CPU and the cluster's scheduler; re-tune for your own data size and
+hardware.
+
+## Tuning the diagnostics
+
+[diagnose_convergence()], [diagnose_and_extract_bilatr()] and
+[extract_theta()] are the other place where throughput and memory
+trade off, when they read a large fit from CmdStan CSV files:
+
+* **`max_memory_mb`** is the memory budget for reading the per-period
+  latent states (Tier 3) in chunks. Reading is single-threaded and each
+  chunk costs about one pass over the largest CSV file, so fewer, larger
+  chunks are faster: use the largest budget your job can afford. The
+  default, 8 GB, is a guess, and the function says so when you rely on
+  it.
+* **`n_cores`** is the number of processes that compute R-hat and ESS
+  for each chunk. It speeds up the summaries, but each process needs
+  memory from the same budget, so at a fixed `max_memory_mb` more cores
+  can mean more, smaller chunks and more passes over the files. Inside a
+  SLURM job, `parallelly::availableCores()` gives the cores the job was
+  allocated.
+
+Both report their choice in a message before they start ("N variable(s)
+in K chunk(s) ... estimated peak ..."); check K at your intended
+`n_cores` before committing a long job to it. See
+[`vignette("diagnostics")`](diagnostics.html) for the diagnostics themselves.

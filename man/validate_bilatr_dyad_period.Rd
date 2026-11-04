@@ -46,3 +46,18 @@ columns (other than the optional ones) are reported up front, before
 any other rule is checked. The actor and \code{w_send} columns are
 validated only if present. Called first thing by \code{\link[=prepare_stan_data]{prepare_stan_data()}}.
 }
+\examples{
+dp <- tibble::tibble(
+  dyad = c("a-b", "a-b", "a-c"),
+  period = c(1L, 2L, 1L),
+  talks = c(3, 0, 1),
+  threats = c(0, 1, 2)
+)
+validate_bilatr_dyad_period(dp, time = "period", action_cols = c(talks, threats))
+
+# negative counts, and a dyad observed twice in one period, are rejected
+bad <- dp
+bad$threats[1] <- -1
+bad$period[2] <- 1L
+try(validate_bilatr_dyad_period(bad, time = "period", action_cols = c(talks, threats)))
+}

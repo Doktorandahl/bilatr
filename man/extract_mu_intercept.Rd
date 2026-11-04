@@ -47,7 +47,5 @@ for the same post-hoc/no-in-memory-fit case described in
 dyad-set size, so no chunking here either).
 }
 \examples{
-\dontrun{
-mu_intercept <- extract_mu_intercept(fit)
-}
+extract_mu_intercept(bilatr_example_fit())
 }

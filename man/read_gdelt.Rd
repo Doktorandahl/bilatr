@@ -103,7 +103,12 @@ supported by this function or by \code{\link[=gdelt_files]{gdelt_files()}}/\code
 this package reads GDELT 1.0's yearly/monthly/daily event files only.
 }
 \examples{
-\dontrun{
-events <- read_gdelt("data/gdelt_raw/20200101.export.CSV.zip")
-}
+\dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
+# downloads one daily file (about 6 MB) into a temporary directory
+dir <- tempfile("gdelt_")
+status <- download_gdelt("2020-01-01", dest_dir = dir)
+events <- read_gdelt(status$path)
+events
+unlink(dir, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

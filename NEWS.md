@@ -1,7 +1,56 @@
 # bilatr (development version)
 
-Steps 1 and 2 of the 1.0.0 release (code blockers; semantics). The full
-NEWS rewrite comes later in the release.
+Steps 1 to 3 of the 1.0.0 release (code blockers; semantics; examples
+and vignettes). The full NEWS rewrite comes later in the release.
+
+## Breaking changes
+
+* The `PentaClass_modified` column is removed from `cameo_lookup`, and
+  so from the output of `recode_cameo()`, which now attaches 11 columns.
+  Group by `PentaClass` instead; nothing in bilatr used the column.
+* The benchmark helpers are exported under new names, with arguments
+  and columns that use the vocabulary of `fit_panel()`
+  (`threads_per_chain`, `chunk_size`) instead of `cores` and
+  `grainsize`:
+  * `build_reduce_sum_grid(n_dyads, thread_levels, grainsize_levels,
+    replicates, grainsize_span, n_grainsize)` is now
+    `benchmark_grid(n_dyads, threads_per_chain, chunk_size, replicates,
+    chunk_size_span, n_chunk_size)`; its `cores`, `grainsize` and
+    `chunks_per_core` columns are now `threads_per_chain`, `chunk_size`
+    and `chunks_per_thread`;
+  * `pareto_front()` is now `benchmark_pareto()`, and picks its
+    throughput and cost columns by default;
+  * `summarise_benchmark()`, `plot_benchmark()` and
+    `insert_reduce_sum_profile()` keep their names; the first two expect
+    `threads_per_chain` and `chunk_size` columns (the full list is in
+    `?summarise_benchmark`) and group by them by default.
+
+## Examples, example fit and vignettes
+
+* New `bilatr_example_fit()` returns the CmdStan CSVs of a tiny real fit
+  that ships with the package (a `stable` and a `stable_gamma` fit of 6
+  simulated dyads), with their Stan data. Every post-fit function now
+  has an example that runs on it without CmdStan, and the post-fit
+  functions are tested on it on CRAN.
+* New `bilatr_cmdstan_available()` says whether cmdstanr and CmdStan are
+  ready, without erroring. The examples of `fit_panel()`,
+  `fit_dyad_ts()`, `compile_bilatr_model()` and `benchmark_bilatr()` run
+  only when it is `TRUE`; the GDELT download examples only
+  interactively. No example uses `\dontrun{}` any more.
+* New `benchmark_bilatr()` times a sweep of `threads_per_chain` x
+  `chunk_size` on your own data and machine, optionally profiling the
+  `reduce_sum` likelihood, and returns a `bilatr_benchmark` object with
+  `print()` and `autoplot()` methods.
+* New `vignette("tuning")` explains `chains`, `parallel_chains`,
+  `threads_per_chain` and `chunk_size`, and shows the local and cluster
+  benchmark workflows.
+* The vignettes that fit a model are precomputed, so they show their
+  output on machines without CmdStan (including CRAN's). Their sources
+  are `vignettes/*.Rmd.orig`, re-knitted with `vignettes/precompile.R`.
+* `parallel` is now in Imports and `parallelly` in Suggests, for the core
+  count that `benchmark_bilatr()` checks against.
+
+## Code blockers
 
 * 'cmdstanr' moves from Imports to Suggests (install it from
   <https://stan-dev.r-universe.dev>), and CmdStan is listed under
@@ -1741,7 +1790,8 @@ Six fixes from a review pass on 0.7.0's `stable_gamma` (see
 
 * `recode_cameo()` now also attaches `EventRootCode2`, `BilatrClass`, and
   `BilatrClassName` columns (alongside the existing
-  `QuadClass`/`PentaClass`/`PentaClass_modified`). `EventRootCode2` is a
+  `QuadClass`/`PentaClass`/`PentaClass_modified`; `PentaClass_modified`
+  was removed in 1.0.0). `EventRootCode2` is a
   coarser regrouping of the CAMEO root codes (root 04 "Consult" split
   three ways; roots 09/14/15/18/20 folded into related roots), and
   `BilatrClass` is an 11-level (0-10) action-class scheme intended as the

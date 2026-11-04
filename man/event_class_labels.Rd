@@ -36,9 +36,9 @@ see \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}'s \code{
 \code{scheme} names a \link{cameo_lookup} column with a matching \verb{*Name} column:
 currently \code{"QuadClass"} (\code{QuadClassName}), \code{"PentaClass"}
 (\code{PentaClassName}), and \code{"ModifiedRootCode"} (\code{ModifiedRootCodeName}).
-For any other \code{scheme} -- \code{NULL}, an unrecognized name (e.g.
-\code{"PentaClass_modified"}, which has no \verb{*Name} column of its own), or a
-non-CAMEO grouping variable from the caller's own data -- the event
+For any other \code{scheme} -- \code{NULL}, an unrecognized name, or a
+non-CAMEO grouping variable from the caller's own data (e.g. a
+\code{"sector"} column you coded yourself) -- the event
 classes' own codes are used as their labels, since there is no lookup
 to consult; if \code{scheme} was non-\code{NULL} but unrecognized, a \code{message()}
 names the schemes that do have labels.
@@ -50,8 +50,11 @@ aggregating), pass \code{scheme} explicitly, since the default
 recognizes.
 }
 \examples{
-\dontrun{
+# the Stan data of the example fit, aggregated by PentaClass
+csv <- bilatr_example_fit()
+stan_data <- readRDS(file.path(dirname(csv[1]), "example_stan_data.rds"))
 event_class_labels(stan_data)
-event_class_labels(stan_data, scheme = "ModifiedRootCode")
-}
+
+# a grouping variable with no labels in cameo_lookup: the codes are used
+event_class_labels(stan_data, scheme = "sector")
 }

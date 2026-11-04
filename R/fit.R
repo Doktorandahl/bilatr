@@ -19,18 +19,24 @@
 #' Check that cmdstanr and CmdStan are available
 #'
 #' `cmdstanr` is in Suggests, so every code path that compiles or samples
-#' calls this first. Requires at least [.BILATR_MIN_CMDSTANR].
+#' calls this first. Requires at least [.BILATR_MIN_CMDSTANR]. Shares its
+#' checks with [bilatr_cmdstan_available()] through [.cmdstan_problem()].
 #'
 #' @param caller The calling function's name, for the error message.
 #' @return `TRUE`, invisibly; errors otherwise.
 #' @keywords internal
 .require_cmdstan <- function(caller) {
-  rlang::check_installed(
-    "cmdstanr",
-    version = .BILATR_MIN_CMDSTANR,
-    reason = "to compile and fit bilatr models."
-  )
-  if (is.null(cmdstanr::cmdstan_version(error_on_NA = FALSE))) {
+  problem <- .cmdstan_problem()
+  if (identical(problem, "cmdstanr")) {
+    # errors (or, interactively, offers to install)
+    rlang::check_installed(
+      "cmdstanr",
+      version = .BILATR_MIN_CMDSTANR,
+      reason = "to compile and fit bilatr models."
+    )
+    problem <- .cmdstan_problem()
+  }
+  if (identical(problem, "cmdstan")) {
     stop(
       caller, ": CmdStan is not installed, or cmdstanr cannot find it. ",
       "Install it with cmdstanr::install_cmdstan(), or point cmdstanr to an ",
@@ -89,12 +95,30 @@
 #' installed source, so an unchanged file keeps its modification time and
 #' `cmdstanr` keeps reusing the compiled executable next to it.
 #'
+#' With `profile = TRUE`, writes instead the program returned by
+#' [insert_reduce_sum_profile()] for that model, under its own name
+#' (`<file>_profile.stan`, e.g. `bilatr_alphanorm_profile.stan`), so the
+#' profiled and unprofiled models are cached side by side. It is
+#' rewritten only when its content changes.
+#'
 #' @param stan_model A canonical registered name.
 #' @param dir The cache directory, from [.bilatr_model_dir()].
+#' @param profile Whether to stage the profiled copy.
 #' @return The path of the copy.
 #' @keywords internal
-.bilatr_stage_stan_file <- function(stan_model, dir) {
+.bilatr_stage_stan_file <- function(stan_model, dir, profile = FALSE) {
   src <- .resolve_stan_model(stan_model)
+  if (profile) {
+    target <- file.path(dir, paste0(tools::file_path_sans_ext(basename(src)), "_profile.stan"))
+    code <- insert_reduce_sum_profile(paste(readLines(src, warn = FALSE), collapse = "\n"))
+    current <- if (file.exists(target)) paste(readLines(target, warn = FALSE), collapse = "\n") else NULL
+    if (!identical(current, code)) {
+      writeLines(code, target)
+      stale <- startsWith(ls(.bilatr_model_cache), paste0(target, "::"))
+      rm(list = ls(.bilatr_model_cache)[stale], envir = .bilatr_model_cache)
+    }
+    return(target)
+  }
   target <- file.path(dir, basename(src))
   if (!file.exists(target) || !identical(unname(tools::md5sum(src)), unname(tools::md5sum(target)))) {
     if (!file.copy(src, target, overwrite = TRUE)) {
@@ -122,12 +146,16 @@
 #' @param force_recompile If `TRUE`, bypass both caches and rebuild.
 #' @param stan_threads Whether to compile with `STAN_THREADS`. Always
 #'   `TRUE` for the package's own fits.
+#' @param profile Whether to compile the copy whose `reduce_sum`
+#'   likelihood is profiled (see [.bilatr_stage_stan_file()]), as
+#'   [benchmark_bilatr()] does.
 #' @return A `CmdStanModel` object.
 #' @keywords internal
-.compile_stan_model <- function(stan_model, opt_level, force_recompile = FALSE, stan_threads = TRUE) {
+.compile_stan_model <- function(stan_model, opt_level, force_recompile = FALSE, stan_threads = TRUE,
+                                profile = FALSE) {
   .require_cmdstan("compile_bilatr_model()")
   stan_model <- .canonical_stan_model(stan_model)
-  stan_file <- .bilatr_stage_stan_file(stan_model, .bilatr_model_dir())
+  stan_file <- .bilatr_stage_stan_file(stan_model, .bilatr_model_dir(), profile = profile)
   cache_key <- paste(stan_file, opt_level, stan_threads, sep = "::")
 
   if (!force_recompile && exists(cache_key, envir = .bilatr_model_cache, inherits = FALSE)) {
@@ -199,12 +227,17 @@
 #'   the in-session cache and the compiled executable on disk.
 #' @return A `CmdStanModel` object.
 #' @seealso [bilatr_clear_model_cache()]
-#' @examples
-#' \dontrun{
+#' @examplesIf bilatr_cmdstan_available()
+#' \donttest{
+#' # compiling takes a minute or more the first time; later calls reuse
+#' # the compiled model
 #' mod <- compile_bilatr_model()
 #' mod_gamma <- compile_bilatr_model("stable_gamma")
-#' mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
+#'
 #' }
+#' # less memory for compiling, somewhat slower sampling (rebuilds, so it
+#' # takes as long as the first compile):
+#' # mod_low_ram <- compile_bilatr_model(opt_level = 1, force_recompile = TRUE)
 #' @export
 compile_bilatr_model <- function(stan_model = "stable", opt_level = 3, force_recompile = FALSE) {
   stan_model <- .canonical_stan_model(stan_model)
@@ -221,8 +254,9 @@ compile_bilatr_model <- function(stan_model = "stable", opt_level = 3, force_rec
 #'
 #' By default the cache directory of the installed bilatr version is
 #' deleted. If `options(bilatr.model_dir = )` is set, only the files
-#' bilatr put in that directory (the `.stan` copies and their compiled
-#' executables) are deleted, not the directory itself.
+#' bilatr put in that directory (the `.stan` copies, the profiled copies
+#' that [benchmark_bilatr()] compiles, and their compiled executables) are
+#' deleted, not the directory itself.
 #'
 #' @param all If `TRUE`, also delete the cached models of every other
 #'   bilatr version under `tools::R_user_dir("bilatr", "cache")`.
@@ -244,7 +278,7 @@ bilatr_clear_model_cache <- function(all = FALSE) {
     dir
   } else {
     stems <- tools::file_path_sans_ext(vapply(.bilatr_stan_models, `[[`, "", "file"))
-    pattern <- paste0("^(", paste(stems, collapse = "|"), ")(\\.(stan|exe|hpp|o))?$")
+    pattern <- paste0("^(", paste(stems, collapse = "|"), ")(_profile)?(\\.(stan|exe|hpp|o))?$")
     list.files(dir, pattern = pattern, full.names = TRUE)
   }
   if (all) {
@@ -801,15 +835,29 @@ fit_bilatr <- function(
 #'   concurrent per-chain jobs sharing an `output_dir` are safe. The
 #'   extractors find this file next to the CmdStan CSVs when given CSV
 #'   paths.
-#' @examples
-#' \dontrun{
+#' @examplesIf bilatr_cmdstan_available()
+#' # 300 simulated USA -> CHN events over 2015-2020
+#' set.seed(1)
+#' days <- seq(as.Date("2015-01-01"), as.Date("2020-12-31"), by = "day")
+#' events <- recode_cameo(tibble::tibble(
+#'   Actor1CountryCode = "USA",
+#'   Actor2CountryCode = "CHN",
+#'   SQLDATE = as.integer(format(sample(days, 300, replace = TRUE), "%Y%m%d")),
+#'   EventCode = sample(cameo_lookup$CAMEOEVENTCODE, 300, replace = TRUE)
+#' ))
 #' agg <- aggregate_events(
-#'   dplyr::filter(events, Actor1CountryCode == "USA", Actor2CountryCode == "CHN"),
+#'   events,
 #'   grouping_var = "PentaClass", start = "2015-01-01", end = "2020-12-31"
 #' )
-#' # reference "1" (verbal cooperation): higher theta = more cooperative
-#' fit <- fit_dyad_ts(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
-#' theta <- extract_theta(fit)
+#' \donttest{
+#' # reference "1" (verbal cooperation): higher theta = more cooperative.
+#' # Far too short for real use; the defaults are 4 chains of 1000 + 1000.
+#' fit <- fit_dyad_ts(
+#'   agg,
+#'   reference_category = "1",
+#'   chains = 2, iter_warmup = 200, iter_sampling = 200, seed = 1, refresh = 0
+#' )
+#' extract_theta(fit)
 #' }
 #' @export
 fit_dyad_ts <- function(
@@ -903,7 +951,7 @@ fit_dyad_ts <- function(
 #' `chunk_size = 1`) are conservative: they run on any machine, but use
 #' one core. On a multi-core machine, more threads per chain and a larger
 #' `chunk_size` can be much faster for large panels; tune them together
-#' for your data size and hardware, as described in `vignette("tuning")`.
+#' for your data size and hardware, as described in `vignette("tuning", package = "bilatr")`.
 #'
 #' @inheritParams fit_dyad_ts
 #' @param threads_per_chain Threads per chain for `reduce_sum`
@@ -911,22 +959,41 @@ fit_dyad_ts <- function(
 #' @return As for [fit_dyad_ts()]: a `CmdStanMCMC` fit object with
 #'   `attr(fit, "stan_data")` set, and the Stan data list saved to
 #'   `output_dir` when one is given.
-#' @examples
-#' \dontrun{
+#' @examplesIf bilatr_cmdstan_available()
+#' # 600 simulated events among three countries over 2015-2020
+#' set.seed(1)
+#' countries <- c("USA", "CHN", "RUS")
+#' days <- seq(as.Date("2015-01-01"), as.Date("2020-12-31"), by = "day")
+#' pairs <- expand.grid(a1 = countries, a2 = countries, stringsAsFactors = FALSE)
+#' pairs <- pairs[pairs$a1 != pairs$a2, ]
+#' idx <- sample(nrow(pairs), 600, replace = TRUE)
+#' events <- recode_cameo(tibble::tibble(
+#'   Actor1CountryCode = pairs$a1[idx],
+#'   Actor2CountryCode = pairs$a2[idx],
+#'   SQLDATE = as.integer(format(sample(days, 600, replace = TRUE), "%Y%m%d")),
+#'   EventCode = sample(cameo_lookup$CAMEOEVENTCODE, 600, replace = TRUE)
+#' ))
 #' agg <- aggregate_events(
 #'   events, grouping_var = "PentaClass", resolution = "yearly",
 #'   start = "2015-01-01", end = "2020-12-31"
 #' )
-#' # reference "1" (verbal cooperation): higher theta = more cooperative
-#' fit <- fit_panel(agg, reference_category = "1", chains = 4, iter_sampling = 1000)
-#'
-#' # on a machine with 16 cores: 4 chains in parallel, 4 threads each
+#' \donttest{
+#' # reference "1" (verbal cooperation): higher theta = more cooperative.
+#' # Far too short for real use; the defaults are 4 chains of 1000 + 1000.
 #' fit <- fit_panel(
-#'   agg, reference_category = "1", # verbal cooperation
-#'   chains = 4, parallel_chains = 4,
-#'   threads_per_chain = 4, chunk_size = 50
+#'   agg,
+#'   reference_category = "1",
+#'   chains = 2, iter_warmup = 200, iter_sampling = 200, seed = 1, refresh = 0
 #' )
-#' theta <- extract_theta(fit)
+#' extract_theta(fit)
+#'
+#' # on a machine with 16 cores and a large panel: 4 chains in parallel,
+#' # 4 threads each (see vignette("tuning", package = "bilatr"))
+#' # fit <- fit_panel(
+#' #   agg, reference_category = "1",
+#' #   chains = 4, parallel_chains = 4,
+#' #   threads_per_chain = 4, chunk_size = 50
+#' # )
 #' }
 #' @export
 fit_panel <- function(

@@ -266,10 +266,10 @@ modified_root_code_eventcodes <- function(class) {
 #' classes
 #'
 #' Joins `data` against the package's built-in [cameo_lookup] table to
-#' attach 12 columns: `CAMEOLabel`, `GoldsteinScore`, `QuadClass`,
+#' attach 11 columns: `CAMEOLabel`, `GoldsteinScore`, `QuadClass`,
 #' `QuadClassName`, `QuadClassEventCodes`, `PentaClass`, `PentaClassName`,
-#' `PentaClassEventCodes`, `PentaClass_modified`, `ModifiedRootCode`,
-#' `ModifiedRootCodeName`, and `ModifiedRootCodeEventCodes`. See
+#' `PentaClassEventCodes`, `ModifiedRootCode`, `ModifiedRootCodeName`,
+#' and `ModifiedRootCodeEventCodes`. See
 #' [cameo_lookup] for the schemes:
 #'
 #' * `QuadClass` is the same mapping as GDELT's own `QuadClass` (roots
@@ -279,8 +279,6 @@ modified_root_code_eventcodes <- function(class) {
 #'   "Make statement", root 14 (protest) moves to class 4 (material
 #'   conflict), and root 16 (reduce relations) moves to class 3 (verbal
 #'   conflict);
-#' * `PentaClass_modified` is `PentaClass`, except that codes with
-#'   QuadClass 1 and a Goldstein score of at most 1 are class 0;
 #' * `ModifiedRootCode` is an 18-class regrouping of the root codes (see
 #'   [assign_modified_root_code()]).
 #'
@@ -307,10 +305,8 @@ modified_root_code_eventcodes <- function(class) {
 #' @return `data` with the recode columns above attached (minus any that
 #'   were already present).
 #' @examples
-#' \dontrun{
 #' events <- data.frame(EventCode = c("01", "190", "0862"))
 #' recode_cameo(events)
-#' }
 #' @export
 recode_cameo <- function(data, code_col = "EventCode") {
   code <- data[[code_col]]
@@ -387,9 +383,9 @@ recode_cameo <- function(data, code_col = "EventCode") {
 #' `scheme` names a [cameo_lookup] column with a matching `*Name` column:
 #' currently `"QuadClass"` (`QuadClassName`), `"PentaClass"`
 #' (`PentaClassName`), and `"ModifiedRootCode"` (`ModifiedRootCodeName`).
-#' For any other `scheme` -- `NULL`, an unrecognized name (e.g.
-#' `"PentaClass_modified"`, which has no `*Name` column of its own), or a
-#' non-CAMEO grouping variable from the caller's own data -- the event
+#' For any other `scheme` -- `NULL`, an unrecognized name, or a
+#' non-CAMEO grouping variable from the caller's own data (e.g. a
+#' `"sector"` column you coded yourself) -- the event
 #' classes' own codes are used as their labels, since there is no lookup
 #' to consult; if `scheme` was non-`NULL` but unrecognized, a `message()`
 #' names the schemes that do have labels.
@@ -412,10 +408,13 @@ recode_cameo <- function(data, code_col = "EventCode") {
 #'   `scheme` if the classes came from a non-`cameo_lookup` source) keeps
 #'   its code as its own label, with a `warning()` naming it.
 #' @examples
-#' \dontrun{
+#' # the Stan data of the example fit, aggregated by PentaClass
+#' csv <- bilatr_example_fit()
+#' stan_data <- readRDS(file.path(dirname(csv[1]), "example_stan_data.rds"))
 #' event_class_labels(stan_data)
-#' event_class_labels(stan_data, scheme = "ModifiedRootCode")
-#' }
+#'
+#' # a grouping variable with no labels in cameo_lookup: the codes are used
+#' event_class_labels(stan_data, scheme = "sector")
 #' @export
 event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var")) {
   event_classes <- attr(stan_data, "event_classes")

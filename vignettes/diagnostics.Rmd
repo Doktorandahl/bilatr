@@ -7,14 +7,10 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r, include = FALSE}
-knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  eval = requireNamespace("cmdstanr", quietly = TRUE) &&
-    tryCatch({ cmdstanr::cmdstan_path(); TRUE }, error = function(e) FALSE)
-)
-```
+<!-- diagnostics.Rmd is generated from diagnostics.Rmd.orig by vignettes/precompile.R,
+which needs CmdStan. Edit the .Rmd.orig file, then re-knit. -->
+
+
 
 ## Why tiered triage
 
@@ -51,7 +47,8 @@ quantity into one of three tiers before applying Rhat/ESS thresholds:
 We simulate a small panel where dyad activity spans two orders of
 magnitude, to make the tiering concrete:
 
-```{r}
+
+``` r
 library(bilatr)
 library(dplyr)
 
@@ -77,6 +74,7 @@ events <- purrr::map2_dfr(seq_len(nrow(dyad_pairs)), n_events_per_dyad, function
   )
 })
 events <- recode_cameo(events, code_col = "EventCode")
+#> recode_cameo(): 13 row(s) matched a bare top-level CAMEO root code with no ModifiedRootCode (its sub-codes span several classes).
 
 agg <- aggregate_events(
   events,
@@ -87,7 +85,8 @@ agg <- aggregate_events(
 )
 ```
 
-```{r, results = "hide"}
+
+``` r
 fit <- fit_panel(
   agg,
   reference_category = "1", # verbal cooperation
@@ -99,13 +98,14 @@ fit <- fit_panel(
   iter_warmup = 300,
   iter_sampling = 300,
   seed = 1,
-  opt_level = 1
+  refresh = 0
 )
 ```
 
 As in the other vignettes, this run is deliberately short (and the event
-data purely random, with no real signal for the model to recover) so
-the vignette builds quickly. That means it's a poor fit in an absolute
+data purely random, with no real signal for the model to recover); the
+vignette was computed ahead of time, with CmdStan, and is kept quick to
+re-run. That means it's a poor fit in an absolute
 sense -- don't be surprised to see Tier 1 flags below that a longer,
 real run wouldn't show. That's still a useful illustration: on a real
 fit, any Tier 1 flag is exactly the kind of thing this tool is meant to
@@ -118,22 +118,69 @@ events. By default `diagnose_convergence()` computes it from the Stan
 data that [fit_panel()] attached to the fit, and it also knows from the
 fit which model was used:
 
-```{r}
+
+``` r
 diag <- diagnose_convergence(fit)
 diag
+#> <bilatr_diagnostics>
+#> 
+#> == Tier 1: global/shared parameters (16/16 flagged) ==
+#> # A tibble: 16 × 5
+#>    variable         rhat ess_bulk ess_tail flagged
+#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
+#>  1 lp__             1.97     2.81    NA    TRUE   
+#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
+#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
+#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
+#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
+#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
+#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
+#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
+#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
+#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
+#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
+#> 12 alpha[1]         1.66    13.4    146.   TRUE   
+#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
+#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
+#> 15 alpha[4]         1.94     4.19   147.   TRUE   
+#> 16 alpha[5]         1.88     5.71   137.   TRUE   
+#> 
+#> == Tier 2: per-dyad hierarchical parameters (8 dyads, 0 worse than expected for their n_dt) ==
+#> # A tibble: 8 × 15
+#>   dyad_id  n_dt log_process_noise_raw_…¹ phi_rhat theta0_rhat process_noise_rhat
+#>     <int> <dbl>                    <dbl>    <dbl>       <dbl>              <dbl>
+#> 1       1   400                     1.63     1.78        1.95               2.17
+#> 2       2     5                     1.67     1.61        1.92               1.74
+#> 3       3   300                     1.74     1.82        1.52               1.79
+#> 4       4    15                     1.77     1.92        1.92               2.14
+#> 5       5   250                     1.55     1.90        1.90               1.59
+#> 6       6     8                     1.79     1.91        1.98               1.73
+#> 7       7   350                     1.77     1.79        1.06               2.07
+#> 8       8    10                     1.92     2.09        1.99               1.65
+#> # ℹ abbreviated name: ¹​log_process_noise_raw_rhat
+#> # ℹ 9 more variables: log_process_noise_raw_ess_bulk <dbl>, phi_ess_bulk <dbl>,
+#> #   theta0_ess_bulk <dbl>, process_noise_ess_bulk <dbl>,
+#> #   log_process_noise_raw_ess_tail <dbl>, phi_ess_tail <dbl>,
+#> #   theta0_ess_tail <dbl>, process_noise_ess_tail <dbl>,
+#> #   worse_than_expected <lgl>
+#> 
+#> == Tier 3: per-dyad-period latent states (theta, aggregated; 8 dyads) ==
+#> 100% of dyads have min theta ESS below threshold (400), median n_dt among them: 132.
 ```
 
 You can also pass your own `n_dt`, keyed by `dyad_id` (the dyad index
 used inside the Stan model) or by dyad name. This is the same as the
 default:
 
-```{r}
+
+``` r
 stan_data <- attr(fit, "stan_data")
 n_dt <- tibble::tibble(
   dyad_id = seq_len(stan_data$D),
   n_dt = apply(stan_data$Y, 1, sum)
 )
 identical(diagnose_convergence(fit, n_dt = n_dt), diag)
+#> [1] TRUE
 ```
 
 The printed report separates concerns by tier: Tier 1 issues (if any)
@@ -144,18 +191,93 @@ first; Tier 3 collapses to one-line aggregate statistics.
 ## Working with the pieces directly
 
 `diag` is a plain list (class `bilatr_diagnostics`) with `tier1`,
-`tier2`, `tier3`, and `summary` elements, so you can filter or
-join further as needed:
+`tier2`, `tier3`, `tier3_other` and `summary` elements (and `gamma`, for
+a `stable_gamma` fit), so you can filter or join further as needed:
 
-```{r}
+
+``` r
 # any global/shared parameter that failed to converge:
 dplyr::filter(diag$tier1, flagged)
+#> # A tibble: 16 × 5
+#>    variable         rhat ess_bulk ess_tail flagged
+#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
+#>  1 lp__             1.97     2.81    NA    TRUE   
+#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
+#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
+#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
+#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
+#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
+#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
+#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
+#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
+#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
+#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
+#> 12 alpha[1]         1.66    13.4    146.   TRUE   
+#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
+#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
+#> 15 alpha[4]         1.94     4.19   147.   TRUE   
+#> 16 alpha[5]         1.88     5.71   137.   TRUE
 
 # dyads whose per-dyad parameters look worse than their n_dt would predict:
 dplyr::filter(diag$tier2, worse_than_expected)
+#> # A tibble: 0 × 15
+#> # ℹ 15 variables: dyad_id <int>, n_dt <dbl>, log_process_noise_raw_rhat <dbl>,
+#> #   phi_rhat <dbl>, theta0_rhat <dbl>, process_noise_rhat <dbl>,
+#> #   log_process_noise_raw_ess_bulk <dbl>, phi_ess_bulk <dbl>,
+#> #   theta0_ess_bulk <dbl>, process_noise_ess_bulk <dbl>,
+#> #   log_process_noise_raw_ess_tail <dbl>, phi_ess_tail <dbl>,
+#> #   theta0_ess_tail <dbl>, process_noise_ess_tail <dbl>,
+#> #   worse_than_expected <lgl>
 
 # headline counts:
 diag$summary
+#> $tiers_computed
+#> [1] 1 2 3
+#> 
+#> $n_tier1_flagged
+#> [1] 16
+#> 
+#> $n_tier1_total
+#> [1] 16
+#> 
+#> $n_gamma_flagged
+#> [1] NA
+#> 
+#> $n_gamma_total
+#> [1] NA
+#> 
+#> $n_dyads_tier2
+#> [1] 8
+#> 
+#> $n_dyads_tier2_worse_than_expected
+#> [1] 0
+#> 
+#> $n_dyads_missing_from_n_dt
+#> [1] 0
+#> 
+#> $n_dyads_missing_from_draws
+#> [1] 0
+#> 
+#> $n_dyads_tier3
+#> [1] 8
+#> 
+#> $n_dyads_tier3_min_ess_below_threshold
+#> [1] 8
+#> 
+#> $n_tier3_other_groups
+#> [1] 0
+#> 
+#> $n_tier3_other_rhat_above
+#> [1] 0
+#> 
+#> $n_tier3_other_ess_below
+#> [1] 0
+#> 
+#> $rhat_threshold
+#> [1] 1.01
+#> 
+#> $ess_threshold
+#> [1] 400
 ```
 
 ## Computing only some tiers
@@ -167,8 +289,31 @@ it is the most expensive part of a call. A quick check of just the
 global/shared parameters, which has no per-dyad structure and so does
 not use `n_dt`, looks like:
 
-```{r}
+
+``` r
 diagnose_convergence(fit, tiers = 1)
+#> <bilatr_diagnostics>
+#> 
+#> == Tier 1: global/shared parameters (16/16 flagged) ==
+#> # A tibble: 16 × 5
+#>    variable         rhat ess_bulk ess_tail flagged
+#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
+#>  1 lp__             1.97     2.81    NA    TRUE   
+#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
+#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
+#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
+#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
+#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
+#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
+#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
+#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
+#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
+#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
+#> 12 alpha[1]         1.66    13.4    146.   TRUE   
+#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
+#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
+#> 15 alpha[4]         1.94     4.19   147.   TRUE   
+#> 16 alpha[5]         1.88     5.71   137.   TRUE
 ```
 
 `diag$tier2`/`diag$tier3` are `NULL` (not empty tibbles) for any tier
@@ -181,8 +326,40 @@ computed" from "computed, nothing to report".
 applied to both `ess_bulk` and `ess_tail`) follow Vehtari et al. (2021)
 and can be tightened or loosened:
 
-```{r, eval = FALSE}
+
+``` r
 diagnose_convergence(fit, rhat_threshold = 1.05, ess_threshold = 100)
+```
+
+## From CmdStan CSV files
+
+On a cluster, or for any large fit, you will usually diagnose the
+CmdStan CSV files rather than a fit object held in memory. Pass the file
+paths: `diagnose_convergence()` finds the `*_stan_data.rds` file that
+[fit_panel()] wrote next to them (with `output_dir`), which gives it
+`n_dt` and the model, and reads Tier 3 in chunks whose size it derives
+from `max_memory_mb`. The two levers for a large fit are:
+
+* `max_memory_mb`: the memory budget per chunk. Fewer, larger chunks
+  are faster, so use the largest budget your job can afford.
+* `n_cores`: the number of processes that compute R-hat and ESS for
+  each chunk. More cores are faster but use more memory, out of the same
+  budget, so a large `n_cores` on a tight budget can mean more chunks.
+
+The pre-flight message says how many chunks were chosen and the
+estimated peak memory; [`vignette("tuning")`](tuning.html) has more on these settings.
+
+This section runs when the vignette is built, without CmdStan, on the
+small example fit that ships with bilatr ([bilatr_example_fit()]: 6
+dyads, 2 chains of 60 draws, far too short to converge):
+
+```{r}
+library(bilatr)
+csv_files <- bilatr_example_fit()
+basename(csv_files)
+diag_csv <- diagnose_convergence(csv_files, max_memory_mb = 2048)
+diag_csv$summary[c("n_tier1_flagged", "n_tier1_total")]
+diag_csv$tier3_other
 ```
 
 ## On the "worse than expected" flag

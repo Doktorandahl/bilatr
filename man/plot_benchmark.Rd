@@ -2,24 +2,40 @@
 % Please edit documentation in R/benchmark.R
 \name{plot_benchmark}
 \alias{plot_benchmark}
-\title{Heatmap of benchmark throughput over the cores x grainsize grid}
+\title{Heatmap of a benchmark over \code{threads_per_chain} x \code{chunk_size}}
 \usage{
 plot_benchmark(summary_df, metric = "iter_per_sec_median", facet = "scenario")
 }
 \arguments{
-\item{summary_df}{A benchmark summary (from \code{\link[=summarise_benchmark]{summarise_benchmark()}}),
-optionally already passed through \code{\link[=pareto_front]{pareto_front()}} (if it has a
-\code{pareto} column, frontier cells are outlined).}
+\item{summary_df}{A benchmark summary from \code{\link[=summarise_benchmark]{summarise_benchmark()}},
+optionally passed through \code{\link[=benchmark_pareto]{benchmark_pareto()}}. A
+\code{bilatr_benchmark} result from \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} is summarised
+(and its Pareto front marked) first.}
 
-\item{metric}{Column to map to fill. Default \code{"iter_per_sec_median"}.}
+\item{metric}{Column to map to the fill. Default
+\code{"iter_per_sec_median"}.}
 
-\item{facet}{Column to facet by, or \code{NULL}. Default \code{"scenario"} when
-present.}
+\item{facet}{Column to facet by, or \code{NULL}. The default facets by
+\code{scenario} when there is such a column.}
 }
 \value{
 A \code{ggplot} object.
 }
 \description{
-Heatmap of benchmark throughput over the cores x grainsize grid
+One tile per (\code{threads_per_chain}, \code{chunk_size}) cell, filled by
+\code{metric}. Cells on the Pareto front (a \code{pareto} column, from
+\code{\link[=benchmark_pareto]{benchmark_pareto()}}) are outlined.
 }
-\keyword{internal}
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  runs <- benchmark_grid(1000, threads_per_chain = c(2, 4), chunk_size = c(25, 100),
+    replicates = 1)
+  runs$sampling_sec <- c(40, 38, 25, 26)
+  runs$iter_per_sec <- 100 / runs$sampling_sec
+  runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
+  plot_benchmark(benchmark_pareto(summarise_benchmark(runs)))
+}
+}
+\seealso{
+\code{\link[=summarise_benchmark]{summarise_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}}
+}

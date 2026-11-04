@@ -128,7 +128,9 @@ unlike \code{parallel::detectCores()}, it respects
 rather than reporting the whole node's core count -- but this is a
 genuine memory/wall-time trade-off, not a free choice, so consider
 an explicit, moderate value for a memory-constrained job rather
-than the largest available.}
+than the largest available. On Unix-alikes, a session that fits a
+model between two \code{n_cores > 1} calls can print "Error while
+shutting down parallel" when R exits; this is harmless.}
 }
 \value{
 A list with elements \code{diagnostics} (a \code{bilatr_diagnostics}
@@ -190,10 +192,10 @@ summary, not a second call with different quantiles); call
 quantiles.
 }
 \examples{
-\dontrun{
-csv_files <- list.files("model_output/some_spec", pattern = "\\\\.csv$", full.names = TRUE)
-result <- diagnose_and_extract_bilatr(csv_files)
+# CmdStan CSVs with the *_stan_data.rds file that fit_panel(output_dir = )
+# wrote next to them; here, the example fit shipped with bilatr
+result <- diagnose_and_extract_bilatr(bilatr_example_fit())
 result$diagnostics
 result$theta
-}
+result$alpha
 }
