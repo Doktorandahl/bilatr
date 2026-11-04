@@ -1,6 +1,4 @@
-# Compositional residual check for a missing dyad-level offset beta_d
-# (0.6.0). See dev/claude_code_prompt_0.6.0_residuals_and_icc.md for the
-# full derivation this file implements.
+# Compositional residual check for a missing dyad-level offset beta_d.
 #
 # The model is eta_dt = alpha * theta_dt - mu_intercept. A dyad-specific
 # compositional offset beta_d, if it existed, would have to be orthogonal
@@ -17,23 +15,23 @@
 #'
 #' @param eta An `n x A` matrix; softmax is applied to each row.
 #' @return An `n x A` matrix of row-stochastic probabilities.
-#' @keywords internal
+#' @noRd
 .softmax_rows <- function(eta) {
   m <- apply(eta, 1, max)
   z <- exp(eta - m)
   z / rowSums(z)
 }
 
-#' Row-wise centred-log-ratio transform
+#' Row-wise centered-log-ratio transform
 #'
 #' `clr(p) = log(p) - mean(log(p))`. Accepts either a plain vector (a
 #' single fixed composition) or an `n x A` matrix (one composition per
 #' row, e.g. per posterior draw), matching how [.var_pi_alpha()] and
-#' friends in `R/category_merges.R` accept either shape for `shares`.
+#' related helpers accept either shape for `shares`.
 #'
 #' @param x A positive numeric vector or `n x A` matrix.
 #' @return `clr(x)`, same shape as `x`.
-#' @keywords internal
+#' @noRd
 .clr <- function(x) {
   # A component that underflowed to exactly 0 (possible for pbar_d, a
   # weighted mean of softmax() rows, when every observed period's eta_dt
@@ -51,7 +49,7 @@
 
 #' Recycle a length-`A` vector into every row of an `n x A` matrix
 #'
-#' @keywords internal
+#' @noRd
 .broadcast_rows <- function(vec, n) {
   matrix(vec, nrow = n, ncol = length(vec), byrow = TRUE)
 }
@@ -67,7 +65,7 @@
 #' "non-conformable arrays". Every draws matrix is stripped via this
 #' immediately after subsetting to rows/columns of interest.
 #'
-#' @keywords internal
+#' @noRd
 .as_plain_matrix <- function(m) {
   matrix(as.numeric(m), nrow = nrow(m), ncol = ncol(m), dimnames = dimnames(m))
 }
@@ -91,7 +89,7 @@
 #' @param p_mat An `n_draws x A` matrix of row-stochastic probabilities.
 #' @return An `n_draws x A` integer matrix of multinomial draws, each row
 #'   summing to `n`.
-#' @keywords internal
+#' @noRd
 .rmultinom_rows <- function(n, p_mat) {
   n_draws <- nrow(p_mat)
   A <- ncol(p_mat)
@@ -123,7 +121,7 @@
 #' @param conc_mat An `n_draws x A` matrix of positive Dirichlet
 #'   concentrations, one row per draw.
 #' @return An `n_draws x A` matrix of row-stochastic Dirichlet draws.
-#' @keywords internal
+#' @noRd
 .rdirichlet_rows <- function(conc_mat) {
   a <- as.vector(conc_mat)
   if (any(a <= 0)) {
@@ -134,14 +132,14 @@
     ), call. = FALSE)
   }
   # Marsaglia-Tsang boost in log space: shape a+1 >= 1 never underflows, and
-  # log(U)/a carries the small-shape behaviour that a direct rgamma(a) loses
+  # log(U)/a carries the small-shape behavior that a direct rgamma(a) loses
   # to underflow for a << 1 (which is routine here: conc = phi_d * p_dt, and
   # phi_d is barely identified for sparse dyads). Exact, not approximate --
   # if X ~ Gamma(a + 1) and U ~ Uniform(0, 1) then X * U^(1/a) ~ Gamma(a).
   log_g <- log(stats::rgamma(length(a), shape = a + 1, rate = 1)) +
     log(stats::runif(length(a))) / a
   log_g <- matrix(log_g, nrow = nrow(conc_mat))
-  log_g <- log_g - apply(log_g, 1, max) # stabilise; max component -> exp(0) = 1
+  log_g <- log_g - apply(log_g, 1, max) # stabilize; max component -> exp(0) = 1
   g <- exp(log_g)
   g / rowSums(g)
 }
@@ -150,15 +148,15 @@
 #'
 #' `yrep_k = Multinomial(n, q)` with `q ~ Dirichlet(conc)` -- the standard
 #' Dirichlet-multinomial construction, matching
-#' `dirichlet_multinomial_lpmf(Y[d,t] | conc)` in
-#' `inst/stan/bilatr_alphanorm.stan` with `conc = phi[d] * p`.
+#' `dirichlet_multinomial_lpmf(Y[d,t] | conc)` in the Stan programs, with
+#' `conc = phi[d] * p`.
 #'
 #' @param n A single non-negative integer (the observed `n_dt`; see
 #'   [.rmultinom_rows()] for why this can be a scalar shared across rows).
 #' @param conc_mat An `n_draws x A` matrix of concentrations
 #'   (`phi_d * p_dt`, one row per draw).
 #' @return An `n_draws x A` integer matrix.
-#' @keywords internal
+#' @noRd
 .dirichlet_multinomial_rows <- function(n, conc_mat) {
   .rmultinom_rows(n, .rdirichlet_rows(conc_mat))
 }
@@ -166,13 +164,12 @@
 #' Drop posterior draws with non-finite compositional-residual accumulators
 #'
 #' A defensive backstop for [check_compositional_residuals()]: both known
-#' sources of non-finite `clr()` residuals are fixed at the source
+#' sources of non-finite `clr()` residuals are handled at the source
 #' (`.rdirichlet_rows()`'s Dirichlet-gamma underflow, `.clr()`'s
-#' zero-component log; see `NEWS.md` 0.6.1), but a multi-hour production
-#' run should not die on its last step if some future, unanticipated
-#' source slips a non-finite value through. Rather than `na.rm = TRUE`
-#' (which would hide the problem silently -- how the original crash
-#' reached production undetected), whole draws with any non-finite entry
+#' zero-component log), but a long run should not fail on its last step
+#' if some unanticipated source slips a non-finite value through. Rather
+#' than `na.rm = TRUE` (which would hide the problem silently), whole
+#' draws with any non-finite entry
 #' are dropped from every pooled statistic, with a single warning naming
 #' how many, and a hard `stop()` if too few draws remain to trust the
 #' result.
@@ -186,7 +183,7 @@
 #'   `stop()`s instead of warning. Default `20`.
 #' @return A list of the same objects, each subset to the surviving
 #'   draws, plus `n_draws_dropped`.
-#' @keywords internal
+#' @noRd
 .drop_nonfinite_draws <- function(T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep,
                                    sum_theta_bar_sq, sum_theta_sq, min_draws = 20L) {
   n_draws_used <- nrow(T_obs_acc)
@@ -212,7 +209,7 @@
         "%d of %d posterior draws produced non-finite compositional residuals,",
         "leaving only %d usable draws (fewer than %d); aborting rather than",
         "reporting an unreliable statistic. Check dyads$phi_min -- a phi_d",
-        "posterior near 1e-6 is the known cause (see NEWS.md 0.6.1)."
+        "posterior near 1e-6 is the known cause."
       ),
       n_dropped, n_draws_used, n_remaining, min_draws
     ), call. = FALSE)
@@ -254,7 +251,7 @@
 #' @param seed Seed for reproducibility.
 #' @return An integer vector of sampled positions into `n_d`, sorted
 #'   ascending, length `min(n_target, length(n_d))`.
-#' @keywords internal
+#' @noRd
 .stratified_dyad_sample <- function(n_d, n_target, n_strata, seed) {
   D <- length(n_d)
   n_target <- min(n_target, D)
@@ -270,8 +267,8 @@
       k <- min(per_stratum + as.integer(s <= remainder), length(idx))
       # idx[sample.int(length(idx), k)], NOT sample(idx, k): when idx has
       # length 1, sample(idx, k) samples from 1:idx instead of returning
-      # that one element (R's classic sample()-on-a-single-number trap;
-      # 0.10.2, B1) -- wrong dyads, and fewer than k after unique().
+      # that one element (R's classic sample()-on-a-single-number trap)
+      # -- wrong dyads, and fewer than k after unique().
       if (k > 0) sampled <- c(sampled, idx[sample.int(length(idx), k)])
     }
     if (length(sampled) < n_target) {
@@ -309,15 +306,15 @@
 #' does not sum to zero stays correct.
 #'
 #' **The pooled statistic is the one with power; the per-dyad check is
-#' calibrated but nearly powerless** (see the prompt's own simulation:
-#' at `D = 400`, a per-dyad `beta` of RMS 0.40 flags only a fifth of
+#' calibrated but nearly powerless** (in simulations at `D = 400`, a
+#' per-dyad `beta` of RMS 0.40 flags only a fifth of
 #' dyads, while the pooled statistic `T = sum_d ||perp_d||^2` detects
 #' decisively from about `beta` RMS 0.15). Accordingly:
 #' - the **pooled PPP** (`mean(T_rep >= T_obs)` across draws) is the
 #'   headline test, in `global$pooled_ppp`;
 #' - `dyads$ppp_dyad` is a *secondary* diagnostic for *which* dyads,
 #'   never the test itself;
-#' - at production scale the pooled p-value saturates (rejects for
+#' - in a large panel the pooled p-value saturates (rejects for
 #'   almost any non-zero `beta`), so `global$implied_beta_rms` -- a
 #'   **rough moment estimator**, `sqrt(max(0, (T_obs - mean(T_rep)) / D) /
 #'   A)`, good to a few tens of percent and biased slightly high, not a
@@ -347,8 +344,8 @@
 #' ratio near 0.05 is a curiosity; approaching 0.3-0.5 is a real case for
 #' `beta_d`. (The equivalence this reduction relies on --
 #' `sd(outer(theta_dt, alpha)) == sqrt(mean(theta_dt^2))` -- is asserted
-#' as a test of `alpha`'s RMS-1 identification, not recomputed here; see
-#' `tests/testthat/test_residual_check.R`.)
+#' in the package tests as a check of `alpha`'s RMS-1 identification, not
+#' recomputed here.)
 #'
 #' **Two further interpretation points:**
 #' - The `along` component is *conservative by construction*: `theta_dt`
@@ -368,7 +365,7 @@
 #'   itself by category (`sum_d perp_dk^2`, observed vs. replicate), to
 #'   show which categories drive the dispersion.
 #'
-#' **Scale and subsampling.** At production scale (`D` ~ 16750, `T` ~ 35)
+#' **Scale and subsampling.** For a large panel (`D` ~ 16750, `T` ~ 35)
 #' a full sweep needs ~586k Dirichlet-multinomial simulations per draw --
 #' not feasible, and not necessary for a PPC. Dyads are subsampled
 #' (stratified by volume, `n_dyads`/`n_strata`, reproducible from `seed`;
@@ -376,13 +373,13 @@
 #' since whether `beta` is needed may depend on it) and draws are
 #' subsampled (`n_draws`; a PPC does not need the full posterior). Only
 #' `theta[d,t]` for the sampled dyads' *observed* periods is ever read
-#' (via [.get_draws()], the same reader [extract_theta()] uses), and the
+#' (with the same reader [extract_theta()] uses), and the
 #' pooled statistic is reported per sampled dyad (`D_sample`, in
 #' `settings`) so results are comparable across subsample sizes.
 #'
 #' @param fit A `CmdStanMCMC` fit object, or a character vector of raw
 #'   CmdStan CSV file paths (one per chain) -- the same forms
-#'   [extract_alpha()]/[.get_draws()] accept.
+#'   [extract_alpha()] accepts.
 #' @param stan_data The Stan data list used to produce `fit`, from
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
@@ -397,8 +394,8 @@
 #'   country offset `g_d`.
 #' @param n_dyads Target size of the stratified dyad subsample (capped at
 #'   the number of eligible -- i.e. `n_d > 0` -- dyads). Default `1500`.
-#' @param n_strata Number of volume strata for [.stratified_dyad_sample()].
-#'   Default `8`.
+#' @param n_strata Number of strata of dyads by event volume (quantiles of
+#'   `n_d`) the subsample is stratified over. Default `8`.
 #' @param n_draws Target number of posterior draws to subsample (capped
 #'   at the number available). Default `200`.
 #' @param eps Pseudo-count added before `clr()` (needed since `clr`
@@ -416,14 +413,15 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   in `stan_data`'s action-dimension order. `NULL` (default) uses
 #'   `stan_data`'s `"event_classes"` attribute; an explicit value wins.
-#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
-#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#' @param class_labels Optional labels for the event classes: a character
+#'   vector named by event class, or an unnamed one in `event_classes`
+#'   order. `NULL` (default) uses `event_class_labels(stan_data)` (see
 #'   [event_class_labels()]).
 #' @return A `bilatr_residual_check` object: `dyads` (one row per sampled
 #'   dyad: `dyad_id`, `dyad`, `dyad2`, `n_d`, `n_obs_t`, `along_mean`,
 #'   `along_lower`/`along_upper`, `perp_norm2_mean`, `ppp_dyad`,
 #'   `phi_min` -- the smallest `phi_d` posterior draw seen for that dyad,
-#'   a modelling signal worth seeing in its own right when a dyad's `phi`
+#'   a modeling signal worth seeing in its own right when a dyad's `phi`
 #'   is barely identified),
 #'   `categories` (one row per action category: `action_index`,
 #'   `event_class`, `class_label`, `contribution_obs`/`contribution_rep`
@@ -432,8 +430,7 @@
 #'   `theta_total_rms`, `beta_signal_ratio`, `eps_sensitivity`,
 #'   `D_sample`, `n_draws_used`, `n_draws_dropped` -- posterior draws
 #'   excluded from the pooled statistics because they produced a
-#'   non-finite compositional residual, see [.drop_nonfinite_draws()] --
-#'   and `phi_min`, the minimum of `dyads$phi_min`), and `settings` (the
+#'   non-finite compositional residual (with a warning) -- and `phi_min`, the minimum of `dyads$phi_min`), and `settings` (the
 #'   resolved arguments, including `sampled_dyad_ids` and
 #'   `n_draws_dropped`).
 #' @examples
@@ -470,12 +467,10 @@ check_compositional_residuals <- function(
     )
   }
 
-  # Model-aware, via the registry (R/model_registry.R's
-  # .bilatr_model_has_gamma()) rather than a user-facing flag: `eta` for
-  # a `stable_gamma` fit is alpha*theta - mu_intercept - g_d, and this
-  # function is the one that motivated the offset in the first place, so
-  # it must subtract g_d or it is simply testing the wrong model (see
-  # inst/stan/bilatr_alphanorm_gamma.stan's header).
+  # Model-aware, via the registry (.bilatr_model_has_gamma()) rather than
+  # a user-facing flag: `eta` for a `stable_gamma` fit is
+  # alpha*theta - mu_intercept - g_d, so it must subtract g_d or it tests
+  # the wrong model (see the `stable_gamma` Stan program's header).
   has_gamma <- .bilatr_model_has_gamma(stan_model)
   if (has_gamma && is.null(stan_data$ctry_a)) {
     stop(
@@ -514,19 +509,14 @@ check_compositional_residuals <- function(
   total_draws <- nrow(am_mat)
   n_draws_used <- min(n_draws, total_draws)
 
-  # Everything from here on, through the function's return value, must
-  # run under one seeded RNG stream (0.10.2, B2): draw_idx itself, and
-  # every yrep_d ~ DirMult(conc) draw the per-dyad loop below takes via
+  # Everything from here on, through the function's return value, runs
+  # under one seeded RNG stream: draw_idx itself, and every
+  # yrep_d ~ DirMult(conc) draw the per-dyad loop below takes via
   # .dirichlet_multinomial_rows() (unseeded rgamma()/runif()/rbinom()
-  # calls with no set.seed() of their own). Pre-0.10.2, the bare
-  # set.seed(seed + 1L) that used to sit where the .with_seed() call now
-  # opens had exactly this effect as a side effect -- it reset the global
-  # stream once, and nothing downstream called set.seed() again, so the
-  # yrep draws rode the same seeded sequence. Wrapping only the draw_idx
-  # line (this function's own local, restorable seed) would keep that
-  # line reproducible but decouple the yrep simulation from `seed`
-  # entirely, breaking this function's documented "same seed -> same
-  # result" contract. So the whole tail is one .with_seed() block.
+  # calls). Seeding only the draw_idx line would decouple the yrep
+  # simulation from `seed` and break the "same seed -> same result"
+  # contract, so the whole tail is one .with_seed() block, which also
+  # leaves the caller's own RNG stream untouched.
   .with_seed(seed + 1L, {
     draw_idx <- sort(sample(total_draws, n_draws_used))
 
@@ -897,12 +887,10 @@ plot.bilatr_residual_check <- function(x, which = c("all", "perp_vs_n", "ppp_his
 
 #' Write a `bilatr_residual_check` object to disk
 #'
-#' The one-call convenience for a thin runscript: [check_compositional_residuals()]
-#' itself never touches disk (a function that writes as a side effect is
-#' untestable and awkward to compose), so this is a separate,
-#' non-exported-computation wrapper writing `dyads`/`categories`/
-#' `global`/`eps_sensitivity` as CSVs and the three [autoplot()]
-#' diagnostics as PNGs into `dir`.
+#' Saves the result of [check_compositional_residuals()], which itself
+#' never writes to disk: `dyads`, `categories`, `global` and
+#' `eps_sensitivity` as CSV files, and the three [autoplot()] diagnostics
+#' as PNG files, into `dir`. Useful at the end of a batch job.
 #'
 #' @param x A `bilatr_residual_check` object.
 #' @param dir Output directory (created if it does not exist).

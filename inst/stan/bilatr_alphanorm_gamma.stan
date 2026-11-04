@@ -1,104 +1,76 @@
-// bilatr: hierarchical dynamic IRT model for latent bilateral relations,
-// with a country-level category-offset vector gamma_c added on top of
-// `stable` (inst/stan/bilatr_alphanorm.stan).
+// bilatr model `stable_gamma` (experimental): the `stable` model
+// (bilatr_alphanorm.stan) plus country-level category offsets gamma.
+// Fit with fit_panel(stan_model = "stable_gamma").
 //
-// Registered as `stable_gamma` (R/model_registry.R, status =
-// "experimental") since 0.7.0. Fit via
-// fit_dyad_ts_dev()/fit_panel_dev(stan_model = "stable_gamma"); not
-// reachable via the exported fit_dyad_ts()/fit_panel() (those always fit
-// `.BILATR_DEFAULT_MODEL`).
+// Everything in bilatr_alphanorm.stan's header applies here unchanged: the
+// likelihood, the random-walk latent process, the priors, and the
+// identification of alpha, theta and mu_intercept, including the
+// orientation fold. This header covers what gamma adds.
 //
-// EVERYTHING in bilatr_alphanorm.stan's header applies here unchanged --
-// alpha/theta/mu_intercept identification, the radial degeneracy, the
-// orientation fold, and their rationale are exactly `stable`'s (this file
-// starts as a copy of that one). This header covers only what gamma adds.
+// PURPOSE
+//   Some countries use some action classes more (or less) than their
+//   dyads' theta implies, whomever they interact with. A dyad-level offset
+//   cannot capture this, because each dyad already has a free theta; a
+//   country-level offset can, because each country appears in many dyads.
+//   gamma[, c] is country c's offset vector over the A action classes, so
+//   theta is measured net of each country's baseline mix of event types.
 //
-// MOTIVATION (see dev/claude_code_prompt_0.7.0_country_offsets.md for the
-// full derivation this file implements): check_compositional_residuals()
-// (0.6.0) found a dyad-level compositional residual (implied RMS ~= 0.217
-// on the linear-predictor scale) that a dyad-level beta_d cannot resolve
-// -- each dyad already has a free theta, so beta_d is not identified, and
-// the check itself showed the per-dyad statistic is nearly powerless. A
-// COUNTRY-level offset is identifiable: a country appears in dozens to
-// hundreds of dyads.
+// ADDITIONAL DATA
+//   n_countries    number of distinct countries in the retained dyads
+//   ctry_a[d]      the sender (directed) or first country (undirected)
+//   ctry_b[d]      the receiver (directed) or second country (undirected)
+//   w_send[d]      1 for directed data; for undirected data, the share of
+//                  the pair's events with ctry_a[d] as the acting country
 //
-// LINEAR PREDICTOR: eta_dt = alpha * theta_dt - mu_eff_d, where
-// mu_eff_d = mu_intercept + g_d folds the country offset into the
-// intercept ONCE PER DYAD (0.7.1; every call site forms this once,
-// outside its own per-period loop -- see partial_log_lik_offset() in
-// inst/stan/include/partial_log_lik.stanfunctions for why: g_d is
-// dyad-constant, so subtracting it a second time inside the per-cell eta
-// expression cost extra autodiff nodes for nothing). g_d is built from
-// the SAME gamma in both directed and undirected data:
-//   - directed, d = (i -> j): g_d = gamma_i (the sender generates the
-//     events, so its repertoire applies)
-//   - undirected, d = {i, j}: g_d = w_send_d * gamma_i + (1 - w_send_d) *
-//     gamma_j, w_send_d the observed share of that pair's events with i
-//     as actor (data, not a parameter)
-// One program serves both: w_send = 1 for directed data reduces the
-// undirected formula to the directed one exactly. This is the point of
-// the design -- both datasets estimate the same gamma, with the same
-// prior and the same interpretation, and the difference in how it enters
-// follows mechanically from what a dyad-year IS in each. The models also
-// nest: as sigma_gamma -> 0, both this program and `stable` coincide
-// (see tests/testthat/test_gamma_offset.R's exact-nesting test at
-// n_countries = 1).
+// LINEAR PREDICTOR
+//   eta[d, t] = alpha * theta[d, t] - mu_eff[d],  mu_eff[d] = mu_intercept + g_d
+//   - directed, d = (i -> j): g_d = gamma[, i] (the sender generates the
+//     events, so its repertoire applies);
+//   - undirected, d = {i, j}: g_d = w_send[d] * gamma[, i]
+//     + (1 - w_send[d]) * gamma[, j].
+//   One program serves both: w_send = 1 reduces the undirected formula to
+//   the directed one exactly, so directed and undirected fits estimate the
+//   same gamma, with the same prior and interpretation. g_d is constant
+//   within a dyad and is folded into the intercept once per dyad
+//   (partial_log_lik_offset()). The models nest: as sigma_gamma -> 0, this
+//   program and `stable` coincide, and with n_countries = 1, gamma is
+//   identically 0.
 //
-// BIT-IDENTITY (0.7.1). mu_eff_d = mu_intercept + g_d is mathematically
-// identical to but NOT bit-identical with 0.7.0's `mu_intercept - (-g_d)`
-// -- `(x - mu) - g` and `x - (mu + g)` associate floating-point addition
-// differently. The one case where this doesn't matter: at
-// n_countries = 1, gamma is identically zero (the row-centring step
-// alone forces it, regardless of gamma_z/sigma_gamma), so
-// mu_intercept + 0 is exact in IEEE 754 and 0.7.0 fits made at
-// n_countries = 1 remain bit-comparable. This is also why the
-// exact-nesting test (n_countries = 1, comparing against `stable`) stays
-// valid evidence for the shared-gamma design after this change: it
-// exercises the g_d = 0 case, where there is nothing for the
-// re-association to change.
+// ADDITIONAL PARAMETERS AND PRIORS
+//   gamma_z[a, c]  ~ std_normal()          (non-centered)
+//   sigma_gamma[a] ~ half-normal(0, 0.3)   (per-class spread across countries)
+//   The prior scale reflects a dyad-level compositional residual with an
+//   RMS of about 0.22 on the linear-predictor scale, found by
+//   check_compositional_residuals() in `stable` fits: a country-level
+//   effect can only be part of such a residual, so 0.22 is an upper bound
+//   on it.
 //
 // IDENTIFICATION: GAMMA CONSTRAINTS. Three constraints on gamma, enforced
-// by construction in transformed parameters below, in this order (the
-// order is not arbitrary -- see the per-step comments there):
-//   1. Orthogonal to alpha. Shifting gamma_c by k*alpha shifts every
-//      dyad containing c by exactly what that dyad's own free theta can
-//      already absorb -- the confounding is exact, since theta is free
-//      per dyad-period. Projected out via dot_self(alpha), NOT via a
-//      hardcoded /A: that division is correct only because alpha is
-//      normalised to RMS 1 (so dot_self(alpha) == A) -- writing the
-//      general form means a future change to alpha's normalisation
-//      cannot silently break this projection.
-//   2. Orthogonal to 1 (per country). Softmax shift invariance -- a
-//      constant added to every category of gamma_c cancels in softmax(),
-//      so it is unidentified; centred out per country.
-//   3. Centred across countries (per category). The common,
-//      country-independent part of any category's offset is absorbed by
-//      mu_intercept; centred out per category.
-// Verified by construction (not taken on faith) in
-// tests/testthat/test_gamma_offset.R that steps 2-4 (row-centre,
-// column-centre, alpha-projection) all hold SIMULTANEOUSLY after all four
-// steps -- see that test for why each later step provably preserves the
-// earlier ones' zero-mean property.
+// exactly by construction in transformed parameters:
+//   1. Orthogonal to alpha, per country. Shifting gamma[, c] by k * alpha
+//      shifts every dyad containing c by exactly what that dyad's own free
+//      theta can absorb, so that component is not identified. It is
+//      projected out with dot_self(alpha) rather than a hard-coded A
+//      (equal only because alpha has RMS 1), so the projection does not
+//      depend on alpha's normalization.
+//   2. Sum to zero over classes, per country. A constant added to every
+//      class of gamma[, c] cancels in softmax().
+//   3. Sum to zero over countries, per class. The country-independent part
+//      of a class's offset is mu_intercept's.
+// gamma is built in four steps: scale gamma_z by sigma_gamma; center each
+// class across countries (3); center each country across classes (2);
+// project out alpha per country (1). Each later step preserves the
+// earlier steps' zero sums, so all three constraints hold simultaneously
+// (the package tests check this numerically). The directions of gamma_z
+// that the construction projects out are informed by its prior only, so
+// gamma_z is left out of the convergence diagnostics, like the
+// sign-ambiguous raw parameters.
 //
-// gamma is NOT multiplied by orientation_sign(alpha_raw): the projection
-// v - (dot_product(v, alpha) / dot_self(alpha)) * alpha is invariant to
-// alpha -> -alpha (the sign cancels: it appears once in the numerator's
-// alpha and once in the denominator's alpha, and once more in the
-// dot_product's alpha... concretely, replacing alpha with -alpha leaves
-// dot_product(v, alpha)/dot_self(alpha) unchanged, since both numerator
-// and denominator are even in alpha's sign, and the subtracted term
-// therefore uses -alpha, so the WHOLE expression v - (...)*(-alpha) using
-// the negated coefficient equals the original -- the projection removes
-// exactly the same component of v regardless of alpha's sign). So gamma,
-// and hence g_d and eta, are already orientation-free -- unlike alpha and
-// theta, which the fold explicitly flips. See
-// tests/testthat/test_gamma_offset.R's orientation-invariance test.
-//
-// PRIOR: sigma_gamma ~ normal(0, 0.3) (half, via vector<lower=0>[A]),
-// consistent with the dyad-level implied RMS of 0.217 being an UPPER
-// bound on the country-level component (a country-level effect can only
-// be part of what a dyad-level check sees, since a dyad-level residual
-// pools whatever country-level and genuinely-dyad-level misfit exists).
+// gamma and the orientation fold. gamma is not multiplied by
+// orientation_sign(alpha_raw): the projection
+// v - (dot_product(v, alpha) / dot_self(alpha)) * alpha removes the same
+// component of v whether alpha or -alpha is used, so gamma, g_d and eta
+// are unchanged when the fold flips alpha and theta.
 //
 // HONEST CAVEAT (mixture approximation). If undirected counts are the
 // sum of two directed processes, the exact likelihood is a mixture of
@@ -109,6 +81,11 @@
 // exact two-component mixture breaks the Dirichlet-multinomial form and
 // is not worth the cost; this is acknowledged here deliberately, not an
 // oversight.
+//
+// GENERATED QUANTITIES
+//   As in `stable`: log_lik (when compute_log_lik = 1) and theta_filtered /
+//   theta_filtered_sd (when compute_theta_filtered = 1), both using mu_eff
+//   in place of mu_intercept.
 functions {
   // <<< BEGIN GENERATED partial_log_lik (source: inst/stan/include/partial_log_lik.stanfunctions) >>>
   // Do not hand-edit between these markers -- edit the source file
@@ -116,21 +93,17 @@ functions {
   // (checked by tests/testthat/test_stan_includes.R).
   // Shared reduce_sum likelihood for all bilatr Stan model variants.
   //
-  // Indifferent to how `alpha` and `mu_intercept` were constructed upstream
-  // (fixed-reference vs. sum-to-zero, static vs. OU-derived theta, ...): it
-  // only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
-  // vectors.
+  // Indifferent to how `theta`, `alpha` and `mu_intercept` were constructed
+  // upstream (random walk or OU process, with or without country offsets):
+  // it only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
+  // values.
   //
-  // This is the single canonical source. It is NOT included at compile/
-  // sample time via Stan's `#include` (cmdstanr breaks `#include` resolution
-  // at $sample()-time whenever include_paths contains a space -- see
-  // https://github.com/stan-dev/cmdstanr/issues/820 -- which bites this
-  // project's own devtools::load_all() working tree). Instead,
-  // `data-raw/sync_stan_functions.R` splices this file's contents verbatim
-  // into a marker-delimited block in each registered model's `.stan` file;
-  // see `R/stan_includes.R`. Edit only this file, then rerun the sync
-  // script -- do not hand-edit the generated blocks, and do not fork this
-  // file per variant.
+  // This is the single canonical source. It is not included via Stan's
+  // `#include`, which cmdstanr cannot resolve at sampling time when the
+  // include path contains a space
+  // (https://github.com/stan-dev/cmdstanr/issues/820). Instead, its contents
+  // are copied verbatim into a marker-delimited block in each model's
+  // `.stan` file, and the package tests check that the copies match.
   real partial_log_lik(array[] int slice_d,
                         int start, int end,
                         int T, int A,
@@ -154,39 +127,17 @@ functions {
     return lp;
   }
 
-  // Country-offset variant of partial_log_lik(), added alongside it (0.7.0,
-  // bilatr_alphanorm_gamma.stan / registered `stable_gamma`) -- not a fork,
-  // per this file's own header: partial_log_lik() itself is untouched, and
-  // every other registered program (stable, ou, and the legacy soft-anchor
-  // pair) gets this spliced in too via data-raw/sync_stan_functions.R, as
-  // an unused extra function, so their .stan text changes (one-time
-  // recompile) but their data/parameter blocks -- and hence fits already on
-  // disk -- are untouched.
+  // Country-offset variant of partial_log_lik(), used by the `stable_gamma`
+  // model (and present, unused, in the other models' copies of this file).
   //
-  // g_d, the per-dyad country offset, is built ONCE PER DYAD, outside the
-  // `t` loop -- not stored anywhere (see bilatr_alphanorm_gamma.stan's
-  // header, "Part 0b": a per-dyad-period or per-dyad matrix in transformed
-  // parameters would be written to the output CSV at prohibitive cost).
+  // The per-dyad country offset g_d is built once per dyad, outside the `t`
+  // loop, and folded into the intercept (mu_eff = mu_intercept + g_d), so
+  // the per-cell expression has the same shape and autodiff cost as
+  // partial_log_lik()'s. g_d is not stored: a per-dyad matrix in
+  // transformed parameters would be written to the output for every draw.
   // w_send[d] == 1 covers directed data (g_d = gamma[, ctry_a[d]] exactly,
-  // ctry_b[d] unused) and the directed-as-degenerate-undirected case alike;
-  // any other value mixes ctry_a's and ctry_b's columns by event share (see
-  // bilatr_alphanorm_gamma.stan's header for the directed/undirected
-  // design this implements).
-  //
-  // 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
-  // mu_intercept + g_d), not subtracted a second time inside the `t`
-  // loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
-  // every observed cell was A extra autodiff nodes per cell for nothing
-  // (~3-8% more nodes in eta's part of the graph at production scale, all
-  // avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
-  // ...`) is now the same shape, and the same autodiff cost, as
-  // partial_log_lik()'s -- the only added work is A new vars per dyad, not
-  // per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
-  // pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
-  // differ in floating-point association) -- but bit-identical at
-  // n_countries = 1, where gamma is identically zero and mu_intercept + 0
-  // is exact in IEEE 754, which is why the exact-nesting test stays valid
-  // evidence for the shared-gamma design after this change.
+  // ctry_b[d] unused); any other value mixes ctry_a's and ctry_b's columns
+  // by event share (see the `stable_gamma` model's header).
   real partial_log_lik_offset(array[] int slice_d,
                                int start, int end,
                                int T, int A,
@@ -223,36 +174,24 @@ functions {
 
   // +1/-1 orientation of a draw, from the reference class's sign. Applied
   // to alpha and theta below (NOT to gamma -- see header); see
-  // bilatr_alphanorm.stan's header, "IDENTIFICATION: ORIENTATION FOLD".
-  // Hand-duplicated here, same reasoning as bilatr_alphanorm_ou.stan's
-  // own copy: tiny, not worth extending the sync tooling for.
+  // bilatr_alphanorm.stan's header, "Sign: the ORIENTATION FOLD".
   real orientation_sign(vector alpha_raw) {
     return alpha_raw[1] >= 0 ? 1.0 : -1.0;
   }
 
-  // Per-dyad country offset g_d -- same construction as
-  // partial_log_lik_offset() (inst/stan/include/
-  // partial_log_lik.stanfunctions), duplicated here for generated
-  // quantities' use (GQ-only, small, hand-verified identical -- same
-  // convention as bilatr_alphanorm.stan's dyad_period_log_lik()).
+  // Per-dyad country offset g_d -- the same construction as in
+  // partial_log_lik_offset() above, for use in generated quantities.
   vector country_offset(matrix gamma, int ctry_a_d, int ctry_b_d, real w_send_d) {
     return w_send_d == 1.0
            ? gamma[, ctry_a_d]
            : w_send_d * gamma[, ctry_a_d] + (1 - w_send_d) * gamma[, ctry_b_d];
   }
 
-  // Offset-aware per-dyad-period log-likelihood, not reduced/summed --
-  // used only by the compute_log_lik generated quantities block below.
-  // 0.7.1: takes `mu_intercept` already folded with g_d (the caller
-  // forms `mu_eff = mu_intercept + country_offset(...)` once per dyad,
-  // outside its own t loop -- see country_offset() above and
-  // partial_log_lik_offset()'s header comment for why), so this
-  // function's own body is now byte-identical to
-  // bilatr_alphanorm.stan's dyad_period_log_lik() -- only the name
-  // differs, kept distinct for discoverability at each call site.
-  // Duplicated rather than shared via the GENERATED mechanism for the
-  // same reason dyad_period_log_lik() is in bilatr_alphanorm.stan:
-  // GQ-only, small.
+  // Offset-aware per-dyad-period log-likelihood, not summed -- used only
+  // by the compute_log_lik generated quantities below. Its `mu_intercept`
+  // argument is mu_eff, already folded with g_d by the caller once per
+  // dyad, so the body is the same as bilatr_alphanorm.stan's
+  // dyad_period_log_lik(); the separate name marks the call sites.
   real dyad_period_log_lik_offset(int obs_dt, array[] int y_dt, real theta_dt,
                                    int A, vector mu_intercept, real phi_d,
                                    vector alpha) {
@@ -270,8 +209,7 @@ data {
   int<lower=1> D;                            // number of dyads
   int<lower=1> A;                            // number of action types
   int<lower=1> C;                            // reduce_sum grainsize (NOT the
-                                              // country count -- see Part 0a
-                                              // of the build prompt; that is
+                                              // country count; that is
                                               // n_countries, below)
   array[D, T] int<lower=0, upper=1> is_obs;  // observed indicator
   array[D, T, A] int<lower=0> Y;             // event counts
@@ -289,10 +227,10 @@ data {
                                               // compute_theta_filtered is 0
   array[n_filter_dyads] int<lower=1, upper=D> filter_dyads; // which dyads to filter
 
-  // Country-offset data (0.7.0; see header). n_countries is the number
-  // of DISTINCT countries actually present in the retained dyads (see
-  // R/stan_data.R's assemble_stan_data()) -- deliberately NOT named `C`
-  // (already the reduce_sum grainsize above).
+  // Country-offset data (see header). n_countries is the number of
+  // DISTINCT countries present in the retained dyads (set by
+  // prepare_stan_data()) -- deliberately NOT named `C` (already the
+  // reduce_sum grainsize above).
   int<lower=1> n_countries;
   array[D] int<lower=1, upper=n_countries> ctry_a;   // sender (directed) / side A (undirected)
   array[D] int<lower=1, upper=n_countries> ctry_b;   // receiver (directed) / side B
@@ -308,28 +246,27 @@ parameters {
 
   // Hierarchical process/dispersion parameters
   vector[D] log_process_noise_raw;  // non-centered: process_noise built in TP
-  real mu_log_noise;                // NOTE: now a ratio to sigma_theta0, see header
+  real mu_log_noise;                // log ratio to sigma_theta0, see header
   real<lower=0> sigma_log_noise;
   vector<lower=0>[D] phi;
   real mu_log_phi;
   real<lower=0> sigma_log_phi;
 
-  // Country-level category offsets (0.7.0; see header)
-  matrix[A, n_countries] gamma_z;      // non-centred
+  // Country-level category offsets (see header)
+  matrix[A, n_countries] gamma_z;      // non-centered
   vector<lower=0>[A] sigma_gamma;      // per-category spread across countries
 }
 transformed parameters {
   // Normalize alpha to RMS (== population SD, sum-to-zero) 1. This is the
-  // scale anchor for the whole model; see bilatr_alphanorm.stan's header
-  // for the radial degeneracy this creates. Sign is NOT fixed here --
-  // see orientation_sign() below and that header, "IDENTIFICATION:
-  // ORIENTATION FOLD".
+  // scale anchor for the whole model; see bilatr_alphanorm.stan's header,
+  // "Scale" and "Radial direction". The sign comes from
+  // orientation_sign(); see that header, "Sign: the ORIENTATION FOLD".
   vector[A] alpha = orientation_sign(alpha_raw)
                     * alpha_raw * sqrt((1.0 * A) / dot_self(alpha_raw));
 
   // Country-level category offsets. See header, "IDENTIFICATION: GAMMA
-  // CONSTRAINTS" -- the four-step order matters: step 2 (row-centre
-  // across countries) leaves step 3's per-column centring unable to
+  // CONSTRAINTS" -- the four-step order matters: step 2 (row-center
+  // across countries) leaves step 3's per-column centering unable to
   // reintroduce a row mean (the constants step 3 subtracts average to
   // zero across countries, since each row already sums to zero before
   // step 3 runs); step 4's alpha-projection subtracts a multiple of
@@ -337,8 +274,7 @@ transformed parameters {
   // so it cannot perturb the column (per-country) sums step 3 already
   // zeroed, and its own per-country coefficients average to zero across
   // countries so it cannot reintroduce a row mean either. After all four
-  // steps, constraints 1-3 hold EXACTLY, simultaneously -- see
-  // tests/testthat/test_gamma_offset.R.
+  // steps, constraints 1-3 hold EXACTLY, simultaneously.
   matrix[A, n_countries] gamma;
   {
     // 1. raw = diag_pre_multiply(sigma_gamma, gamma_z)
@@ -409,22 +345,18 @@ model {
   mu_intercept ~ std_normal();
 
   // load-bearing, not merely regularizing: identifies the radial
-  // direction of alpha_raw (see bilatr_alphanorm.stan's header, "RADIAL
-  // DEGENERACY"). The orientation fold (transformed parameters, above)
+  // direction of alpha_raw (see bilatr_alphanorm.stan's header, "Radial
+  // direction"). The orientation fold (transformed parameters, above)
   // leaves this prior untouched.
   alpha_raw ~ std_normal();
 
-  // Country-level category offsets (0.7.0; see header). sigma_gamma's
-  // half-normal(0, 0.3) is calibrated against the dyad-level implied RMS
-  // this model exists to test (0.217), as an upper bound on the
-  // country-level component. gamma_z ~ std_normal() (via to_vector(),
-  // element-wise): note gamma_z's projected-out directions (the alpha
-  // direction, the all-ones direction, and the across-country mean) are
-  // pinned ONLY by this prior, not by the likelihood -- see
-  // R/diagnose_convergence.R's .bilatr_sign_ambiguous_raw_names()/
-  // R/orient.R for where this is kept out of the tiered diagnostics
-  // tables (not sign ambiguity, prior-only directions -- a different
-  // reason, same tier = NA treatment).
+  // Country-level category offsets (see header, "ADDITIONAL PARAMETERS
+  // AND PRIORS"). gamma_z ~ std_normal() (via to_vector(), element-wise):
+  // gamma_z's projected-out directions (the alpha direction, the all-ones
+  // direction, and the across-country mean) are informed ONLY by this
+  // prior, not by the likelihood, which is why the convergence
+  // diagnostics leave gamma_z out (not sign ambiguity, but the same
+  // treatment).
   sigma_gamma ~ normal(0, 0.3);
   to_vector(gamma_z) ~ std_normal();
 
@@ -443,11 +375,8 @@ generated quantities {
 
   if (compute_log_lik) {
     for (d in 1:D) {
-      // 0.7.1: fold once per dyad, same as partial_log_lik_offset() --
-      // see that function's header comment. No autodiff here (generated
-      // quantities), so this is cosmetic, not a performance fix; done
-      // anyway so all four sites (the two likelihood functions, this
-      // block, and the forward filter below) read the same way.
+      // fold the offset once per dyad, as in partial_log_lik_offset(), so
+      // every site that uses g_d reads the same way.
       vector[A] mu_eff = mu_intercept + country_offset(gamma, ctry_a[d], ctry_b[d], w_send[d]);
       for (t in 1:T) {
         log_lik[d, t] = dyad_period_log_lik_offset(
@@ -460,8 +389,8 @@ generated quantities {
   // Forward-filtered theta: conditional on THIS draw's hyperparameters,
   // a Fisher-scoring (West-Harrison linear-Bayes) filter over the
   // observations -- an approximation to p(theta_t | y_1:t), not the exact
-  // marginal. See bilatr_alphanorm.stan's header for the full derivation
-  // of the score/information; the offset changes exactly one thing here
+  // marginal. See bilatr_alphanorm.stan's generated quantities for the
+  // derivation of the score/information; the offset changes exactly one thing here
   // -- eta uses mu_eff (mu_intercept folded with g_d) in place of
   // mu_intercept -- because d(eta_k)/d(theta) = alpha_k regardless of
   // g_d (g_d does not depend on theta), so the score and information

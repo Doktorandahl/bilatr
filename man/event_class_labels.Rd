@@ -22,15 +22,11 @@ event class missing from the lookup (possible for a real CAMEO
 its code as its own label, with a \code{warning()} naming it.
 }
 \description{
-The data-driven replacement (0.10.1) for the retired per-scheme
-\verb{*_name()} functions (\code{eventrootcode3_name()} and friends; see
-NEWS.md): rather than a standalone namer per CAMEO regrouping that the
-caller has to pick by hand, this reads labels straight out of
-\link{cameo_lookup}'s \verb{*Name} column for \code{scheme}, keyed by event class
-VALUE, never by position in \code{event_classes} -- so it is correct
-regardless of where \code{reference_category} put a class in that order
-(unlike the old \code{class_label_fn(action_index)} pattern this replaces;
-see \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}'s \code{class_labels} argument).
+Reads the labels from \link{cameo_lookup}'s \verb{*Name} column for \code{scheme},
+keyed by event class value, never by position in \code{event_classes}, so
+the result is correct wherever \code{reference_category} put a class in that
+order. The other post-fit functions use it for their \code{class_labels}
+default.
 }
 \details{
 \code{scheme} names a \link{cameo_lookup} column with a matching \verb{*Name} column:

@@ -33,21 +33,17 @@ different. \code{FALSE}: no country-presence filter at all.}
 \item{root_events_only}{\code{FALSE} (default), or \code{TRUE} to keep only
 \code{IsRootEvent == 1} rows.}
 
-\item{date_range}{Length-2 vector (anything \code{\link[=.parse_event_date]{.parse_event_date()}}
-accepts), or \code{NULL} (default). Filters on \code{SQLDATE}. For daily files
-(organised by \code{DATEADDED}, not \code{SQLDATE}; see \code{?bilatr_gdelt_layout}),
-this keeps events \emph{dated} in the range among the files actually read
--- it does not recover events dated in the range but added (and so
-filed) outside those files.}
+\item{date_range}{Length-2 vector of dates (\code{Date}, \code{POSIXt},
+\code{YYYYMMDD} or \code{YYYY-MM-DD}), or \code{NULL} (default). Filters on
+\code{SQLDATE}. Daily files are organized by \code{DATEADDED} (see "GDELT 1.0
+files"), so this keeps the events \emph{dated} in the range among the
+files actually read; it does not recover events dated in the range
+but added on days outside those files.}
 
-\item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. Each
-chunk's kept rows are appended to a list and row-bound once after the
-read completes, so this does not change memory scaling with \code{chunk_size}
-the way re-\code{bind_rows()}-ing into an accumulator on every chunk would
-(quadratic in kept rows -- confirmed 10.1s vs. 1.7s on a synthetic
-400k-row, 58-column file at the default \code{chunk_size}, a third of rows
-kept). Larger than readr's own default (10,000) since GDELT backfiles
-run to millions of rows.}
+\item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. The
+default, 100,000, is ten times readr's own, since GDELT backfiles run
+to millions of rows. Memory use depends on the rows kept, not on
+\code{chunk_size}.}
 }
 \value{
 A tibble of \code{actor1_type}, \code{actor2_type}, \code{n}, sorted by \code{n}

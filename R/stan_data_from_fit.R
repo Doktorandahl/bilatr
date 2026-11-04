@@ -18,7 +18,7 @@
 #' @param required If `FALSE`, return `NULL` instead of erroring when
 #'   nothing is found (for [icc_curves()], whose `stan_data` is optional).
 #' @return A Stan data list, or `NULL` (only when `required = FALSE`).
-#' @keywords internal
+#' @noRd
 .stan_data_from_fit <- function(fit, stan_data, caller, required = TRUE) {
   if (!is.null(stan_data)) {
     return(stan_data)
@@ -65,11 +65,11 @@
 #'
 #' For [extract_alpha()]/[extract_mu_intercept()]'s `event_classes = NULL`
 #' default: `attr(attr(fit, "stan_data"), "event_classes")`, or `NULL`
-#' (unlabelled output) when `fit` is CSV paths or carries no Stan data.
+#' (unlabeled output) when `fit` is CSV paths or carries no Stan data.
 #'
 #' @param fit A fit object, or a character vector of CSV paths.
 #' @return A character vector, or `NULL`.
-#' @keywords internal
+#' @noRd
 .attached_event_classes <- function(fit) {
   if (is.character(fit)) {
     return(NULL)
@@ -100,7 +100,7 @@
 #' @param stan_model The caller's `stan_model` argument, or `NULL`.
 #' @param caller The calling function's name, for messages.
 #' @return A canonical registered model name.
-#' @keywords internal
+#' @noRd
 .resolve_stan_model_for_fit <- function(fit, stan_data, stan_model, caller) {
   recorded <- NULL
   source <- NULL
@@ -145,7 +145,7 @@
 #' @return A registered model name, or `NULL` if the header has no
 #'   `model` line, names a model that is not registered, or cannot be
 #'   read.
-#' @keywords internal
+#' @noRd
 .stan_model_from_csv_header <- function(csv_file) {
   cmdstan_name <- tryCatch(
     .scan_stan_csv_header_and_skip(csv_file)$model,

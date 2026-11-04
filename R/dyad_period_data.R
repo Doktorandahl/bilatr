@@ -113,7 +113,7 @@ validate_bilatr_dyad_period <- function(
 #' @inheritParams validate_bilatr_dyad_period
 #' @param action_quo A quosure of the `action_cols` expression.
 #' @return See [validate_bilatr_dyad_period()].
-#' @keywords internal
+#' @noRd
 .validate_dyad_period <- function(data, time, action_quo, dyad, actor1, actor2, w_send) {
   fn <- "validate_bilatr_dyad_period()"
   if (!is.data.frame(data)) {
@@ -324,7 +324,7 @@ validate_bilatr_dyad_period <- function(
 #' @param role_cols The dyad/actor/time/w_send column names.
 #' @return A list: `cols` (character) and `default` (`TRUE` if selected by
 #'   the `NULL` default).
-#' @keywords internal
+#' @noRd
 .resolve_action_cols <- function(action_quo, data, role_cols) {
   if (rlang::quo_is_null(action_quo)) {
     from_attr <- attr(data, "action_cols")
@@ -371,7 +371,7 @@ validate_bilatr_dyad_period <- function(
 #'
 #' @param x A column.
 #' @return A single logical.
-#' @keywords internal
+#' @noRd
 .is_whole_number_col <- function(x) {
   if (!is.numeric(x)) {
     return(FALSE)
@@ -388,7 +388,7 @@ validate_bilatr_dyad_period <- function(
 #'
 #' @param x A numeric vector.
 #' @return A logical vector.
-#' @keywords internal
+#' @noRd
 .is_whole_number <- function(x) {
   if (is.integer(x)) {
     return(rep(TRUE, length(x)))

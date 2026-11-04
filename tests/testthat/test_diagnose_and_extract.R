@@ -6,7 +6,7 @@ test_that("diagnose_and_extract_bilatr() matches calling the four functions sepa
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
+  fx <- make_csv_diagnostics_fixture() # stable model (orientation fold: no basin to land in)
 
   diag_ref <- suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, chunk_size = 3))
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -122,7 +122,7 @@ test_that("diagnose_and_extract_bilatr() folds Tier 1/2 and Tier 3 into one read
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
+  fx <- make_csv_diagnostics_fixture() # stable model (orientation fold: no basin to land in)
 
   diag_ref <- suppressWarnings(diagnose_convergence(fx$csv_files, n_dt = fx$n_dt, chunk_size = 3))
   theta_ref <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))
@@ -168,7 +168,7 @@ test_that("diagnose_and_extract_bilatr() attaches event_class labels the same as
   )
 })
 
-test_that("diagnose_and_extract_bilatr(class_labels =) overrides the event_class_labels(stan_data) default (0.10.2, B0a)", {
+test_that("diagnose_and_extract_bilatr(class_labels =) overrides the event_class_labels(stan_data) default", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()

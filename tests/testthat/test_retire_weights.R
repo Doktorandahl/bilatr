@@ -1,4 +1,4 @@
-test_that("Stan data from events has no weight fields: exactly the pre-0.4.6 fields minus the three dropped ones", {
+test_that("Stan data from events has exactly the expected fields, with no weight fields", {
   events <- make_fake_events()
   events <- recode_cameo(events, code_col = "EventCode")
   sd <- events_to_stan_data(
@@ -6,11 +6,8 @@ test_that("Stan data from events has no weight fields: exactly the pre-0.4.6 fie
     reference_category = 0,
     min_n_events = 1
   )
-  # pre-0.4.6, the Stan data additionally carried dyad_weight/
-  # period_weight/action_weight (all vectors of 1s); every other field
-  # (and every value of every other field) is unchanged. Built with
-  # aggregate_events()/prepare_stan_data() since 0.12.0, which give the
-  # same list as assemble_stan_data() did (test_prepare_stan_data_equivalence.R).
+  # No dyad_weight/period_weight/action_weight fields (the frozen weighted
+  # reference program below declares them, as vectors of 1s).
   expect_false(any(c("dyad_weight", "period_weight", "action_weight") %in% names(sd)))
   expect_setequal(
     names(sd),
@@ -23,31 +20,24 @@ test_that("Stan data from events has no weight fields: exactly the pre-0.4.6 fie
   )
 })
 
-test_that("the 0.4.6 stable program is bit-identical to the pre-0.4.6 one at unit weights", {
+test_that("the stable program is bit-identical to a frozen weighted reference program at unit weights", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
 
-  # Proof this is a pure deletion, not a behavior change: dyad_weight/
-  # period_weight/action_weight all being 1 must leave the target exactly
-  # (not approximately) unchanged, since removing the elementwise
-  # multiplies is IEEE-754-exact at unit weights. Compiles a pre-0.4.6
-  # copy of the retired-weighting stable program (originally git blob
-  # ff3e7e1, the commit immediately before this task; 0.7.1 checked that
-  # historical file in as a fixture instead of shelling out to `git show`
-  # at test time -- the latter fails hermetically under `R CMD check`,
-  # which runs from a temp copy with no `.git` directory, and the
-  # resulting empty `old_stan_src` compiled an "empty model" that then
-  # failed with a confusing, unrelated error) standalone -- NOT via
-  # .compile_stan_model(), which always reads the package's live,
-  # already-changed inst/stan/ -- and fits it alongside the current one
-  # with identical data, a fixed (non-random) init, seed, and adaptation.
+  # The stable program without likelihood weights must give exactly (not
+  # approximately) the target of a program that multiplies by
+  # dyad_weight/period_weight/action_weight, when every weight is 1, since
+  # those multiplies are IEEE-754-exact at unit weights. Compiles the
+  # frozen weighted program (a fixture) standalone -- NOT via
+  # .compile_stan_model(), which reads the package's own inst/stan/ -- and
+  # fits it alongside the current one with identical data, a fixed
+  # (non-random) init, seed, and adaptation.
   # Copied to a tempfile before compiling, not compiled in place: cmdstanr
   # writes the compiled executable alongside its source .stan file by
   # default, which would otherwise leave a stray binary inside
   # tests/testthat/fixtures/ on every run of this test (caught by
-  # R CMD check's "checking for executable files" -- the same class of
-  # issue this fixture itself was added to fix, just one directory over).
+  # R CMD check's "checking for executable files").
   old_stan_src <- readLines(testthat::test_path("fixtures", "bilatr_alphanorm_pre_0.4.6.stan"))
   old_stan_file <- tempfile(fileext = ".stan")
   writeLines(old_stan_src, old_stan_file)

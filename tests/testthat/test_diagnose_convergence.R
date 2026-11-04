@@ -61,7 +61,7 @@ test_that(".classify_bilatr_tier assigns Tier 2 to single-index, non-Tier-1, non
 test_that(".classify_bilatr_tier assigns Tier 3 to double-index, non-sign-ambiguous parameters", {
   # theta_raw is excluded from this set on purpose -- see the dedicated
   # sign-ambiguous-exclusion test below. theta_filtered/theta_filtered_sd
-  # (0.5.0) need no special-casing either -- structural, same as theta/
+  # need no special-casing either -- structural, same as theta/
   # log_lik (see .bilatr_tier1_names's docs for the filter_dyads caveat
   # on dyad_id when a dyad subset was used).
   out <- .classify_bilatr_tier(c("theta[3,12]", "log_lik[2,1]", "theta_filtered[1,1]", "theta_filtered_sd[1,1]"))
@@ -265,7 +265,7 @@ test_that("diagnose_convergence() Tier 3 is aggregated per dyad, not per dyad-pe
 
   expect_equal(nrow(diag$tier3), 4L) # 4 dyads with theta[d,t], not 8 dyad-periods
   expect_true(all(c("min_ess_bulk", "min_ess_tail", "share_ess_below_threshold") %in% names(diag$tier3)))
-  # 0.10.2, B4: make_fake_draws() has no Tier 3 quantity besides theta, so
+  # make_fake_draws() has no Tier 3 quantity besides theta, so
   # tier3_other is a zero-row tibble, not NULL (3 was in tiers).
   expect_equal(nrow(diag$tier3_other), 0L)
 })
@@ -275,7 +275,7 @@ test_that("diagnose_convergence() Tier 3 is aggregated per dyad, not per dyad-pe
 test_that("diagnose_convergence() returns a bilatr_diagnostics object", {
   diag <- diagnose_convergence(make_fake_draws(), n_dt = make_fake_n_dt())
   expect_s3_class(diag, "bilatr_diagnostics")
-  # 0.7.1: always carries a `gamma` element (NULL unless `stan_model` has
+  # always carries a `gamma` element (NULL unless `stan_model` has
   # one -- default .BILATR_DEFAULT_MODEL here does not; see
   # .assemble_bilatr_diagnostics()/.bilatr_model_has_gamma()).
   expect_named(diag, c("tier1", "gamma", "tier2", "tier3", "tier3_other", "summary"))
@@ -346,7 +346,7 @@ test_that("print.bilatr_diagnostics() only prints sections for computed tiers", 
   expect_false(any(grepl("Tier 3", out)))
 })
 
-test_that("print.bilatr_diagnostics() reports flagged dyads' median n_dt, not a bound (B10)", {
+test_that("print.bilatr_diagnostics() reports flagged dyads' median n_dt, not a bound", {
   set.seed(1)
   n_iter <- 600
   n_chain <- 4
@@ -375,7 +375,7 @@ test_that("print.bilatr_diagnostics() reports flagged dyads' median n_dt, not a 
   expect_false(any(grepl("concentrated around", out)))
 })
 
-test_that("print.bilatr_diagnostics() prints one line per tier3_other base name (B4)", {
+test_that("print.bilatr_diagnostics() prints one line per tier3_other base name", {
   set.seed(1)
   n_iter <- 100
   n_chain <- 2
@@ -436,11 +436,10 @@ test_that(".compute_chunk_size() shrinks with more file_mb headroom lost, and sh
   )
   expect_lt(smaller_size, base_size)
 
-  # n_cores > 1 forks posterior::summarise_draws() workers (B8's
-  # replacement for the pre-measurement model, which assumed a flat
-  # penalty regardless of the exact core count -- measured, in
-  # dev/bench_memory.R, to scale with n_cores instead): each additional
-  # worker shrinks the chunk size further, not just the first one
+  # n_cores > 1 forks posterior::summarise_draws() workers, whose memory
+  # cost was measured to scale with n_cores, not to be a flat penalty:
+  # each additional worker shrinks the chunk size further, not just the
+  # first one
   par_size_2 <- .compute_chunk_size(
     n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 2
   )
@@ -521,10 +520,10 @@ test_that(".bilatr_worker_tradeoff() reports NA (infeasible), not an error, when
 test_that(".bilatr_worker_tradeoff()'s wall time falls with more chunks-per-second but core-seconds rises with n_workers, in the shape the review's own arithmetic predicted", {
   # Same qualitative shape as the review's per-chain production case: at
   # some point along worker_levels, wall time should be lower than at
-  # n_workers = 1 (more chunks, but summarising parallelised), while
+  # n_workers = 1 (more chunks, but summarizing parallelized), while
   # core-seconds should never be lower than at n_workers = 1 (each
   # chunk's read cost is repeated per chunk regardless of n_workers, and
-  # summarising splits across cores without reducing total CPU-seconds
+  # summarizing splits across cores without reducing total CPU-seconds
   # for that part -- extra workers can only add chunk-count overhead).
   out <- .bilatr_worker_tradeoff(
     n_vars = 1900000, n_draws = 1000, n_chains = 1, file_mb = 14000,
@@ -538,9 +537,7 @@ test_that(".bilatr_worker_tradeoff()'s wall time falls with more chunks-per-seco
 
 test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation", {
   # ARRAY(3) + PER_CHAIN/n_chains(2/n_chains), no cores term at
-  # n_cores = 1. 0.10.0 dropped the FLIP(1) term the pre-0.10.0 formula
-  # had here: the post-hoc sign-flip machinery it budgeted for was
-  # retired along with the soft-anchor stack that needed it.
+  # n_cores = 1.
   expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 1, n_cores = 1), 3 + 2)
   expect_equal(.bilatr_chunk_overhead_multiplier(n_chains = 4, n_cores = 1), 3 + 2 / 4)
 
@@ -593,7 +590,7 @@ test_that("diagnose_convergence() from CSV files matches the in-memory path exac
   expect_setequal(names(diag_csv_chunked$tier3), names(diag_mem$tier3))
 })
 
-test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requested tiers via $draws(variables =), not the whole fit subset afterward (B8)", {
+test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requested tiers via $draws(variables =), not the whole fit subset afterward", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -657,7 +654,7 @@ test_that("diagnose_convergence() from CSV files respects tiers = 1 (no n_dt, no
   expect_null(diag$tier3_other)
 })
 
-test_that("diagnose_convergence() Tier 3 is theta-only; theta_filtered/theta_filtered_sd land in tier3_other, not mis-joined by filter position (B4)", {
+test_that("diagnose_convergence() Tier 3 is theta-only; theta_filtered/theta_filtered_sd land in tier3_other, not mis-joined by filter position", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -669,7 +666,7 @@ test_that("diagnose_convergence() Tier 3 is theta-only; theta_filtered/theta_fil
 
   # D = 6, T = 4 (make_csv_diagnostics_fixture()): tier3 holds exactly one
   # row per dyad, n_theta == T for every dyad -- not inflated by the two
-  # filtered-dyad quantities folded in under the pre-0.10.2 mis-join.
+  # filtered-dyad quantities folded in by a join on their first index.
   expect_equal(nrow(diag$tier3), 6L)
   expect_true(all(diag$tier3$n_theta == 4L))
 
@@ -680,7 +677,7 @@ test_that("diagnose_convergence() Tier 3 is theta-only; theta_filtered/theta_fil
   expect_equal(diag$summary$n_tier3_other_groups, 2L)
 })
 
-test_that("diagnose_convergence() gives log_lik its own tier3_other row when compute_log_lik = 1 (B4)", {
+test_that("diagnose_convergence() gives log_lik its own tier3_other row when compute_log_lik = 1", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -723,7 +720,7 @@ test_that("n_dt defaults to the per-dyad event totals of the fit's Stan data (id
   skip_on_cran()
 
   fx <- make_csv_diagnostics_fixture()
-  # the hand-built n_dt the vignettes used to build
+  # a hand-built n_dt, as a user might build it
   hand <- suppressWarnings(diagnose_convergence(fx$fit, n_dt = fx$n_dt, stan_model = "stable"))
   attr(fx$fit, "stan_data") <- fx$stan_data
   attr(fx$fit, "stan_model") <- "stable"

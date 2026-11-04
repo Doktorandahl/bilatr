@@ -3,7 +3,7 @@
 #' Packages a dyad x time-period table of action counts (see
 #' `?bilatr_dyad_period_data`), from [aggregate_events()] or any other
 #' source, as the data list expected by the package's Stan models (see
-#' `R/model_registry.R`).
+#' [compile_bilatr_model()], "Models").
 #'
 #' In order:
 #'
@@ -58,8 +58,9 @@
 #'
 #'   The reference category is placed first, and every bilatr model folds
 #'   the sign of its discrimination `alpha[1]` into the reported `alpha`
-#'   and `theta`, so the reported `alpha[1]` is never negative (see each
-#'   `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"). Since
+#'   and `theta`, so the reported `alpha[1]` is never negative (see the
+#'   header of each
+#'   model's Stan program, "Sign: the ORIENTATION FOLD"). Since
 #'   `alpha` sums to zero, `alpha[1]` is at least the average
 #'   discrimination of the other classes, and the reference class gains
 #'   probability relative to them as \eqn{\theta} rises.
@@ -115,8 +116,9 @@
 #'   `theta` every fit already returns. Left off by default: computing it
 #'   for every dyad is `D * T` iterations with `A` `digamma()` calls each,
 #'   single-threaded (no `reduce_sum` in `generated quantities`), on the
-#'   order of a minute or two per chain for a full production-sized dyad
-#'   set, and adds two more `D x T`-scaled Tier 3 blocks to the output.
+#'   order of a minute or two per chain for a panel of about 17,000 dyads
+#'   over 35 years, and adds two more `D x T`-scaled Tier 3 blocks to the
+#'   output.
 #' @param filter_dyads Optional character vector of dyad names (matched
 #'   against the `dyad_ids` attribute's `dyad` column) naming which dyads
 #'   to compute `theta_filtered` for. Ignored, with a warning, if
@@ -327,8 +329,8 @@ prepare_stan_data <- function(
   # (.k1, .k2, ...) so no action column can collide with the key columns.
   count_names <- paste0(".k", seq_len(A))
   long <- tibble::tibble(.dyad = dyad_vec, .time = time_vec, !!!rlang::set_names(counts, count_names))
-  # C-locale (radix) sort: the same order dplyr::group_by() gives, and so
-  # the same dyad_id order bilatr <= 0.11.0 assigned.
+  # C-locale (radix) sort: the same order dplyr::group_by() gives, so
+  # dyad_id does not depend on the locale.
   dyads <- sort(unique(dyad_vec), method = "radix")
   grid <- tidyr::expand_grid(.dyad = dyads, .time = time_values) %>%
     dplyr::left_join(long, by = c(".dyad", ".time")) %>%
@@ -378,7 +380,7 @@ prepare_stan_data <- function(
   countries_present <- NULL
   if (has_actors) {
     # radix = C-locale byte order: this order defines what gamma's columns
-    # mean, so it must not depend on locale (as in bilatr <= 0.11.0).
+    # mean, so it must not depend on locale.
     countries_present <- sort(unique(c(dyad_info$actor1, dyad_info$actor2)), method = "radix")
     n_countries <- length(countries_present)
     country_index <- stats::setNames(seq_len(n_countries), countries_present)
@@ -464,7 +466,7 @@ prepare_stan_data <- function(
 #' @param data The dyad-period data frame.
 #' @param time The `time` argument.
 #' @return A single column name.
-#' @keywords internal
+#' @noRd
 .resolve_time_col <- function(data, time) {
   if (!is.null(time)) {
     return(time)
@@ -491,7 +493,7 @@ prepare_stan_data <- function(
 #' @param x Anything.
 #' @param min The smallest allowed value.
 #' @return `TRUE`/`FALSE`.
-#' @keywords internal
+#' @noRd
 .is_count <- function(x, min = 0) {
   is.numeric(x) && length(x) == 1 && !is.na(x) && is.finite(x) && .is_whole_number(x) && x >= min
 }
@@ -504,7 +506,7 @@ prepare_stan_data <- function(
 #' @param arg Its argument name, for the error.
 #' @param fn The calling function, for the error.
 #' @return `0L` or `1L`.
-#' @keywords internal
+#' @noRd
 .as_flag <- function(x, arg, fn) {
   if (length(x) != 1 || is.na(x) || !(is.logical(x) || (is.numeric(x) && x %in% c(0, 1)))) {
     stop(fn, ": `", arg, "` must be 0 or 1 (or FALSE or TRUE).", call. = FALSE)

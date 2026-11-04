@@ -186,13 +186,13 @@ phase: the runs should all do about the same number, and
 drifted, so its `iter_per_sec` is not comparable). The medians over the
 replicates below are robust to one such run.
 
-[summarise_benchmark()] collapses the replicates, and
+[summarize_benchmark()] collapses the replicates, and
 [benchmark_pareto()] marks the settings on the Pareto front of
 throughput and cost:
 
 ```{r summarise}
 summ <- bench %>%
-  summarise_benchmark() %>%
+  summarize_benchmark() %>%
   benchmark_pareto()
 
 summ %>%
@@ -273,8 +273,8 @@ one job per setting. The pieces:
    likelihood profiled. Write it to a `.stan` file and compile it once,
    before submitting.
 3. Each job fits one chain and writes one row with the columns described
-   in `?summarise_benchmark` ("Benchmark results").
-4. Bind the rows and summarise them as above.
+   in `?summarize_benchmark` ("Benchmark results").
+4. Bind the rows and summarize them as above.
 
 The preparation, on a login node:
 
@@ -338,27 +338,35 @@ When the arrays have finished:
 ```{r, eval = FALSE}
 results <- purrr::map(list.files("bench/results", full.names = TRUE), readr::read_csv) %>%
   dplyr::bind_rows()
-summ <- benchmark_pareto(summarise_benchmark(results))
+summ <- benchmark_pareto(summarize_benchmark(results))
 plot_benchmark(summ)
 ```
 
 If you benchmark several data sets at once, add a `scenario` column to
-each job's row; [summarise_benchmark()] and [plot_benchmark()] group
+each job's row; [summarize_benchmark()] and [plot_benchmark()] group
 and facet by it, and `benchmark_pareto(by = "scenario")` finds each
 one's front.
 
-## A worked result from a production panel
+## A worked example from a production panel
 
-As an example of what a cluster sweep can show: for a yearly GDELT
-panel of 16,750 directed dyads (the panel behind `?theta_directed`), a
-sweep of this kind put `threads_per_chain = 16` with `chunk_size = 600`
-on the Pareto front. That is about 28 chunks, a little under two tasks
-per thread, a fairly coarse split, which suggests that on that cluster
-the overhead of many small tasks outweighed the cost of uneven work.
+As an example of what a larger sweep can show: for the yearly GDELT
+panel behind the published theta trajectories (`?theta_trajectories`),
+16,750 directed dyads over 1991-2025, with events grouped into the four
+QuadClass action classes (*A* = 4) and the `stable` model, a sweep
+of this kind on a many-core compute node recommended
+`threads_per_chain = 16` with `chunk_size = 1163`. That is about 14
+chunks, fewer than one per thread: a very coarse split, which suggests
+that on that hardware the overhead of many small tasks outweighed the
+cost of uneven work. The production fits behind the published
+trajectories used 16 threads with `chunk_size = 1200`, that
+recommendation rounded. On the same panel with ten action classes
+(*A* = 10), the same sweep's best setting was 32 threads with
+`chunk_size = 1802`, so the optimum moves with *A* as well as with
+the hardware.
 
-This is an example, not a recommendation. The best settings depend on
-the number of dyads and periods, the number of action types, the model,
-the CPU and the cluster's scheduler; re-tune for your own data size and
+This is one worked example, not a recommendation. The best settings
+depend on the number of dyads and periods, the number of action types,
+the model, the CPU and the scheduler; re-tune for your own data size and
 hardware.
 
 ## Tuning the diagnostics
@@ -376,11 +384,11 @@ trade off, when they read a large fit from CmdStan CSV files:
 * **`n_cores`** is the number of processes that compute R-hat and ESS
   for each chunk. It speeds up the summaries, but each process needs
   memory from the same budget, so at a fixed `max_memory_mb` more cores
-  can mean more, smaller chunks and more passes over the files. Inside a
-  SLURM job, `parallelly::availableCores()` gives the cores the job was
-  allocated.
+  can mean more, smaller chunks and more passes over the files. Under a
+  job scheduler, `parallelly::availableCores()` gives the cores the job
+  was allocated.
 
 Both report their choice in a message before they start ("N variable(s)
 in K chunk(s) ... estimated peak ..."); check K at your intended
-`n_cores` before committing a long job to it. See
+`n_cores` before starting a long job. See
 [`vignette("diagnostics")`](diagnostics.html) for the diagnostics themselves.

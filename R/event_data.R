@@ -83,7 +83,7 @@ NULL
 #'
 #' @param x A `Date`, `POSIXt`, numeric, character, or factor vector.
 #' @return A `Date` vector, the same length as `x`.
-#' @keywords internal
+#' @noRd
 .parse_event_date <- function(x) {
   if (inherits(x, "Date")) {
     return(x)
@@ -109,7 +109,7 @@ NULL
 #'
 #' @param x A character vector.
 #' @return A `Date` vector, the same length as `x`.
-#' @keywords internal
+#' @noRd
 .parse_event_date_strict <- function(x) {
   out <- as.Date(rep(NA_character_, length(x)))
   ymd <- !is.na(x) & grepl("^[0-9]{8}$", x)
@@ -122,8 +122,8 @@ NULL
 #' Build the slim four-column working table from a validated event table
 #'
 #' Used by [aggregate_events()], so that a `data` table is validated
-#' exactly once and its date column parsed exactly once per call (0.9.1,
-#' audit 0f). Callers must validate `data` (via
+#' exactly once and its date column parsed exactly once per call. Callers
+#' must validate `data` (via
 #' [validate_bilatr_events()]) before calling this; it does no validation
 #' of its own.
 #'
@@ -132,7 +132,7 @@ NULL
 #'   [validate_bilatr_events()].
 #' @return A tibble with `.actor1`, `.actor2`, `.date` (parsed), `.class`
 #'   (as character), `.year`, and `.month`.
-#' @keywords internal
+#' @noRd
 .slim_event_table <- function(data, grouping_var, actor1, actor2, date) {
   slim <- tibble::tibble(
     .actor1 = as.character(data[[actor1]]),
@@ -158,7 +158,7 @@ NULL
 #' @param a,b Character vectors of actor codes, same length.
 #' @return A list with `actor_a` (whichever of `a`/`b` sorts first in
 #'   C-locale byte order, element-wise) and `actor_b` (the other).
-#' @keywords internal
+#' @noRd
 .order_pair_c_locale <- function(a, b) {
   lev <- sort(unique(c(a, b)), method = "radix")
   a_first <- match(a, lev) < match(b, lev)

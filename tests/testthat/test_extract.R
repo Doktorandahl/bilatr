@@ -5,7 +5,7 @@ test_that("extract_theta() from CSV files matches the in-memory path exactly, se
   skip_on_cran()
   skip_on_ci()
 
-  fx <- make_csv_diagnostics_fixture() # stable model (0.4.2+: no reflection symmetry, no basin to land in)
+  fx <- make_csv_diagnostics_fixture() # stable model (orientation fold: no basin to land in)
   theta_mem <- suppressWarnings(extract_theta(fx$fit, fx$stan_data))
 
   theta_csv <- suppressWarnings(suppressMessages(extract_theta(fx$csv_files, fx$stan_data, chunk_size = 3)))

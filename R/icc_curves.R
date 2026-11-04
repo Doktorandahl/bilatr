@@ -1,21 +1,19 @@
-# Category response curves (0.6.0). p_k(theta) = softmax(alpha * theta -
+# Category response curves. p_k(theta) = softmax(alpha * theta -
 # mu_intercept)_k over a range of theta is exactly Bock's (1972) nominal
 # response model's category response function -- this likelihood is that
 # model with a random-walk latent trait and Dirichlet-multinomial
-# overdispersion layered on top. See
-# dev/claude_code_prompt_0.6.0_residuals_and_icc.md for the design.
+# overdispersion layered on top.
 
 #' Resolve the theta grid range for [icc_curves()], cheapest path first
 #'
 #' Never reads all of `theta`: an explicit `theta_range` is used as-is;
 #' otherwise a `theta_summary` tibble (e.g. [extract_theta()]'s output,
-#' which is saved to disk per-spec as `<id>_theta.rds` in this project's
-#' own runscripts, so this is normally a free, already-in-memory path)
-#' has quantiles of its `mean` column taken; only as a last resort is a
+#' usually already in memory or saved alongside the fit) has quantiles of
+#' its `mean` column taken; only as a last resort is a
 #' draw-and-dyad subsample read directly off `fit`, with a `message()`
 #' noting that fallback was used.
 #'
-#' @keywords internal
+#' @noRd
 .resolve_icc_theta_range <- function(fit, stan_data, theta_range, theta_summary, quantile_probs,
                                       n_dyads_fallback, seed) {
   if (!is.null(theta_range)) {
@@ -62,8 +60,8 @@
 #' themselves needs only `alpha` and `mu_intercept`, both length-`A`
 #' vectors, read once in full (never all of `theta`). Resolving a
 #' *default* `theta_range`, however, would naively need `theta`'s
-#' observed spread -- see [.resolve_icc_theta_range()] for the
-#' cheapest-first resolution: an explicit `theta_range`, then quantiles
+#' observed spread, so it is resolved cheapest first: an explicit
+#' `theta_range`, then quantiles
 #' of a `theta_summary` tibble's `mean` column (e.g. [extract_theta()]'s
 #' output -- already in memory or on disk in most workflows), and only as
 #' a last resort a small draw-and-dyad subsample read directly off `fit`
@@ -75,18 +73,17 @@
 #' contribution at `theta`, `p_k(theta) * (alpha_k - alpha_bar(theta))^2`
 #' with `alpha_bar(theta) = sum_j p_j(theta) alpha_j` -- exactly the
 #' quantity [diagnose_category_merges()] computes at a single reference
-#' share vector (`R/category_merges.R`'s [.var_pi_alpha()], reused here
-#' rather than reimplemented), evaluated across a whole range of `theta`
+#' share vector, evaluated across a whole range of `theta`
 #' instead of one point. This directly addresses that function's own
 #' documented caveat that its measure is local in `theta`: seeing where
 #' each category is informative across the scale is the natural
 #' companion to the merge ladder. The total `Var_p(theta)(alpha)` --
 #' the scale's test information function -- is attached as
 #' `attr(x, "total_information")` (a `theta`/`median`/`lower`/`upper`
-#' tibble), and shown as a reference curve by [autoplot()]/[plot()].
+#' tibble), and shown as a reference curve by [autoplot()] and `plot()`.
 #'
 #' **Bands are pointwise, not simultaneous**: at each `theta` grid point,
-#' the curve is computed per posterior draw and summarised by
+#' the curve is computed per posterior draw and summarized by
 #' `stats::quantile(probs)` independently of every other grid point.
 #'
 #' **These are *mean* share curves.** The Dirichlet-multinomial adds
@@ -94,7 +91,7 @@
 #' the bands suggest -- the bands are posterior uncertainty in the curve
 #' itself, not a predictive interval for an observation.
 #'
-#' **`stan_model = "stable_gamma"` (0.7.0):** `eta` includes `- gamma_c`
+#' **`stan_model = "stable_gamma"`:** `eta` includes `- gamma_c`
 #' for whichever country `country` selects. The default, `country = NULL`,
 #' evaluates at `gamma = 0` -- the GLOBAL curve, ignoring every country's
 #' idiosyncratic repertoire, not any particular country's actual curve.
@@ -102,11 +99,10 @@
 #' already computes, and what makes curves comparable across
 #' `stan_model`s), but it is worth being explicit that it is a baseline,
 #' not an average or a "typical country". `type = "information"` is
-#' unaffected beyond this: it is computed downstream of the (now
-#' possibly offset) `p_mat`, so no separate change was needed there.
+#' computed from the same (possibly offset) probabilities.
 #'
 #' @param fit A `CmdStanMCMC` fit object, or a character vector of raw
-#'   CmdStan CSV file paths -- the same forms [.get_draws()] accepts.
+#'   CmdStan CSV file paths (one per chain).
 #' @param stan_data The Stan data list used to produce `fit`, from
 #'   [prepare_stan_data()]. Used for the last-resort `theta_range`
 #'   fallback (see Details), the `event_classes`/labels, and `country`
@@ -130,10 +126,11 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   in `stan_data`'s action-dimension order. Defaults to `stan_data`'s
 #'   `"event_classes"` attribute if `stan_data` is supplied.
-#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
-#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
-#'   [event_class_labels()]) when `stan_data`
-#'   is supplied, else the raw event classes.
+#' @param class_labels Optional labels for the event classes: a character
+#'   vector named by event class, or an unnamed one in `event_classes`
+#'   order. `NULL` (default) uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]) when `stan_data` is available, else the raw
+#'   event classes.
 #' @param n_grid Number of theta grid points. Default `201`.
 #' @param probs The lower/upper posterior interval bounds (a third,
 #'   e.g. the median, is always included). Default `c(0.05, 0.95)`.
@@ -144,24 +141,19 @@
 #'   model recorded on the fit, on its Stan data, or in the CmdStan CSV
 #'   header, else assumes `"stable"` with a message; see
 #'   [diagnose_convergence()].
-#' @param country Only meaningful for `stan_model = "stable_gamma"` --
-#'   ignored, with a warning if supplied, for any other `stan_model`. `NULL` (default)
-#'   evaluates the curves at the `gamma = 0` GLOBAL baseline, i.e. what
-#'   every non-`gamma` model already computes -- this is the right
-#'   default (a country-specific curve is the exception, not the norm,
-#'   and every existing caller/test comparing curves across models stays
-#'   valid). A single country code (character, matched against
+#' @param country Only meaningful for `stan_model = "stable_gamma"`;
+#'   ignored, with a warning if supplied, for any other model. `NULL`
+#'   (default) evaluates the curves at the `gamma = 0` global baseline,
+#'   which is what the other models compute, so curves stay comparable
+#'   across models. A single country code (character, matched against
 #'   `stan_data`'s `"country_codes"` attribute) or an integer country
-#'   index (in `1:n_countries`) gives that country's curves instead, subtracting its `gamma_c`
-#'   from `eta` (`gamma`, read once, Tier 1/cheap, alongside `alpha`/
-#'   `mu_intercept` above -- `gamma` is orientation-free by construction,
-#'   so no relabeling applies to it; see
-#'   `inst/stan/bilatr_alphanorm_gamma.stan`'s header).
+#'   index (in `1:n_countries`) gives that country's curves instead,
+#'   subtracting its offset `gamma_c` from `eta`.
 #' @param n_dyads_fallback Number of dyads to subsample for the
 #'   last-resort `theta_range` fallback (see Details). Default `300`.
 #' @param seed Seed for the last-resort fallback's dyad subsample.
 #' @return A tibble (subclassed `bilatr_icc_curves`, with an
-#'   [autoplot()]/[plot()] method and usable directly by
+#'   [autoplot()] and `plot()` methods, and usable directly by
 #'   [icc_crossings()]) of `theta`, `action_index`, `event_class`,
 #'   `class_label`, `median`, `lower`, `upper`.
 #' @examples
@@ -214,7 +206,7 @@ icc_curves <- function(
   A <- ncol(alpha_mat)
   n_draws <- nrow(alpha_mat)
 
-  # gamma_vec (0.7.0): the fixed A-length-per-draw country offset
+  # gamma_vec: the fixed A-length-per-draw country offset
   # subtracted from every grid point's eta below -- 0 (the global
   # baseline) unless `country` was supplied for a stable_gamma fit. Read
   # once here (Tier 1, cheap: A x n_countries); gamma is orientation-free
@@ -452,7 +444,7 @@ plot.bilatr_icc_curves <- function(x, show_total = TRUE, ...) {
 #' is strictly increasing, so equal probabilities need equal linear
 #' predictors) iff `alpha_j * theta - mu_j == alpha_k * theta - mu_k`.
 #' Computed per posterior draw (reusing `x`'s stored `alpha`/
-#' `mu_intercept` draws -- no re-read of `fit`) and summarised to a
+#' `mu_intercept` draws -- no re-read of `fit`) and summarized to a
 #' median and posterior interval; undefined (`NA`) for draws where
 #' `alpha_j == alpha_k` exactly.
 #'

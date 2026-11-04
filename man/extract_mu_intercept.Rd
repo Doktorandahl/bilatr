@@ -18,7 +18,7 @@ in the same order used to build the Stan data (i.e. its
 an \code{event_class} column is added alongside the raw action index.
 \code{NULL} (default) uses the \code{event_classes} of the Stan data attached to
 \code{fit} by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}, if any; otherwise the output
-is unlabelled.}
+is unlabeled.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}

@@ -1,7 +1,6 @@
 # Stan data built from event data: aggregate_events() then
-# prepare_stan_data() (events_to_stan_data() in helper_fixtures.R). Ported
-# in 0.12.0 from the assemble_stan_data() tests; the windowing errors moved
-# to aggregate_events(), which now owns the window.
+# prepare_stan_data() (events_to_stan_data() in helper_fixtures.R). The
+# windowing errors come from aggregate_events(), which owns the window.
 
 test_that("event data gives correctly shaped D x T x A arrays", {
   events <- make_fake_events()
@@ -92,7 +91,7 @@ test_that("min_n_events drops low-activity dyads, and errors clearly if it drops
   )
 })
 
-test_that("0e: an empty window gives a clear error naming the data's date range, not a min_n_events error", {
+test_that("an empty window gives a clear error naming the data's date range, not a min_n_events error", {
   events <- make_fake_events(years = 2015:2019)
   events <- recode_cameo(events, code_col = "EventCode")
 
@@ -105,7 +104,7 @@ test_that("0e: an empty window gives a clear error naming the data's date range,
   expect_false(grepl("No dyads", err))
 })
 
-test_that("0e: an empty `data` errors clearly instead of via the min_n_events path", {
+test_that("an empty `data` errors clearly instead of via the min_n_events path", {
   empty <- tibble::tibble(
     Actor1CountryCode = character(0),
     Actor2CountryCode = character(0),

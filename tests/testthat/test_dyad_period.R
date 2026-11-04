@@ -7,7 +7,7 @@ test_that("order_event_classes places reference_category first, rest sorted afte
   expect_equal(order_event_classes(c("b", "a", "c")), c("a", "b", "c"))
 })
 
-test_that("validate_reference_class errors on a value absent from the data (0.9.0; was a warning + NULL)", {
+test_that("validate_reference_class errors on a value absent from the data", {
   expect_error(
     validate_reference_class("z", c("a", "b"), "reference_category"),
     "not present"
@@ -16,9 +16,8 @@ test_that("validate_reference_class errors on a value absent from the data (0.9.
   expect_null(validate_reference_class(NULL, c("a", "b"), "reference_category"))
 })
 
-# The blocks below were ported in 0.12.0 from grouped_events_to_dyad_period()
-# and fill_dyad_period_skeleton() to aggregate_events() (which now also
-# fills the skeleton) and prepare_stan_data() (which builds is_obs).
+# The blocks below test aggregate_events() (which also fills the
+# dyad-period skeleton) and prepare_stan_data() (which builds is_obs).
 
 test_that("aggregate_events() gives one row per dyad-year with C-locale numerically ordered class columns", {
   events <- make_fake_events()
@@ -50,7 +49,7 @@ test_that("directed = FALSE collapses ordered pairs to a single undirected dyad 
   expect_equal(dplyr::n_distinct(undirected$dyad), 1L)
 })
 
-test_that("0d: aggregate_events(start =, end =) reports how many rows it dropped", {
+test_that("aggregate_events(start =, end =) reports how many rows it dropped", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),

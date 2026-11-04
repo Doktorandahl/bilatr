@@ -12,9 +12,7 @@ test_that("every registered Stan model compiles", {
   skip_on_cran()
   skip_on_ci()
 
-  # `stable`/`ou`/`stable_gamma`, all current (alpha[1] > 0 by
-  # construction, no legacy soft-anchor entries -- those were fully
-  # retired in 0.10.0, see NEWS.md).
+  # `stable`/`ou`/`stable_gamma` (alpha[1] > 0 by construction).
   expect_setequal(
     names(.bilatr_stan_models),
     c("stable", "ou", "stable_gamma")
@@ -67,11 +65,8 @@ test_that("every experimental model runs a short fixed-seed sample on real assem
   }
 })
 
-# The following three blocks moved from tests/testthat/test_fit_dev.R
-# (0.10.1: R/fit_dev.R and its test file were deleted once fit_panel()/
-# fit_dyad_ts() gained stan_model directly; these test bilatr_init_fn()/
-# .alpha_raw_sum0_init() live behavior, with no dependency on the removed
-# _dev wrappers).
+# The following three blocks test bilatr_init_fn() and
+# .alpha_raw_sum0_init().
 
 test_that("bilatr_init_fn() initializes phi for the stable model, not phi_logn params", {
   stan_data <- list(D = 2, T = 3, A = 4)
@@ -142,7 +137,7 @@ test_that("bilatr_init_fn()'s inits pass cmdstanr's init validation for every re
   skip_on_cran()
   skip_on_ci()
 
-  # Specifically verifies what R/fit.R's bilatr_init_fn() assumes but
+  # Specifically verifies what bilatr_init_fn() assumes but
   # cannot check for itself at the R level: that cmdstanr's `init`
   # argument accepts alpha_raw's/mu_intercept's sum_to_zero_vector[A] as
   # their length-A CONSTRAINED representation, not the length-(A - 1)

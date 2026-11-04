@@ -86,7 +86,7 @@ bilatr_cmdstan_available <- function() {
 #' @return `NULL` when cmdstanr (at least [.BILATR_MIN_CMDSTANR]) and
 #'   CmdStan are available; otherwise `"cmdstanr"` (cmdstanr is not
 #'   installed, or too old) or `"cmdstan"` (cmdstanr cannot find CmdStan).
-#' @keywords internal
+#' @noRd
 .cmdstan_problem <- function() {
   if (!rlang::is_installed("cmdstanr", version = .BILATR_MIN_CMDSTANR)) {
     return("cmdstanr")

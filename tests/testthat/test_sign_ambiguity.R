@@ -1,7 +1,6 @@
-test_that(".bilatr_sign_ambiguous_raw_names()'s output is pinned: the runscripts call it directly by name", {
-  # This function's name and output must not change across versions (see
-  # its own docs in R/diagnose_convergence.R) -- the runscripts call
-  # bilatr:::.bilatr_sign_ambiguous_raw_names() directly for job sizing.
+test_that(".bilatr_sign_ambiguous_raw_names()'s output is pinned", {
+  # The set of raw parameters left out of the tiered diagnostics, across
+  # every registered model.
   expect_setequal(
     .bilatr_sign_ambiguous_raw_names(),
     c("alpha_raw", "z_theta0", "theta_raw", "gamma_z", "mu_dyad_raw")
@@ -23,8 +22,8 @@ test_that("the orientation fold reports alpha[1] > 0 and agreeing alpha/theta fr
   skip_on_ci()
 
   # This is the actual proof the orientation fold -- not coincidence --
-  # is doing the work (0.4.2b; see inst/stan/bilatr_alphanorm.stan's
-  # header, "IDENTIFICATION: ORIENTATION FOLD"). Two chains are given
+  # is doing the work (see inst/stan/bilatr_alphanorm.stan's header,
+  # "Sign: the ORIENTATION FOLD"). Two chains are given
   # EXACT mirror-image raw-parameter inits (alpha_raw, z_theta0, theta_raw
   # all negated between the two), each pinned via
   # adapt_engaged = FALSE / tiny step_size / small max_treedepth so

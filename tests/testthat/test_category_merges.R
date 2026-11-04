@@ -33,13 +33,13 @@ test_that("alpha_prior_moments() is memoised: repeated calls with the same argum
   expect_identical(a, b)
 })
 
-test_that("alpha_prior_moments() defaults to a fixed seed, so two fresh calls with no seed argument are identical (0.10.2, B10)", {
+test_that("alpha_prior_moments() defaults to a fixed seed, so two fresh calls with no seed argument are identical", {
   a <- alpha_prior_moments(6, n_sim = 1e4)
   b <- alpha_prior_moments(6, n_sim = 1e4)
   expect_identical(a, b)
 })
 
-test_that("alpha_prior_moments(seed = NULL) is never cached: two unseeded calls are not forced identical (0.10.2, B10)", {
+test_that("alpha_prior_moments(seed = NULL) is never cached: two unseeded calls are not forced identical", {
   a <- alpha_prior_moments(6, n_sim = 1e4, seed = NULL)
   b <- alpha_prior_moments(6, n_sim = 1e4, seed = NULL)
   # Monte Carlo noise from two different draws -- not identical, but both
@@ -48,7 +48,7 @@ test_that("alpha_prior_moments(seed = NULL) is never cached: two unseeded calls 
   expect_lt(max(abs(a$prior_mean - b$prior_mean)), 0.05)
 })
 
-test_that("alpha_prior_moments() does not disturb the caller's global RNG stream (0.10.2, B2)", {
+test_that("alpha_prior_moments() does not disturb the caller's global RNG stream", {
   runif(1) # ensure .Random.seed exists before capturing it
   old_seed <- get(".Random.seed", envir = .GlobalEnv)
 
@@ -317,7 +317,7 @@ test_that("merge_cost() on an explicit grouping matches the ladder's cumulative 
   expect_equal(priced$pct_info_lost, step1$loss_mean, tolerance = 1e-8)
 })
 
-test_that("merge_cost() uses x$probs' outer bounds, not a hard-coded c(0.05, 0.5, 0.95) (0.10.2, B3)", {
+test_that("merge_cost() uses x$probs' outer bounds, not a hard-coded c(0.05, 0.5, 0.95)", {
   set.seed(9)
   D <- 4
   Tn <- 3

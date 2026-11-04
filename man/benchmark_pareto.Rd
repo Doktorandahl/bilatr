@@ -7,8 +7,8 @@
 benchmark_pareto(df, throughput = NULL, cost = NULL, by = NULL)
 }
 \arguments{
-\item{df}{A benchmark summary from \code{\link[=summarise_benchmark]{summarise_benchmark()}}, or a
-benchmark result itself (see \code{?summarise_benchmark}, "Benchmark
+\item{df}{A benchmark summary from \code{\link[=summarize_benchmark]{summarize_benchmark()}}, or a
+benchmark result itself (see \code{?summarize_benchmark}, "Benchmark
 results"), such as the output of \code{\link[=benchmark_bilatr]{benchmark_bilatr()}}.}
 
 \item{throughput}{Name of the throughput column (higher is better).
@@ -42,8 +42,8 @@ runs <- benchmark_grid(1000, threads_per_chain = c(2, 4), chunk_size = c(25, 100
 runs$sampling_sec <- c(40, 38, 25, 26)
 runs$iter_per_sec <- 100 / runs$sampling_sec
 runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
-benchmark_pareto(summarise_benchmark(runs))
+benchmark_pareto(summarize_benchmark(runs))
 }
 \seealso{
-\code{\link[=summarise_benchmark]{summarise_benchmark()}}, \code{\link[=plot_benchmark]{plot_benchmark()}}
+\code{\link[=summarize_benchmark]{summarize_benchmark()}}, \code{\link[=plot_benchmark]{plot_benchmark()}}
 }

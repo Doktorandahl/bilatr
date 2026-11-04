@@ -45,7 +45,8 @@ so the rows of one \code{threads_per_chain} value are a contiguous block
 Constructs the grid of a \code{reduce_sum} tuning sweep on a panel of
 \code{n_dyads} dyads: one row per run, crossing \code{threads_per_chain},
 \code{chunk_size} and \code{replicate}. \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} runs such a grid on
-this machine; for a cluster, each row can be one job of a job array
+this machine; for a sweep run as batch jobs, each row can be one job
+of a job array
 (see \code{vignette("tuning", package = "bilatr")}).
 }
 \details{
@@ -57,7 +58,7 @@ When \code{chunk_size} is \code{NULL}, it is generated as a geometric sequence o
 \code{n_dyads / 6}).
 }
 \examples{
-# the grid of a cluster sweep for a 16,750-dyad panel
+# the grid of a batch-job sweep for a 16,750-dyad panel
 grid <- benchmark_grid(16750, threads_per_chain = c(8, 16, 32), replicates = 2)
 grid
 unique(grid$chunk_size)
@@ -66,5 +67,5 @@ unique(grid$chunk_size)
 benchmark_grid(300, threads_per_chain = 1:2, chunk_size = c(10, 50), replicates = 1)
 }
 \seealso{
-\code{\link[=benchmark_bilatr]{benchmark_bilatr()}}, \code{\link[=summarise_benchmark]{summarise_benchmark()}}
+\code{\link[=benchmark_bilatr]{benchmark_bilatr()}}, \code{\link[=summarize_benchmark]{summarize_benchmark()}}
 }

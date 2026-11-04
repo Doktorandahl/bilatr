@@ -1,42 +1,28 @@
 #' Run convergence diagnostics and extract theta/alpha/mu_intercept from raw
 #' CmdStan CSVs in a single shared read
 #'
-#' A fused counterpart to calling [diagnose_convergence()], [extract_theta()],
-#' [extract_alpha()], and [extract_mu_intercept()] separately against the
-#' same set of CSV files. Calling them separately re-reads overlapping data
-#' from disk: [diagnose_convergence()]'s Tier 3 sweep already covers every
-#' `theta`/`theta_raw` column [extract_theta()] needs, and its Tier 1/2
-#' read already covers every `alpha`/`mu_intercept` column
-#' [extract_alpha()]/[extract_mu_intercept()] need. `data.table::fread()`
-#' touches each file's full byte range once per call regardless of how
-#' few columns are requested (see [.fast_read_post_warmup_draws]), so
-#' each of those extra calls pays close to a full-file touch for data
-#' already summarised once. This function reads Tier 1/2 once and Tier 3
-#' once (chunked, same as [diagnose_convergence()]) via
-#' [.read_diagnostics_summary_from_csv()] -- the same helper
-#' [diagnose_convergence()]'s own CSV-path branch uses -- and derives
-#' every output from that one summary rather than re-reading anything.
-#' Sharing that helper (rather than a second, orientation-aware copy of
-#' its tier/chunk logic, as before 0.10.0) means the two paths cannot
-#' drift apart.
+#' A combined counterpart to calling [diagnose_convergence()],
+#' [extract_theta()], [extract_alpha()] and [extract_mu_intercept()]
+#' separately on the same CSV files. Called separately, they read
+#' overlapping data from disk several times, and each read costs about
+#' one pass over every chain file however few columns it keeps. This
+#' function reads Tier 1 and 2 once and Tier 3 once (in memory-bounded
+#' chunks, as [diagnose_convergence()] does) and derives every output
+#' from that one summary. It uses the same reading code as
+#' [diagnose_convergence()], so the diagnostics are identical.
 #'
-#' Total file touches per chain file, at production scale (Tier 3 too
-#' large for one chunk): one header/config scan and one row-count
-#' validation probe, both in [.prepare_fast_csv_read]; one read for Tier
-#' 1/2; and one per Tier 3 chunk. When Tier 3 fits in a single chunk
-#' (small panels, or a large `max_memory_mb`), Tier 1/2 is folded into
-#' that same read instead of being a separate one -- see
-#' [.read_diagnostics_summary_from_csv()].
+#' Per chain file, that is one header scan and one validation pass, one
+#' read for Tiers 1 and 2, and one read per Tier 3 chunk. When Tier 3 fits
+#' in one chunk (small panels, or a large `max_memory_mb`), Tiers 1 and 2
+#' are read together with it.
 #'
-#' Only meaningful for the CSV-file-paths case: an in-memory `fit` has no
-#' repeated-disk-read cost to avoid, so there is nothing to fuse there --
-#' call the four functions separately instead.
+#' Only CSV files are accepted: with an in-memory fit there is no
+#' repeated reading to avoid, so call the four functions separately.
 #'
 #' Unlike [extract_alpha()]/[extract_mu_intercept()]'s standalone `probs`
 #' argument, the `alpha`/`mu_intercept` outputs here always carry the same
 #' fixed `mean`/`5%`/`50%`/`95%` columns as [extract_theta()]'s CSV path
-#' (it reuses the same underlying [posterior::summarise_draws()] default
-#' summary, not a second call with different quantiles); call
+#' (they come from the same summary); call
 #' [extract_alpha()]/[extract_mu_intercept()] directly if you need other
 #' quantiles.
 #'
@@ -59,12 +45,14 @@
 #' @param event_classes Optional character vector of event-class labels,
 #'   passed through to the `alpha`/`mu_intercept` outputs exactly as in
 #'   [extract_alpha()]. `NULL` (default) uses `stan_data`'s
-#'   `"event_classes"` attribute, if present; an explicit value wins. When supplied, `alpha`/`mu_intercept` also get
-#'   a `class_label` column (0.10.1), from `event_class_labels(stan_data)`
-#'   (see [event_class_labels()]) unless overridden by `class_labels`.
-#' @param class_labels Optional; see [.resolve_class_labels()]. Ignored
-#'   when `event_classes` is `NULL` (nothing to key labels by). Defaults
-#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#'   `"event_classes"` attribute, if present; an explicit value wins. When
+#'   supplied, `alpha`/`mu_intercept` also get a `class_label` column,
+#'   from `event_class_labels(stan_data)` (see [event_class_labels()])
+#'   unless overridden by `class_labels`.
+#' @param class_labels Optional labels for the event classes: a character
+#'   vector named by event class, or an unnamed one in `event_classes`
+#'   order. Ignored when `event_classes` is `NULL` (nothing to key labels
+#'   by). `NULL` (default) uses `event_class_labels(stan_data)` (see
 #'   [event_class_labels()]).
 #' @return A list with elements `diagnostics` (a `bilatr_diagnostics`
 #'   object, as from [diagnose_convergence()]), `theta`, `alpha`, and
@@ -153,11 +141,11 @@ diagnose_and_extract_bilatr <- function(
     tidyr::separate(variable, into = c("dyad_id", "time_index"), sep = ",", convert = TRUE) %>%
     dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
 
-  # theta_filtered/theta_filtered_sd (0.5.0+, present only if
+  # theta_filtered/theta_filtered_sd (present only if
   # compute_theta_filtered = 1 was set): their first index is the
   # POSITION within filter_dyads, not the true D-space dyad_id, whenever
-  # filter_dyads narrowed the dyad set -- see R/diagnose_convergence.R's
-  # .bilatr_tier1_names docs for the caveat this resolves. stan_data$
+  # filter_dyads narrowed the dyad set (see .bilatr_tier1_names'
+  # docs). stan_data$
   # filter_dyads (prepare_stan_data()'s own resolved integer vector, 1:D
   # when filter_dyads = NULL was used) maps that position back to the
   # true dyad_id before joining dyad_ids, so this is correct in both the

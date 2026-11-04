@@ -130,9 +130,9 @@ test_that("bilatr_clear_model_cache() also deletes the profiled copies", {
   expect_identical(list.files(dir), "keep_me.txt")
 })
 
-# -- summarise_benchmark(), benchmark_pareto(), plot_benchmark() ---------------
+# -- summarize_benchmark(), benchmark_pareto(), plot_benchmark() ---------------
 
-test_that("summarise_benchmark collapses replicates to one row per cell", {
+test_that("summarize_benchmark collapses replicates to one row per cell", {
   raw <- tidyr::expand_grid(
     scenario = "prd_quad",
     threads_per_chain = c(8L, 16L),
@@ -144,7 +144,7 @@ test_that("summarise_benchmark collapses replicates to one row per cell", {
   raw$core_sec_per_1k_iter <- raw$threads_per_chain * raw$sampling_sec * 1000 / 75
   raw$reduce_sum_wall_sec <- raw$sampling_sec * 0.8
 
-  summ <- summarise_benchmark(raw)
+  summ <- summarize_benchmark(raw)
   expect_named(summ, c(
     "scenario", "threads_per_chain", "chunk_size", "n_rep",
     "sampling_sec_median", "sampling_sec_mad", "iter_per_sec_median", "iter_per_sec_mad",
@@ -159,20 +159,20 @@ test_that("summarise_benchmark collapses replicates to one row per cell", {
   expect_true(all(is.finite(summ$reduce_sum_wall_sec_median)))
 })
 
-test_that("summarise_benchmark works without scenario or profile columns", {
+test_that("summarize_benchmark works without scenario or profile columns", {
   raw <- fake_runs(benchmark_grid(500, threads_per_chain = 1:2, chunk_size = c(5, 50), replicates = 2))
-  summ <- summarise_benchmark(raw)
+  summ <- summarize_benchmark(raw)
   expect_equal(nrow(summ), 4L)
   expect_false("scenario" %in% names(summ))
   expect_true(all(is.na(summ$reduce_sum_wall_sec_median)))
   expect_true(all(is.na(summ$leapfrog_per_sec_median)))
 })
 
-test_that("summarise_benchmark names the missing benchmark columns", {
+test_that("summarize_benchmark names the missing benchmark columns", {
   raw <- fake_runs(benchmark_grid(500, threads_per_chain = 1, chunk_size = 5, replicates = 1))
   old <- dplyr::rename(raw, cores = threads_per_chain, grainsize = chunk_size)
-  expect_error(summarise_benchmark(old), "`threads_per_chain`, `chunk_size`")
-  expect_error(summarise_benchmark(list()), "data frame")
+  expect_error(summarize_benchmark(old), "`threads_per_chain`, `chunk_size`")
+  expect_error(summarize_benchmark(list()), "data frame")
 })
 
 test_that("benchmark_pareto marks the non-dominated cells", {
@@ -201,7 +201,7 @@ test_that("benchmark_pareto computes the front within groups", {
 
 test_that("benchmark_pareto picks summary or raw columns by default, and NAs missing values", {
   raw <- fake_runs(benchmark_grid(500, threads_per_chain = 1:2, chunk_size = c(5, 50), replicates = 1))
-  summ <- summarise_benchmark(raw)
+  summ <- summarize_benchmark(raw)
   expect_identical(
     benchmark_pareto(summ)$pareto,
     benchmark_pareto(summ, "iter_per_sec_median", "core_sec_per_1k_iter_median")$pareto
@@ -314,10 +314,10 @@ test_that("benchmark_bilatr() runs a 2 x 2 grid with real CmdStan", {
   expect_equal(bench$core_sec_per_1k_iter, bench$threads_per_chain * bench$sampling_sec * 1000 / 15)
   expect_true(all(bench$n_leapfrog >= 15))
   expect_equal(bench$leapfrog_per_sec, bench$n_leapfrog / bench$sampling_sec)
-  expect_true(all(is.finite(summarise_benchmark(bench)$leapfrog_per_sec_median)))
+  expect_true(all(is.finite(summarize_benchmark(bench)$leapfrog_per_sec_median)))
   expect_identical(attr(bench, "settings")$stan_model, "stable")
 
-  summ <- summarise_benchmark(bench)
+  summ <- summarize_benchmark(bench)
   expect_equal(nrow(summ), 4L)
   expect_true("pareto" %in% names(benchmark_pareto(bench)))
   expect_true(any(benchmark_pareto(summ)$pareto))

@@ -17,10 +17,9 @@ ranging from -10 (most conflictual) to 10 (most cooperative).}
 2 = material cooperation (06-09), 3 = verbal conflict (10-14),
 4 = material conflict (15-20).}
 \item{QuadClassName}{Character. Human-readable label for
-\code{QuadClass}; see \code{\link[=quadclass_name]{quadclass_name()}}.}
+\code{QuadClass}.}
 \item{QuadClassEventCodes}{Character. Comma-separated CAMEO root
-codes underlying each \code{QuadClass} class; see
-\code{\link[=quadclass_eventcodes]{quadclass_eventcodes()}}.}
+codes underlying each \code{QuadClass} class.}
 \item{PentaClass}{Integer, 0-4. As QuadClass, except that roots
 01-02 (make public statement, appeal) form class 0, root 14
 (protest) moves to class 4 (material conflict), and root 16
@@ -29,10 +28,9 @@ statement (roots 01-02), 1 = verbal cooperation (03-05),
 2 = material cooperation (06-09), 3 = verbal conflict (10-13, 16),
 4 = material conflict (14, 15, 17-20).}
 \item{PentaClassName}{Character. Human-readable label for
-\code{PentaClass}; see \code{\link[=pentaclass_name]{pentaclass_name()}}.}
+\code{PentaClass}.}
 \item{PentaClassEventCodes}{Character. Comma-separated CAMEO root
-codes underlying each \code{PentaClass} class; see
-\code{\link[=pentaclass_eventcodes]{pentaclass_eventcodes()}}.}
+codes underlying each \code{PentaClass} class.}
 \item{ModifiedRootCode}{Integer, 1-18. A regrouping of the CAMEO
 root codes that moves \code{016} (deny responsibility) into Reject
 (class 13) and \code{018}/\code{019} (make empathetic comment, express
@@ -41,17 +39,17 @@ accord) into diplomatic cooperation (class 7); splits root \code{04}
 (\code{041}-\code{044}) and negotiate or mediate (\code{045}-\code{046}); merges
 Investigate (\code{09}) and Demand (\code{10}); merges Threaten (\code{13}) and
 Exhibit force posture (\code{15}); and merges \code{18}-\code{20} into "Assault,
-fight, or mass violence". See \code{\link[=assign_modified_root_code]{assign_modified_root_code()}}.
+fight, or mass violence".
 Blank (\code{NA}) on the top-level (two-digit) row for a root whose own
 event codes don't all belong to the same \code{ModifiedRootCode} class
 (roots \code{01} and \code{04}); populated on that root's individual
 sub-codes as normal.}
 \item{ModifiedRootCodeName}{Character. Human-readable label for
-\code{ModifiedRootCode}; see \code{\link[=modified_root_code_name]{modified_root_code_name()}}. \code{NA}
+\code{ModifiedRootCode}. \code{NA}
 wherever \code{ModifiedRootCode} is blank.}
 \item{ModifiedRootCodeEventCodes}{Character. Comma-separated CAMEO
-root/event codes underlying each \code{ModifiedRootCode} class; see
-\code{\link[=modified_root_code_eventcodes]{modified_root_code_eventcodes()}}. \code{NA} wherever \code{ModifiedRootCode}
+root/event codes underlying each \code{ModifiedRootCode} class. \code{NA}
+wherever \code{ModifiedRootCode}
 is blank.}
 }
 

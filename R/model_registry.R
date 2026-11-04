@@ -1,138 +1,76 @@
-# Internal registry of Stan model variants shipped under inst/stan/.
+# Registry of the Stan models shipped under inst/stan/.
 #
-# fit_dyad_ts()/fit_panel() (and, for the default model only,
-# compile_bilatr_model()) accept a `stan_model` name and resolve it here
-# (0.10.1: previously only the internal `_dev` variants in the
-# now-removed R/fit_dev.R exposed model choice). An unregistered name
-# errors via .canonical_stan_model() rather than silently falling
-# through.
+# fit_dyad_ts(), fit_panel() and compile_bilatr_model() accept a
+# `stan_model` name and resolve it here; an unregistered name errors in
+# .canonical_stan_model() rather than silently falling through.
 #
-# To register a new model variant: add an entry below (the `file` must
-# exist under inst/stan/), and it becomes immediately fittable via
+# To register a new model: add an entry below (the `file` must exist
+# under inst/stan/), and it becomes fittable via
 # fit_dyad_ts()/fit_panel(stan_model = "<name>"). `status` is `"stable"`
-# for the single default model (see .BILATR_DEFAULT_MODEL) or
-# `"experimental"` for anything else; fitting an experimental model emits
-# a one-time-per-session message (see .bilatr_warn_if_experimental()
-# below).
+# for the default model (see .BILATR_DEFAULT_MODEL) or `"experimental"`;
+# fitting an experimental model emits a one-time-per-session message (see
+# .bilatr_warn_if_experimental() below). `description` is shown in
+# ?compile_bilatr_model's Models section (see .bilatr_models_rd()).
 
 .bilatr_stan_models <- list(
   stable = list(
     file = "bilatr_alphanorm.stan",
     description = paste(
-      "Since 0.4.2b (see NEWS.md): identifies alpha[1]'s sign via an",
-      "ORIENTATION FOLD -- alpha_raw is a free sum_to_zero_vector (as",
-      "before 0.4.2), but alpha and theta are both multiplied by",
-      "sign(alpha_raw[1]) in transformed parameters, so alpha[1] >= 0",
-      "always in the REPORTED draws regardless of which raw-space basin a",
-      "chain occupies (a 0.4.2 hard-positivity constraint on alpha_raw",
-      "tried this first and failed on the cluster -- see NEWS.md and the",
-      ".stan file's header). Also hard-pins location (no mu_theta0) and",
-      "normalizes alpha's RMS to 1. positive alpha[1] means better",
-      "relations, for every fit made under this program (no post-hoc",
-      "orientation needed for alpha/theta; the raw alpha_raw/z_theta0/",
-      "theta_raw remain sign-ambiguous and are excluded from tiered",
-      "diagnostics -- see R/diagnose_convergence.R). process_noise's",
-      "prior is a ratio to sigma_theta0, not an absolute theta-unit",
-      "quantity -- see the .stan file's header comment."
+      "The dynamic IRT model. Each dyad's latent state `theta` follows a",
+      "random walk; its event counts follow a Dirichlet-multinomial",
+      "whose class probabilities depend on `theta` through the",
+      "discrimination vector `alpha` and the intercepts `mu_intercept`.",
+      "Process noise, the dispersion `phi` and the initial states are",
+      "partially pooled across dyads."
     ),
     status = "stable"
   ),
   ou = list(
     file = "bilatr_alphanorm_ou.stan",
     description = paste(
-      "Since 0.4.2b (see NEWS.md): combines stable's identification (hard",
-      "location pin, RMS-1 alpha normalization, alpha[1] >= 0 via the",
-      "orientation fold) with an OU/AR(1) theta process (dyad-specific",
-      "equilibria `mu_dyad` and a global persistence `rho`), giving",
-      "cross-dyad ordering a restoring force in place of stable's",
-      "random-walk theta. sd_stat is relative to sigma_mu, so",
-      "exp(mu_log_sd_stat) is directly the within/between-dyad SD ratio.",
-      "Still experimental: not yet prior-predictive calibrated."
+      "As `\"stable\"`, but `theta` follows a mean-reverting",
+      "Ornstein-Uhlenbeck (AR(1)) process around a dyad-specific level",
+      "`mu_dyad`, with a shared persistence `rho` (prior",
+      "`beta(rho_prior_a, rho_prior_b)`; see [prepare_stan_data()]).",
+      "`within_between_ratio` is the ratio of within-dyad to between-dyad",
+      "standard deviation."
     ),
     status = "experimental"
   ),
   stable_gamma = list(
     file = "bilatr_alphanorm_gamma.stan",
     description = paste(
-      "Since 0.7.0 (see NEWS.md): adds a country-level category-offset",
-      "vector `gamma` on top of stable's identification (same alpha/theta/",
-      "mu_intercept construction, orientation fold, and RMS-1 alpha",
-      "normalization, all unchanged).",
-      "eta_dt = alpha*theta_dt - mu_intercept - g_d, with g_d built from the",
-      "SAME `gamma` for directed (g_d = gamma[, ctry_a[d]]) and undirected",
-      "(g_d = w_send[d]*gamma[, ctry_a[d]] + (1-w_send[d])*gamma[, ctry_b[d]])",
-      "dyads -- one program, one shared parameter, the difference following",
-      "mechanically from what a dyad-year is in each. `gamma` is",
-      "identified by three constraints enforced in transformed parameters",
-      "(orthogonal to `alpha`, since theta already absorbs any component",
-      "along it; orthogonal to `1` per country, softmax shift invariance;",
-      "centred across countries per category, since the common part is",
-      "absorbed by mu_intercept) -- see the .stan file's header for the",
-      "four-step derivation and why the order matters. Averaging",
-      "gamma_i/gamma_j for undirected dyads is a first-order approximation",
-      "to the true two-component mixture likelihood, accurate when gamma is",
-      "small (deliberate, documented trade-off -- see the .stan file's",
-      "header, \"HONEST CAVEAT\"). Nests `stable` exactly as",
-      "sigma_gamma -> 0 (and exactly, not just in the limit, at",
-      "n_countries = 1). Motivated by check_compositional_residuals()",
-      "(0.6.0), which found a dyad-level compositional residual a",
-      "dyad-specific beta_d cannot identify (theta already absorbs it) but",
-      "a country-level offset can (a country appears in many dyads).",
-      "Needs `stan_data` from prepare_stan_data() built with actor columns",
-      "(`n_countries`/`ctry_a`/`ctry_b`/`w_send`); fit_panel()/fit_dyad_ts()",
-      "error before compiling if they are absent. check_compositional_residuals()",
-      "and icc_curves() are gamma-aware for this model (see NEWS.md). Still",
-      "experimental: not yet fit at production scale."
+      "As `\"stable\"`, plus a country-level offset `gamma` on each action",
+      "class, which absorbs a country's habitual repertoire, so `theta` is",
+      "measured net of each country's baseline mix of event types. Directed",
+      "and undirected data estimate the same `gamma`; for an undirected",
+      "pair the two countries' offsets are averaged by event share, a",
+      "first-order approximation. Needs actor columns in the data; see",
+      "[extract_gamma()]."
     ),
     status = "experimental"
   )
 )
 
-# Historical note: several models were retired to inst/stan/legacy/
-# (gitignored, kept for local reference only, not registered):
-#   - the pre-0.3.0 centered "stable"/"phi_logn" models (centered
-#     process_noise hierarchy, hostile-anchored alpha[A]) and the
-#     transitional "stable_ncproc"/"phi_logn_ncproc" entries, in 0.3.0;
-#   - "phi_logn" (phi as a function of centered log(n_dt), per-dyad-period
-#     rather than per-dyad constant), in 0.3.2 -- its final source is
-#     inst/stan/legacy/bilatr_phi_logn.stan, the pre-0.3.0 centered one is
-#     bilatr_phi_logn_pre_0.3.0.stan;
-#   - the original "stable" (the consolidated Dirichlet-multinomial model,
-#     `alpha[1]` hard-fixed to 1, `mu_theta0`-anchored theta0 location)
-#     and the original "ou" (its OU/AR(1) theta variant), both replaced in
-#     0.4.0 by the promoted `alphanorm`/`alphanorm_ou` models -- see
-#     inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan and
-#     bilatr_ou_pre_0.4.0.stan.
-#   - 0.4.2: `stable`/`ou`'s free sum_to_zero_vector alpha_raw (with a
-#     soft sign anchor on alpha[1]) replaced with a hard-positivity
-#     constraint (real<lower=0> alpha_raw_1) intended to remove the
-#     alpha/theta reflection symmetry entirely. A production cluster run
-#     falsified this: the constraint removes one mode from the parameter
-#     space but not the likelihood barrier between the two, so a chain
-#     that would have landed in the excluded mode instead slides to the
-#     constraint boundary and parks there (see NEWS.md and each .stan
-#     file's header for the numbers). Reverted in 0.4.2b.
-#   - 0.4.2b: `stable`/`ou`'s alpha_raw is back to a free
-#     sum_to_zero_vector (as it was pre-0.4.2), and alpha[1]'s sign is
-#     instead identified via an ORIENTATION FOLD: alpha and theta are
-#     both multiplied by sign(alpha_raw[1]) in transformed parameters, so
-#     alpha[1] >= 0 always in the REPORTED draws without excluding any
-#     region of the parameter space (see NEWS.md and each current .stan
-#     file's header, "IDENTIFICATION: ORIENTATION FOLD"). The pre-0.4.2
-#     `stable_soft_anchor`/`ou_soft_anchor` programs (what `stable`/`ou`
-#     were named 0.4.0-0.4.1) were kept registered (status = "legacy")
-#     from 0.4.2 through 0.9.1 so runs made under them stayed readable.
-#   - 0.10.0: `stable_soft_anchor`/`ou_soft_anchor`, the pre-0.4.0
-#     `alphanorm`/`alphanorm_ou` aliases, and the entire post-hoc
-#     orientation stack they needed (`bilatr_orient()`,
-#     `.bilatr_flip_variables()`, `.warn_if_wrong_basin()`) were retired
-#     fully -- unlike every earlier retirement above, these two are no
-#     longer registered at all: [.canonical_stan_model()] now errors on
-#     all four names, naming bilatr <= 0.9.1 as what's needed to read
-#     fits made under them. This is safe because `stable`/`ou`'s
-#     orientation fold (since 0.4.2b) never needed the soft-anchor
-#     programs for anything except reading old fits, and none remain in
-#     active use.
+#' The Models section of ?compile_bilatr_model, from the registry
+#'
+#' Used by inline roxygen code, so the help page and the registry share
+#' one description per model.
+#' @return A single markdown string, one bullet per registered model.
+#' @noRd
+.bilatr_models_rd <- function() {
+  label <- function(name, status) {
+    paste0(
+      "`\"", name, "\"`",
+      if (identical(name, .BILATR_DEFAULT_MODEL)) " (the default)" else if (identical(status, "experimental")) " (experimental)"
+    )
+  }
+  items <- vapply(names(.bilatr_stan_models), function(name) {
+    m <- .bilatr_stan_models[[name]]
+    paste0("* ", label(name, m$status), ": ", m$description)
+  }, character(1))
+  paste(items, collapse = "\n")
+}
 
 .BILATR_DEFAULT_MODEL <- "stable"
 
@@ -144,7 +82,7 @@
 #'
 #' @param name A `stan_model` value as given by the caller.
 #' @return The canonical registered name; anything else is an error.
-#' @keywords internal
+#' @noRd
 .canonical_stan_model <- function(name) {
   if (!rlang::is_string(name)) {
     stop(
@@ -170,7 +108,7 @@
 #' @return The path to the model's `.stan` file (works both from the
 #'   package source tree under `devtools::load_all()` and from an
 #'   installed package, via `system.file()`).
-#' @keywords internal
+#' @noRd
 .resolve_stan_model <- function(name) {
   name <- .canonical_stan_model(name)
 
@@ -189,25 +127,22 @@
 #' Does a registered Stan model declare a country-level `gamma` offset?
 #'
 #' The single source of truth for whether a `stan_model` needs `gamma`-
-#' aware behaviour downstream (0.7.0+): [check_compositional_residuals()]
-#' and [icc_curves()] both branch on this, via the registry rather than a
-#' user-facing flag, so a future `gamma`-bearing variant only needs an
+#' aware behavior downstream: [check_compositional_residuals()] and
+#' [icc_curves()] both branch on this, via the registry rather than a
+#' user-facing flag, so a future `gamma`-bearing model only needs an
 #' entry here, not a change at every call site. `stable_gamma` is
-#' currently the only one; written as an explicit set (not, say, a
-#' `has_gamma` field on `.bilatr_stan_models` entries) because only one
-#' entry needs it so far and this keeps the registry's existing shape
-#' unchanged for every other model.
+#' currently the only one.
 #'
 #' @param stan_model Name registered in `.bilatr_stan_models`; see
 #'   [.canonical_stan_model()].
 #' @return `TRUE`/`FALSE`.
-#' @keywords internal
+#' @noRd
 .bilatr_model_has_gamma <- function(stan_model) {
   .canonical_stan_model(stan_model) %in% c("stable_gamma")
 }
 
 #' Session-lifetime guard for the once-per-model experimental-model message
-#' @keywords internal
+#' @noRd
 .bilatr_experimental_messaged <- new.env(parent = emptyenv())
 
 #' Reset the once-per-session experimental-model message guard
@@ -216,7 +151,7 @@
 #' per `stan_model` name per session, so a test exercising that message
 #' needs to reset the guard first rather than relying on being the first
 #' caller in the process.
-#' @keywords internal
+#' @noRd
 .reset_bilatr_experimental_messaged <- function() {
   rm(list = ls(.bilatr_experimental_messaged), envir = .bilatr_experimental_messaged)
 }
@@ -232,7 +167,7 @@
 #' @param stan_model A canonical name (already resolved via
 #'   [.canonical_stan_model()]).
 #' @return `NULL`, invisibly.
-#' @keywords internal
+#' @noRd
 .bilatr_warn_if_experimental <- function(stan_model) {
   if (identical(.bilatr_stan_models[[stan_model]]$status, "experimental") &&
     !exists(stan_model, envir = .bilatr_experimental_messaged, inherits = FALSE)) {

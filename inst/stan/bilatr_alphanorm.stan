@@ -1,247 +1,115 @@
-// bilatr: hierarchical dynamic IRT model for latent bilateral relations.
+// bilatr model `stable`: hierarchical dynamic IRT model for latent
+// bilateral relations, with a Gaussian random walk for each dyad's latent
+// state. The model fit_panel() and fit_dyad_ts() fit by default.
 //
-// Registered as `stable` (R/model_registry.R, status = "stable") since
-// 0.4.0, promoted from the experimental `alphanorm` variant it was
-// developed under -- see NEWS.md. This is now the model
-// fit_dyad_ts()/fit_panel() fit by default; the file itself is
-// unchanged/unrenamed across that promotion, only the registry entry
-// pointing at it. NOTE: every bare "stable"/"ou" reference in the
-// comparative/historical discussion BELOW this point (written before the
-// promotion) means the ORIGINAL stable/ou models this one replaced,
-// retired to inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan and
-// bilatr_ou_pre_0.4.0.stan respectively -- not this file.
+// PURPOSE
+//   Measures the latent state theta[d, t] of each dyad d (a directed or
+//   undirected pair of actors) in each period t from the counts of its
+//   events in A action classes. Each class a has a discrimination
+//   alpha[a] and an intercept mu_intercept[a]; higher theta shifts a
+//   dyad's event mix toward the classes with larger alpha.
 //
-// 0.4.6: the dyad_weight/period_weight/action_weight likelihood-weighting
-// data fields are retired from this file (and from partial_log_lik() /
-// dyad_period_log_lik() / assemble_stan_data()) -- never used in
-// production, and action_weight in particular made the Dirichlet-
-// multinomial concentration depend on theta, complicating the
-// hand-differentiated forward filter built on top of this likelihood.
-// At unit weights (the only weights ever used) this is an exact,
-// bit-identical no-op; see NEWS.md. The legacy stable_soft_anchor
-// program (inst/stan/legacy/bilatr_stable_soft_anchor.stan) still
-// declares and applies all three, unchanged, since it must keep
-// matching the fits that produced its output.
+// DATA
+//   T, D, A        number of periods, dyads and action classes
+//   C              reduce_sum grainsize: dyads per task (chunk_size in R)
+//   is_obs[d, t]   1 if dyad d has at least one event in period t, else 0
+//   Y[d, t, a]     event counts
+//   compute_log_lik, prior_only, compute_theta_filtered   0/1 switches
+//   n_filter_dyads, filter_dyads   the dyads to forward-filter
+//   Action class 1 is the reference class: prepare_stan_data() puts its
+//   `reference_category` first.
 //
-// 0.4.2: alpha_raw's sum_to_zero_vector[A] (with only a SOFT sign anchor
-// on alpha[1]) was briefly replaced with a hand-built construction whose
-// first element was positive BY DECLARATION (real<lower=0> alpha_raw_1).
-// A production cluster run falsified that approach: a hard constraint
-// removes one of the two reflection-symmetric modes from the parameter
-// space, but not the likelihood barrier between them, so a chain that
-// starts in the excluded orientation cannot cross to the feasible one --
-// it slides to the constraint boundary and parks there instead (observed:
-// alpha_raw_1 = 0.00046, 5-95% interval [0.000025, 0.00127], wandering on
-// the log scale, lp__ materially worse than a healthy chain; confirmed to
-// be the mirrored solution projected onto alpha[1] = 0 and re-fitted
-// around that boundary, not a repairable mirror image -- correlation
-// 0.994 with the healthy chain's negation, but NOT identical to it). See
-// "IDENTIFICATION: ORIENTATION FOLD" below for what replaced it (0.4.2b)
-// and why no hard constraint of any kind can work here. The soft-anchor
-// version of this file (with its `anchor_scale` data field, the version
-// before EITHER of these) is retired to
-// inst/stan/legacy/bilatr_stable_soft_anchor.stan, registered as
-// `stable_soft_anchor` -- fits made under this file are not
-// parameter-comparable to fits made under that one (see NEWS.md).
+// LIKELIHOOD (dyad-periods with is_obs[d, t] = 1 only)
+//   eta[d, t] = alpha * theta[d, t] - mu_intercept           (length A)
+//   Y[d, t]   ~ DirichletMultinomial(phi[d] * softmax(eta[d, t]))
+//   phi[d] is the dyad's concentration (smaller phi, more overdispersion).
+//   The sum over dyads is parallelized with reduce_sum (partial_log_lik()).
+//   Periods without events add nothing; theta there is informed by the
+//   latent process alone. prior_only = 1 drops the likelihood.
 //
-// Motivation: the model this replaced (retired to
-// inst/stan/legacy/bilatr_dirmult_irt_pre_0.4.0.stan) had a residual
-// affine ridge in its identification. With alpha[1] = 1 and
-// mu_intercept[1] = 0, the softmax only sees
-// eta_a - eta_1 = (alpha_a - 1) * theta - mu_a. Writing A_a = alpha_a - 1,
-// the map theta' = (theta - b)/c, A'_a = c*A_a, mu'_a = mu_a - A_a*b
-// leaves the likelihood exactly invariant and preserves both constraints.
-// Location and scale are therefore broken only softly, by
-// mu_theta0 ~ normal(0,1) and alpha_raw ~ std_normal() -- this inflates
-// posterior intervals and is a likely contributor to treedepth pathology
-// in the stable model, and is part of why cross-dyad theta levels are not
-// reliably comparable.
+// LATENT PROCESS (non-centered; the sign factor of the orientation fold,
+// below, is left out here)
+//   theta0[d]        = sigma_theta0 * z_theta0[d]
+//   theta[d, 1]      = theta0[d] + process_noise[d] * theta_raw[d, 1]
+//   theta[d, t]      = theta[d, t - 1] + process_noise[d] * theta_raw[d, t]
+//   process_noise[d] = sigma_theta0 * exp(mu_log_noise
+//                        + sigma_log_noise * log_process_noise_raw[d])
+//   process_noise is a ratio to sigma_theta0: exp(mu_log_noise) is the
+//   typical per-period innovation SD as a fraction of the cross-dyad SD
+//   of the initial states.
 //
-// This variant closes the ridge:
-//   - location has no separate free parameter: mu_theta0 is removed
-//     entirely (theta0 is sigma_theta0 * z_theta0). This removes the
-//     ADDITIONAL soft anchor mu_theta0 ~ normal(0,1) stable puts on top
-//     of z_theta0's own prior -- but z_theta0's own population mean is
-//     itself still only softly (if stiffly) pinned toward 0 by
-//     z_theta0 ~ std_normal(), not pinned exactly; see "Identification"
-//     below for the correction to this point and why it doesn't
-//     practically matter
-//   - scale is pinned on the ALPHA side, not the theta side: alpha_raw is
-//     a sum_to_zero_vector[A] (mean exactly 0 by construction, so no
-//     mu_intercept-style location dof leaks into alpha), and alpha is
-//     alpha_raw normalized to RMS 1 in transformed parameters (RMS == SD
-//     here because alpha_raw sums to zero). This makes theta's unit a
-//     property of the coding scheme (the discrimination profile across
-//     action classes), not of whatever dyad sample happens to be fit --
-//     which matters because the dyad-set restriction is still being
-//     varied across runs; under stable's theta-side normalization
-//     (sigma_theta0 as the scale anchor), fits on different dyad samples
-//     are not on a common scale, but under alpha-side normalization they
-//     are (the action-class coding scheme doesn't change between runs).
-//   - mu_intercept is also a sum_to_zero_vector[A] rather than
-//     fixed-first-to-0, for the same reason: no residual location dof
-//     hiding in the softmax level-shift.
+// PRIORS
+//   theta_raw, z_theta0, log_process_noise_raw ~ std_normal()
+//   sigma_theta0    ~ half-normal(0, 2)
+//   mu_log_noise    ~ normal(log(0.2), 0.5)
+//   sigma_log_noise ~ half-normal(0, 0.5)
+//   phi             ~ lognormal(mu_log_phi, sigma_log_phi),
+//                     mu_log_phi ~ normal(0, 1), sigma_log_phi ~ half-normal(0, 1)
+//   mu_intercept    ~ std_normal()
+//   alpha_raw       ~ std_normal()   (load-bearing; see "Radial direction")
+//   These priors have not been calibrated by prior-predictive simulation.
 //
-// Identification:
-//   - alpha has RMS (== population SD, since sum-to-zero) exactly 1, by
-//     construction in transformed parameters -- not softly shrunk by a
-//     prior
-//   - mu_intercept sums to exactly 0, by construction (sum_to_zero_vector)
-//   - theta0's population mean is softly but STIFFLY pinned toward 0 --
-//     NOT exact, and this is a correction to earlier text in this
-//     header (and to this variant's registry description): z_theta0 is
-//     a plain vector[D] with z_theta0 ~ std_normal(), a prior, not a
-//     sum-to-zero constraint, so a common shift b in z_theta0 costs
-//     D * b^2 / 2 in log density rather than being forbidden outright.
-//     The pin is nonetheless very stiff in practice (D is in the
-//     thousands for this project's dyad sets), so the mean is
-//     effectively 0 for any purpose that matters -- but "effectively"
-//     is doing real work in that sentence, and it belongs in a
-//     different category than alpha's/mu_intercept's genuinely exact
-//     constraints above. sum_to_zero_vector[D] z_theta0 would make it
-//     exact too, if that distinction ever mattered enough to act on.
-//   - no dyad-specific intercept, as in stable: cross-dyad level
-//     differences are forced into theta via mu_intercept
-//
-// PRIOR UNITS HAVE CHANGED, NOT JUST BEEN PORTED. This has NOT yet been
-// checked against prior predictive simulation:
-//   - sigma_theta0 ~ normal(0, 2): under stable this was
-//     sigma_theta0 ~ normal(0, 0.5), interpreted loosely (theta0's scale
-//     was also softly anchored by mu_theta0 ~ normal(0,1), so
-//     sigma_theta0 alone didn't fully determine theta's units). Here,
-//     with alpha carrying the scale anchor instead, sigma_theta0 is
-//     GENUINELY the cross-dyad SD of theta0 in the units alpha defines --
-//     a materially different and more consequential prior than in
-//     stable. The normal(0, 2) here is a placeholder guess, not a
-//     recalibrated choice.
-//   - mu_log_noise ~ normal(log(0.2), 0.5) is UNCHANGED IN TEXT from
-//     stable but its MEANING has changed: process_noise here is built as
-//     sigma_theta0 * exp(mu_log_noise + sigma_log_noise * ...), i.e. it
-//     is now a RATIO to sigma_theta0 (innovation SD as a fraction of the
-//     cross-dyad SD), not an absolute theta-unit quantity. Read as
-//     "annual innovation SD is ~20% of the cross-dyad SD" -- the
-//     between/within ratio that actually drives cross-dyad rank
-//     inversion under detente. This reinterpretation is deliberate (see
-//     task rationale), but the specific normal(log(0.2), 0.5) prior on
-//     that ratio has not been separately justified/calibrated; it is
-//     carried over textually from stable's absolute-units prior only
-//     because 0.2 happens to be a plausible ratio too.
-//
-// RADIAL DEGENERACY: hard-normalizing alpha in transformed parameters
-// (alpha = alpha_raw * sqrt(A / dot_self(alpha_raw))) leaves
-// ||alpha_raw|| itself unidentified -- only its direction matters, since
-// any rescaling of alpha_raw is undone by the normalization. This makes
-// alpha_raw ~ std_normal() load-bearing (it is what identifies the radial
-// component), not merely regularizing, and dot_self(alpha_raw) near zero
-// is a numerical hazard (division blows up). This can produce a mild
-// funnel along the radial direction. The diagnostic script for this
-// variant should report divergence count AND the posterior of
-// dot_self(alpha_raw) (it should concentrate near A - 1, i.e. near where
-// std_normal() puts most of a sum-to-zero (A-1)-dimensional vector's
-// squared norm -- not near 0).
-//
-// ESCAPE HATCH if the radial degeneracy misbehaves in practice: keep
-// alpha[1] = 1 (stable's fixed-reference identification) and pin the
-// scale instead via sigma_theta0 ~ lognormal(0, 0.2) (a tight prior
-// directly on theta's cross-dyad SD, playing the scale-anchor role alpha
-// plays here). Not implemented; recorded here as the documented fallback
-// per task instructions, left for a future decision.
-//
-// alpha[1] IS the reference action class here, not an arbitrary
-// index: assemble_stan_data() (via grouped_events_to_dyad_period()'s
-// `reference_category` argument) already reorders that class to be
-// first in the action dimension before this model ever sees the data
-// (verified directly: with grouping_var = "BilatrClass2",
-// reference_category = 2, `attr(stan_data, "event_classes")[1]` is
-// `"2"`), so no separate index needs to be threaded through as new
-// data -- `alpha[1]` already IS the anchor position.
-//
-// IDENTIFICATION: ORIENTATION FOLD (0.4.2b). eta = alpha .* theta -
-// mu_intercept is invariant under the JOINT negation alpha -> -alpha,
-// theta -> -theta (i.e. theta0 -> -theta0, z_theta0 -> -z_theta0, and
-// theta_raw -> -theta_raw at every t), because alpha .* theta is a
-// product of two negations while mu_intercept is untouched. With a free
-// sum_to_zero_vector[A] alpha_raw, every prior on the flipped quantities
-// is symmetric about 0, so the two mirror modes carry exactly equal
-// posterior mass, and whichever one a chain's init happens to land in is
-// the one it reports -- making cross-chain Rhat on alpha/theta
-// uninterpretable for independently-initialized chains. That is the
-// actual problem; two different fixes for it have been tried and
-// rejected before this one (both recorded here so neither is tried
-// again):
-//   - a SOFT sign anchor (target += log_inv_logit(alpha[1] *
-//     inv(anchor_scale)), the pre-0.4.2 approach, retired to
-//     inst/stan/legacy/bilatr_stable_soft_anchor.stan / registered as
-//     `stable_soft_anchor`): makes the target correctly specified but
-//     cannot move a chain across the likelihood barrier (thousands of
-//     nats) separating the two modes once warmup has landed it in one.
-//   - a HARD constraint (real<lower=0> alpha_raw_1, the 0.4.2 approach,
-//     briefly shipped and reverted): removes one mode from the parameter
-//     space entirely, but not the barrier -- a chain that would have
-//     landed in the excluded mode instead slides to the constraint
-//     boundary and parks there (see the top-of-file note above for the
-//     cluster numbers). A constraint identifies by removing ambiguity;
-//     it cannot move a chain across a barrier. Constraining a different
-//     element, the largest-magnitude element, or strengthening the soft
-//     anchor all have the identical failure mode -- they only relocate
-//     where a trapped chain parks, they do not free it. Do not try any
-//     of them.
-//
-// The fix that actually works changes what is REPORTED, not what is
-// REACHABLE. Let s = sign(alpha_raw[1]) (see orientation_sign(), in the
-// functions block above) and multiply BOTH alpha and theta by it.
-// Because the likelihood depends on those two only through the
-// elementwise product alpha .* theta, and both flip together, the
-// likelihood is completely unchanged -- so a chain in EITHER raw-space
-// basin reports identical alpha and theta, with alpha[1] >= 0 always. No
-// barrier needs crossing, no region is excluded, nothing is truncated.
-// Two properties matter, and must survive any future edit to this file:
-//   - The target stays smooth. The discontinuity is in the reported
-//     transformed parameters, not in the density HMC differentiates.
-//     Crossing alpha_raw[1] = 0 flips s, alpha and theta simultaneously,
-//     leaving alpha .* theta -- and hence every term of the likelihood --
-//     continuous and differentiable; the priors are on the raw
-//     parameters (alpha_raw, z_theta0, theta_raw) and are untouched by
-//     s. There is no Jacobian adjustment to make, because this is not a
-//     change of variables: it is the same model, reported under a
-//     canonical labelling.
-//   - It is exact, not approximate. Both raw-space modes map to the same
-//     reported values, so the pushforward posterior on (alpha, theta) is
-//     correct whichever basin a chain occupies.
-// orientation_sign() is a functions-block helper, deliberately NOT cached
-// into a local `real s` here: any bare top-level declaration in
-// transformed parameters is written to the output CSV, and a raw sign
-// scalar would show the same meaningless cross-chain Rhat this fold
-// exists to remove (see R/diagnose_convergence.R's
-// .bilatr_sign_ambiguous_raw_names() / .classify_bilatr_tier() for where
-// that exclusion is actually enforced, for alpha_raw/z_theta0/theta_raw
-// themselves).
-//
-// alpha_raw ~ std_normal() is on the free parameter directly (no
-// constructed-variable Jacobian to reason about, unlike the reverted
-// 0.4.2 approach) -- see "RADIAL DEGENERACY" above for why it is
-// load-bearing, not merely regularizing.
+// IDENTIFICATION
+//   Scale. alpha = alpha_raw * sqrt(A / dot_self(alpha_raw)), so alpha has
+//     root-mean-square 1 (equal to its SD, since it sums to zero). The unit
+//     of theta is set by the discrimination profile of the action classes,
+//     not by the dyads in the sample, so fits of the same class scheme on
+//     different dyad sets share a scale.
+//   Radial direction. The normalization leaves the length of alpha_raw
+//     unidentified by the likelihood; alpha_raw ~ std_normal() identifies
+//     it (dot_self(alpha_raw) concentrates near A - 1). A posterior of
+//     dot_self(alpha_raw) near 0 signals a numerical problem.
+//   Softmax location. alpha_raw and mu_intercept are sum_to_zero_vector[A],
+//     so neither carries a free level shift.
+//   Location of theta. theta0 has no free mean parameter: its cross-dyad
+//     mean is pinned at 0 by z_theta0 ~ std_normal(). A common shift b
+//     costs D * b^2 / 2 in log density, a stiff pin for large D, but a
+//     prior rather than an exact constraint.
+//   Sign: the ORIENTATION FOLD. eta depends on alpha and theta only through
+//     alpha .* theta, which is unchanged when both are negated (theta0,
+//     z_theta0 and theta_raw at every t negated together), and every prior
+//     on the negated quantities is symmetric about 0. The posterior
+//     therefore has two mirror-image modes of equal mass, separated by a
+//     large likelihood barrier. A sign constraint cannot resolve this: a
+//     chain initialized on the excluded side cannot cross the barrier and
+//     settles on the constraint boundary instead. The fold changes what is
+//     reported, not what the sampler can reach. With
+//     s = orientation_sign(alpha_raw), the sign of alpha_raw[1], the
+//     reported alpha, theta0 and theta are all multiplied by s:
+//     - the likelihood is unchanged, since alpha .* theta is;
+//     - the target stays smooth: the priors are on the raw parameters,
+//       which s does not touch, and crossing alpha_raw[1] = 0 flips alpha
+//       and theta together;
+//     - no Jacobian adjustment is needed: it is the same model, reported
+//       under a canonical sign;
+//     - it is exact: both raw-space modes map to the same reported values.
+//     s is computed by a function rather than stored, because a stored
+//     transformed parameter would be written to the output, where its
+//     cross-chain R-hat would be meaningless.
 //
 // ORIENTATION: the reported alpha[1] is never negative, so higher theta
 // makes the reference action class more likely relative to the other
 // action types; with a cooperative reference class, higher theta means
 // more cooperative relations (see ?prepare_stan_data, reference_category).
 // This holds for every fit made under this file via the fold above, not
-// just on average across many. `alpha`,
-// `theta`, `mu_intercept`, `phi`, and every scale/dispersion parameter
-// are always in their final orientation as REPORTED;
-// bilatr_orient()/.bilatr_flip_variables() return `character(0)` for
-// `stable`/`ou` accordingly (R/orient.R) -- there is nothing left for
-// post-hoc relabeling to do to the reported quantities. The RAW
+// just on average across many. `alpha`, `theta`, `mu_intercept`, `phi`,
+// and every scale/dispersion parameter are always in their final
+// orientation as REPORTED; no post-hoc relabeling is needed. The RAW
 // parameters the fold consumes (alpha_raw, z_theta0, theta_raw) remain
-// genuinely sign-ambiguous themselves: if two chains land in opposite
-// raw-space basins, those three variables' own cross-chain Rhat is
-// meaningless even though everything reported is fine -- this is why
-// they are excluded from the tiered diagnostics tables rather than left
-// to be (mis)read as a convergence failure (R/diagnose_convergence.R).
-// Only fits made under the retired `stable_soft_anchor`/`ou_soft_anchor`
-// programs still need bilatr_orient()'s post-hoc relabeling of the
-// reported quantities themselves.
+// sign-ambiguous themselves: if two chains land in opposite raw-space
+// basins, those three variables' own cross-chain R-hat is meaningless even
+// though everything reported is fine, which is why bilatr's tiered
+// convergence diagnostics leave them out (see ?diagnose_convergence).
+//
+// GENERATED QUANTITIES
+//   log_lik[d, t]   per-dyad-period log-likelihood (0 where is_obs is 0),
+//                   when compute_log_lik = 1 (D x T values per draw).
+//   theta_filtered[i, t], theta_filtered_sd[i, t]
+//                   for dyad filter_dyads[i], when compute_theta_filtered
+//                   = 1: the mean and SD of theta[d, t] given events up to
+//                   and including period t, from a linear-Bayes forward
+//                   filter run conditional on the draw's hyperparameters
+//                   (see the comment in the block).
 functions {
   // <<< BEGIN GENERATED partial_log_lik (source: inst/stan/include/partial_log_lik.stanfunctions) >>>
   // Do not hand-edit between these markers -- edit the source file
@@ -249,21 +117,17 @@ functions {
   // (checked by tests/testthat/test_stan_includes.R).
   // Shared reduce_sum likelihood for all bilatr Stan model variants.
   //
-  // Indifferent to how `alpha` and `mu_intercept` were constructed upstream
-  // (fixed-reference vs. sum-to-zero, static vs. OU-derived theta, ...): it
-  // only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
-  // vectors.
+  // Indifferent to how `theta`, `alpha` and `mu_intercept` were constructed
+  // upstream (random walk or OU process, with or without country offsets):
+  // it only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
+  // values.
   //
-  // This is the single canonical source. It is NOT included at compile/
-  // sample time via Stan's `#include` (cmdstanr breaks `#include` resolution
-  // at $sample()-time whenever include_paths contains a space -- see
-  // https://github.com/stan-dev/cmdstanr/issues/820 -- which bites this
-  // project's own devtools::load_all() working tree). Instead,
-  // `data-raw/sync_stan_functions.R` splices this file's contents verbatim
-  // into a marker-delimited block in each registered model's `.stan` file;
-  // see `R/stan_includes.R`. Edit only this file, then rerun the sync
-  // script -- do not hand-edit the generated blocks, and do not fork this
-  // file per variant.
+  // This is the single canonical source. It is not included via Stan's
+  // `#include`, which cmdstanr cannot resolve at sampling time when the
+  // include path contains a space
+  // (https://github.com/stan-dev/cmdstanr/issues/820). Instead, its contents
+  // are copied verbatim into a marker-delimited block in each model's
+  // `.stan` file, and the package tests check that the copies match.
   real partial_log_lik(array[] int slice_d,
                         int start, int end,
                         int T, int A,
@@ -287,39 +151,17 @@ functions {
     return lp;
   }
 
-  // Country-offset variant of partial_log_lik(), added alongside it (0.7.0,
-  // bilatr_alphanorm_gamma.stan / registered `stable_gamma`) -- not a fork,
-  // per this file's own header: partial_log_lik() itself is untouched, and
-  // every other registered program (stable, ou, and the legacy soft-anchor
-  // pair) gets this spliced in too via data-raw/sync_stan_functions.R, as
-  // an unused extra function, so their .stan text changes (one-time
-  // recompile) but their data/parameter blocks -- and hence fits already on
-  // disk -- are untouched.
+  // Country-offset variant of partial_log_lik(), used by the `stable_gamma`
+  // model (and present, unused, in the other models' copies of this file).
   //
-  // g_d, the per-dyad country offset, is built ONCE PER DYAD, outside the
-  // `t` loop -- not stored anywhere (see bilatr_alphanorm_gamma.stan's
-  // header, "Part 0b": a per-dyad-period or per-dyad matrix in transformed
-  // parameters would be written to the output CSV at prohibitive cost).
+  // The per-dyad country offset g_d is built once per dyad, outside the `t`
+  // loop, and folded into the intercept (mu_eff = mu_intercept + g_d), so
+  // the per-cell expression has the same shape and autodiff cost as
+  // partial_log_lik()'s. g_d is not stored: a per-dyad matrix in
+  // transformed parameters would be written to the output for every draw.
   // w_send[d] == 1 covers directed data (g_d = gamma[, ctry_a[d]] exactly,
-  // ctry_b[d] unused) and the directed-as-degenerate-undirected case alike;
-  // any other value mixes ctry_a's and ctry_b's columns by event share (see
-  // bilatr_alphanorm_gamma.stan's header for the directed/undirected
-  // design this implements).
-  //
-  // 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
-  // mu_intercept + g_d), not subtracted a second time inside the `t`
-  // loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
-  // every observed cell was A extra autodiff nodes per cell for nothing
-  // (~3-8% more nodes in eta's part of the graph at production scale, all
-  // avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
-  // ...`) is now the same shape, and the same autodiff cost, as
-  // partial_log_lik()'s -- the only added work is A new vars per dyad, not
-  // per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
-  // pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
-  // differ in floating-point association) -- but bit-identical at
-  // n_countries = 1, where gamma is identically zero and mu_intercept + 0
-  // is exact in IEEE 754, which is why the exact-nesting test stays valid
-  // evidence for the shared-gamma design after this change.
+  // ctry_b[d] unused); any other value mixes ctry_a's and ctry_b's columns
+  // by event share (see the `stable_gamma` model's header).
   real partial_log_lik_offset(array[] int slice_d,
                                int start, int end,
                                int T, int A,
@@ -354,14 +196,12 @@ functions {
   }
   // <<< END GENERATED partial_log_lik >>>
 
-  // Per-dyad-period log-likelihood, not reduced/summed -- used only by the
-  // compute_log_lik generated quantities block below. Must stay
-  // numerically identical to the per-cell term inside partial_log_lik
-  // above (same eta/softmax/conc/dirichlet_multinomial_lpmf). Duplicated
-  // rather than shared via the GENERATED mechanism because it is
-  // GQ-only, needed by the three experimental variants only (not
-  // stable), and small enough that hand-verified identity across the
-  // three files is lower-risk than extending the sync tooling for it.
+  // Per-dyad-period log-likelihood, not summed -- used only by the
+  // compute_log_lik generated quantities below. Must stay numerically
+  // identical to the per-cell term inside partial_log_lik() above (same
+  // eta/softmax/conc/dirichlet_multinomial_lpmf). Written out here rather
+  // than generated from the shared source because it is small and used
+  // only in generated quantities.
   real dyad_period_log_lik(int obs_dt, array[] int y_dt, real theta_dt,
                             int A, vector mu_intercept, real phi_d,
                             vector alpha) {
@@ -375,11 +215,8 @@ functions {
   }
 
   // +1/-1 orientation of a draw, from the reference class's sign. Applied
-  // to BOTH alpha and theta below; see header, "IDENTIFICATION:
-  // ORIENTATION FOLD". Hand-duplicated (not spliced via the GENERATED
-  // mechanism) in bilatr_alphanorm_ou.stan -- identical there, same
-  // reasoning as dyad_period_log_lik() above (tiny, not worth extending
-  // the sync tooling for).
+  // to BOTH alpha and theta below; see header, "Sign: the ORIENTATION
+  // FOLD". The same function is written out in each model file.
   real orientation_sign(vector alpha_raw) {
     return alpha_raw[1] >= 0 ? 1.0 : -1.0;
   }
@@ -415,7 +252,7 @@ parameters {
 
   // Hierarchical process/dispersion parameters
   vector[D] log_process_noise_raw;  // non-centered: process_noise built in TP
-  real mu_log_noise;                // NOTE: now a ratio to sigma_theta0, see header
+  real mu_log_noise;                // log ratio to sigma_theta0, see header
   real<lower=0> sigma_log_noise;
   vector<lower=0>[D] phi;
   real mu_log_phi;
@@ -423,10 +260,9 @@ parameters {
 }
 transformed parameters {
   // Normalize alpha to RMS (== population SD, sum-to-zero) 1. This is the
-  // scale anchor for the whole model; see header for the radial
-  // degeneracy this creates. Sign is NOT fixed here -- see
-  // orientation_sign() below and header, "IDENTIFICATION: ORIENTATION
-  // FOLD".
+  // scale anchor for the whole model; see header, "Scale" and "Radial
+  // direction". The sign comes from orientation_sign(); see header,
+  // "Sign: the ORIENTATION FOLD".
   vector[A] alpha = orientation_sign(alpha_raw)
                     * alpha_raw * sqrt((1.0 * A) / dot_self(alpha_raw));
 
@@ -435,7 +271,7 @@ transformed parameters {
   // sampler is in -- see header.
   vector[D] theta0 = orientation_sign(alpha_raw) * sigma_theta0 * z_theta0;
 
-  // Per-dyad process noise, now a RATIO to sigma_theta0 (non-centered
+  // Per-dyad process noise, a RATIO to sigma_theta0 (non-centered
   // lognormal hierarchy on the ratio, not on an absolute theta-unit
   // quantity -- see header).
   vector<lower=0>[D] process_noise =
@@ -473,7 +309,7 @@ model {
   mu_intercept ~ std_normal();
 
   // load-bearing, not merely regularizing: identifies the radial
-  // direction of alpha_raw (see header, "RADIAL DEGENERACY"). The
+  // direction of alpha_raw (see header, "Radial direction"). The
   // orientation fold (transformed parameters, above) leaves this prior
   // untouched -- it is symmetric about 0 and orientation_sign() is
   // applied only to the REPORTED alpha/theta0/theta, not to alpha_raw
@@ -507,14 +343,13 @@ generated quantities {
   // observations -- an approximation to p(theta_t | y_1:t), not the exact
   // marginal (the hyperparameters here were themselves fit on all T
   // periods). No autodiff in generated quantities, so the score is
-  // hand-derived (see data-raw or dev notes for the derivation): with
-  // conc_0 = phi[d] constant in theta (true unconditionally since the
-  // weights were retired in 0.4.6), d/dtheta log P(y|conc) reduces to
+  // derived by hand: with the total concentration phi[d] constant in
+  // theta, d/dtheta log P(y | conc) reduces to
   // sum_k phi[d]*p_k*(alpha_k - a_bar) * (digamma(y_k + phi[d]*p_k) -
   // digamma(phi[d]*p_k)); the Fisher information uses the standard DM
   // overdispersion correction n*(1+phi)/(n+phi) applied to
-  // Var_pi(alpha) = dot_product(p, square(alpha - a_bar)) (see
-  // diagnose_category_merges()'s use of the same quantity). No
+  // Var_pi(alpha) = dot_product(p, square(alpha - a_bar)) (the same
+  // quantity diagnose_category_merges() uses). No
   // orientation_sign() call anywhere here: alpha, mu_intercept,
   // sigma_theta0, and process_noise are already-oriented quantities, and
   // the initial state (0) is orientation-free, so the recursion's output

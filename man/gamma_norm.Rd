@@ -17,8 +17,7 @@ A tibble, one row per country, \code{country_code}, \code{country_index},
 \description{
 \code{sqrt(mean(gamma_c^2))} across action categories, for each country --
 the natural ranking key for which countries carry the largest
-country-level offset (see \code{\link[=extract_gamma]{extract_gamma()}} and
-\code{inst/stan/bilatr_alphanorm_gamma.stan}'s header). Computed from
+country-level offset (see \code{\link[=extract_gamma]{extract_gamma()}}). Computed from
 \code{x$mean} (posterior means), not per-draw: a summary of a summary,
 adequate for ranking/ordering (e.g. \code{\link[=autoplot.bilatr_gamma]{autoplot.bilatr_gamma()}}'s
 country axis) but not itself a posterior quantity -- no interval is

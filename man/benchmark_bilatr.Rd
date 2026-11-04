@@ -47,7 +47,7 @@ prepared Stan data list.}
 }
 \value{
 A tibble of class \code{bilatr_benchmark}, one row per run, with the
-columns described in \code{?summarise_benchmark} ("Benchmark results"):
+columns described in \code{?summarize_benchmark} ("Benchmark results"):
 \code{job_id}, \code{threads_per_chain}, \code{chunk_size}, \code{replicate}, \code{n_chunks},
 \code{chunks_per_thread}, \code{warmup_sec}, \code{sampling_sec}, \code{total_sec},
 \code{iter_per_sec}, \code{core_sec_per_1k_iter}, \code{n_leapfrog} (leapfrog steps
@@ -61,7 +61,7 @@ Runs a small sweep of \code{threads_per_chain} x \code{chunk_size} on your own
 data and machine, so you can choose the settings of \code{\link[=fit_panel]{fit_panel()}} by
 measurement. Each run is one chain of the model, with the given
 \code{threads_per_chain} and \code{chunk_size}; the result goes straight into
-\code{\link[=summarise_benchmark]{summarise_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}} and \code{\link[=plot_benchmark]{plot_benchmark()}}.
+\code{\link[=summarize_benchmark]{summarize_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}} and \code{\link[=plot_benchmark]{plot_benchmark()}}.
 See \code{vignette("tuning", package = "bilatr")} for how to read it.
 }
 \details{
@@ -120,11 +120,11 @@ bench <- benchmark_bilatr(
   reference_category = "1"
 )
 bench
-benchmark_pareto(summarise_benchmark(bench))
+benchmark_pareto(summarize_benchmark(bench))
 }
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=summarise_benchmark]{summarise_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}},
-\code{\link[=plot_benchmark]{plot_benchmark()}}, \code{\link[=benchmark_grid]{benchmark_grid()}} for a cluster sweep.
+\code{\link[=summarize_benchmark]{summarize_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}},
+\code{\link[=plot_benchmark]{plot_benchmark()}}, \code{\link[=benchmark_grid]{benchmark_grid()}} for a batch-job sweep.
 }

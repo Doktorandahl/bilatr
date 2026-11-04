@@ -11,7 +11,7 @@
 #' @param key The config key to match, e.g. `"num_samples"`.
 #' @return The matched value as a string (e.g. `"1000"`, `"false"`), or
 #'   `NA_character_` if `line` doesn't match `key`.
-#' @keywords internal
+#' @noRd
 .match_stan_csv_config_field <- function(line, key) {
   m <- regmatches(line, regexpr(paste0("^#\\s*", key, "\\s*=\\s*([^ (]+)"), line, perl = TRUE))
   if (length(m) == 0) {
@@ -41,9 +41,9 @@
 #'
 #' Parses `method`/`num_samples`/`num_warmup`/`save_warmup`/`thin` out of
 #' the config block in the same single pass that finds the header and the
-#' post-warmup data offset (0.10.0; previously a separate
-#' `cmdstanr:::read_csv_metadata()` call, which does a full-file `grep`
-#' pass and is a `:::` call into cmdstanr's private API). Each key's
+#' post-warmup data offset (rather than calling
+#' `cmdstanr:::read_csv_metadata()`, which does a full-file `grep` pass
+#' and is a `:::` call into cmdstanr's private API). Each key's
 #' FIRST match wins, since keys are indented by nesting level and could in
 #' principle repeat at a different level. `save_warmup` is normalized to
 #' logical, accepting both `0`/`1` (older CmdStan) and `false`/`true`
@@ -69,7 +69,7 @@
 #'   (logical), parsed from the config block, and `num_post_warmup_draws`
 #'   (`ceiling(num_samples / thin)`, the same arithmetic
 #'   `cmdstanr:::read_csv_metadata()` used).
-#' @keywords internal
+#' @noRd
 .scan_stan_csv_header_and_skip <- function(csv_file) {
   con <- file(csv_file, open = "rt")
   on.exit(close(con), add = TRUE)
@@ -161,12 +161,9 @@
 #' ([diagnose_convergence()], [diagnose_and_extract_bilatr()],
 #' [extract_theta()], [extract_alpha()]/[extract_mu_intercept()] via
 #' [.get_draws]). Scans every one of `csv_files` (see
-#' [.scan_stan_csv_header_and_skip], which replaces
-#' `cmdstanr:::read_csv_metadata()`, 0.10.0) for its config and the line
-#' offset of its first post-warmup draw, and checks the chains agree
-#' (unlike the `cmdstanr:::read_csv_metadata()`-based path this replaced,
-#' which only ever looked at `csv_files[1]` and silently assumed the rest
-#' matched). Everything downstream -- [.fast_read_post_warmup_draws] for
+#' [.scan_stan_csv_header_and_skip]) for its config and the line offset
+#' of its first post-warmup draw, and checks that the chains agree,
+#' rather than assuming the rest match the first file. Everything downstream -- [.fast_read_post_warmup_draws] for
 #' the Tier 1/2 read and every Tier 3 chunk -- reads `variables` directly
 #' out of the raw CSV at that offset via `data.table::fread(file = ...,
 #' skip = ..., nrows = ...)`, never a comment-stripped copy: no scratch
@@ -200,7 +197,7 @@
 #'   size in MB -- `fread()` reads one file at a time, so this is the
 #'   file-sized memory floor any single read pays regardless of
 #'   `chunk_size`; see [.compute_chunk_size()]).
-#' @keywords internal
+#' @noRd
 .prepare_fast_csv_read <- function(csv_files) {
   scans <- lapply(csv_files, .scan_stan_csv_header_and_skip)
 
@@ -292,11 +289,11 @@
 #' @param caller Optional calling function's name, prefixed to the error.
 #' @return Character vector of concrete, available variable names, in
 #'   the order their filters were given (a base-name filter expands to
-#'   its matches in `available`'s order), with duplicates dropped (B5): a
+#'   its matches in `available`'s order), with duplicates dropped: a
 #'   request like `c("alpha", "alpha[1]")` would otherwise return
 #'   `"alpha[1]"` twice, and `data.table::fread(select = )` errors opaquely
 #'   ("Column number ... has been selected twice") on a duplicated column.
-#' @keywords internal
+#' @noRd
 .expand_bilatr_variable_filters <- function(available, filters, caller = NULL) {
   matched <- as.list(match(filters, available))
   for (id in which(is.na(matched))) {
@@ -355,7 +352,7 @@
 #'   indexed element of that name via [.expand_bilatr_variable_filters],
 #'   matching [cmdstanr::read_cmdstan_csv()]'s own `variables` matching.
 #' @return A `posterior::draws_array`.
-#' @keywords internal
+#' @noRd
 .fast_read_post_warmup_draws <- function(prepared, variables) {
   resolved_vars <- .expand_bilatr_variable_filters(prepared$variables, variables)
   col_idx <- unname(prepared$col_index[resolved_vars])

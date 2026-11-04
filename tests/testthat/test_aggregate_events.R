@@ -1,4 +1,4 @@
-# Tests for aggregate_events() (0.12.0). No CmdStan needed.
+# Tests for aggregate_events(). No CmdStan needed.
 
 # Four events with hand-computable IDs. Days since 1946-01-01: 1946-2019
 # is 74 years with 18 leap days (1948, ..., 2016), so 2020-01-01 is day

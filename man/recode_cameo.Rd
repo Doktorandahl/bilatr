@@ -35,8 +35,8 @@ conflict, 15-20 material conflict);
 "Make statement", root 14 (protest) moves to class 4 (material
 conflict), and root 16 (reduce relations) moves to class 3 (verbal
 conflict);
-\item \code{ModifiedRootCode} is an 18-class regrouping of the root codes (see
-\code{\link[=assign_modified_root_code]{assign_modified_root_code()}}).
+\item \code{ModifiedRootCode} is an 18-class regrouping of the root codes that
+splits Consult and merges some conflict roots (see \link{cameo_lookup}).
 }
 
 \code{\link[=event_class_labels]{event_class_labels()}} labels the classes of a fitted model's

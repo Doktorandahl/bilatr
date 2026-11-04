@@ -1,5 +1,5 @@
-# Tests for prepare_stan_data() (0.12.0) on non-event data. Equivalence
-# with the 0.11.0 assemble_stan_data() output on event data is in
+# Tests for prepare_stan_data() on non-event data. Equivalence with a
+# frozen reference on event data is in
 # test_prepare_stan_data_equivalence.R. No CmdStan needed.
 
 # Arbitrary dyad labels, no actor columns, a week_id-style time index with
@@ -258,8 +258,8 @@ test_that("dyad_id order is C-locale for mixed-case and numeric labels, matching
   expect_identical(dyads, c("10", "2", "Abc", "B", "USA", "_x", "a", "abc", "usa"))
   expect_identical(dyads, sort(labels, method = "radix"))
 
-  # dplyr::group_by() (what bilatr <= 0.11.0 used to number dyads) gives
-  # the same order under the default dplyr.legacy_locale = FALSE
+  # dplyr::group_by() gives the same order under the default
+  # dplyr.legacy_locale = FALSE
   withr::local_options(dplyr.legacy_locale = NULL)
   grouped <- dplyr::group_by(tibble::tibble(dyad = labels), .data$dyad) %>%
     dplyr::summarise(id = dplyr::cur_group_id())
@@ -273,7 +273,7 @@ test_that("non-event duplicates and bad tables fail validation through prepare_s
   expect_error(prep(dp), "duplicate dyad x `week_id` rows.*north")
 })
 
-# --- 0.12.0b ------------------------------------------------------------
+# --- the action_cols attribute and time_range -----------------------------
 
 agg_fixture <- function() {
   events <- tibble::tibble(
@@ -285,19 +285,19 @@ agg_fixture <- function() {
   suppressMessages(aggregate_events(events, grouping_var = "PentaClass"))
 }
 
-test_that("aggregate_events() records its class columns as the action_cols attribute (D16)", {
+test_that("aggregate_events() records its class columns as the action_cols attribute", {
   agg <- agg_fixture()
   expect_identical(attr(agg, "action_cols"), c("0", "1", "3"))
 })
 
-test_that("the action_cols attribute is used silently when action_cols = NULL (D16)", {
+test_that("the action_cols attribute is used silently when action_cols = NULL", {
   agg <- agg_fixture()
   expect_no_warning(sd <- suppressMessages(prepare_stan_data(agg)))
   explicit <- suppressMessages(prepare_stan_data(agg, action_cols = c("0", "1", "3")))
   expect_identical(sd, explicit)
 })
 
-test_that("a verb that drops the action_cols attribute brings the default warning back (D16)", {
+test_that("a verb that drops the action_cols attribute brings the default warning back", {
   agg <- agg_fixture()
   # filter()/select()/mutate()/arrange() keep custom attributes (dplyr
   # >= 1.0's dplyr_reconstruct()), so the attribute survives them ...
@@ -317,7 +317,7 @@ test_that("a verb that drops the action_cols attribute brings the default warnin
   )
 })
 
-test_that("a whole-number column added after aggregate_events() is named in a message (0.12.0c)", {
+test_that("a whole-number column added after aggregate_events() is named in a message", {
   # Merging categories after diagnose_category_merges(), keeping the originals.
   merged <- dplyr::mutate(agg_fixture(), coop = `1` + `3`)
   expect_identical(attr(merged, "action_cols"), c("0", "1", "3"))
@@ -340,7 +340,7 @@ test_that("a whole-number column added after aggregate_events() is named in a me
   )
 })
 
-test_that("the action_cols attribute stays silent when there is nothing extra (0.12.0c)", {
+test_that("the action_cols attribute stays silent when there is nothing extra", {
   agg <- agg_fixture()
   suppressMessages(
     expect_no_message(prepare_stan_data(agg), message = "not in it are ignored")
@@ -348,7 +348,7 @@ test_that("the action_cols attribute stays silent when there is nothing extra (0
   expect_no_warning(suppressMessages(prepare_stan_data(agg)))
 })
 
-test_that("merging categories and dropping the originals falls back to the default warning (0.12.0c)", {
+test_that("merging categories and dropping the originals falls back to the default warning", {
   merged <- dplyr::mutate(agg_fixture(), coop = `1` + `3`) %>% dplyr::select(-"1", -"3")
   expect_warning(
     sd <- suppressMessages(prepare_stan_data(merged)),
@@ -357,7 +357,7 @@ test_that("merging categories and dropping the originals falls back to the defau
   expect_identical(attr(sd, "event_classes"), c("0", "coop"))
 })
 
-test_that("an action_cols attribute naming a missing column falls back to the default, with the warning (D16)", {
+test_that("an action_cols attribute naming a missing column falls back to the default, with the warning", {
   agg <- dplyr::select(agg_fixture(), -"3")
   expect_identical(attr(agg, "action_cols"), c("0", "1", "3"))
   expect_warning(
@@ -367,7 +367,7 @@ test_that("an action_cols attribute naming a missing column falls back to the de
   expect_identical(attr(sd, "event_classes"), c("0", "1"))
 })
 
-test_that("time_range pins T and fills the grid over it (D17)", {
+test_that("time_range pins T and fills the grid over it", {
   sd <- prep(synthetic_dp(), time_range = c(3859, 3868))
   expect_identical(sd$T, 10L)
   ids <- attr(sd, "dyad_ids")
@@ -382,7 +382,7 @@ test_that("time_range = NULL is the data's own range", {
   expect_identical(prep(synthetic_dp()), prep(synthetic_dp(), time_range = c(3861L, 3866L)))
 })
 
-test_that("time_range drops rows outside it with a message giving the count (D17)", {
+test_that("time_range drops rows outside it with a message giving the count", {
   expect_message(
     sd <- prepare_stan_data(synthetic_dp(), time = "week_id", action_cols = c(zeta, alpha, mid), time_range = c(3861, 3864)),
     "dropping 2 row\\(s\\) outside `time_range`"
@@ -393,7 +393,7 @@ test_that("time_range drops rows outside it with a message giving the count (D17
   expect_identical(unique(attr(sd, "dyad_ids")$dyad), c("South", "north"))
 })
 
-test_that("time_range is validated (D17)", {
+test_that("time_range is validated", {
   expect_error(prep(synthetic_dp(), time_range = 3861), "must be two whole numbers")
   expect_error(prep(synthetic_dp(), time_range = c(3861, 3862, 3863)), "must be two whole numbers")
   expect_error(prep(synthetic_dp(), time_range = c(3861.5, 3866)), "must be two whole numbers")
@@ -403,7 +403,7 @@ test_that("time_range is validated (D17)", {
   expect_error(prep(synthetic_dp(), time_range = c(1, 10)), "no rows fall within `time_range` \\(1 to 10\\); `week_id` spans 3861 to 3866")
 })
 
-test_that("event_class_labels() returns the raw column names silently for a user table (D12)", {
+test_that("event_class_labels() returns the raw column names silently for a user table", {
   sd <- prep(synthetic_dp())
   expect_null(attr(sd, "grouping_var"))
   expect_silent(labels <- event_class_labels(sd))

@@ -3,7 +3,7 @@
 #' @param code Character or numeric vector of CAMEO event codes (e.g.
 #'   `"0211"`, `"19"`).
 #' @return Character vector of two-digit root codes.
-#' @keywords internal
+#' @noRd
 get_root <- function(code) {
   stringr::str_sub(stringr::str_pad(as.character(code), width = 2, pad = "0"), 1, 2)
 }
@@ -13,13 +13,13 @@ get_root <- function(code) {
 #' The same mapping as GDELT's own `QuadClass` column: roots 01-05 are
 #' 1 (verbal cooperation), 06-09 are 2 (material cooperation), 10-14 are
 #' 3 (verbal conflict) and 15-20 are 4 (material conflict). Checked
-#' against raw GDELT 1.0 event files (`data-raw/quadclass_gdelt_check.md`).
+#' against raw GDELT 1.0 daily, monthly and yearly event files.
 #'
 #' @param root Character vector of two-digit CAMEO root codes, as returned
 #'   by [get_root()].
 #' @return Integer vector with values 1 (verbal cooperation), 2 (material
 #'   cooperation), 3 (verbal conflict), 4 (material conflict), or `NA`.
-#' @keywords internal
+#' @noRd
 assign_quad <- function(root) {
   root_num <- as.integer(root)
   dplyr::case_when(
@@ -37,7 +37,7 @@ assign_quad <- function(root) {
 #'   [assign_quad()].
 #' @return Character vector of the corresponding class names, `NA` for
 #'   values outside 1-4.
-#' @keywords internal
+#' @noRd
 quadclass_name <- function(class) {
   names <- c(
     "1" = "Verbal cooperation",
@@ -54,7 +54,7 @@ quadclass_name <- function(class) {
 #'   [assign_quad()].
 #' @return Character vector of comma-separated CAMEO root codes, `NA` for
 #'   values outside 1-4.
-#' @keywords internal
+#' @noRd
 quadclass_eventcodes <- function(class) {
   codes <- c(
     "1" = "01, 02, 03, 04, 05",
@@ -79,7 +79,7 @@ quadclass_eventcodes <- function(class) {
 #' @param quad Integer vector of QuadClass values, as returned by
 #'   [assign_quad()].
 #' @return Integer vector with values 0-4.
-#' @keywords internal
+#' @noRd
 assign_penta <- function(root, quad) {
   root_num <- as.integer(root)
   dplyr::case_when(
@@ -99,7 +99,7 @@ assign_penta <- function(root, quad) {
 #'   [assign_penta()].
 #' @return Character vector of the corresponding class names, `NA` for
 #'   values outside 0-4.
-#' @keywords internal
+#' @noRd
 pentaclass_name <- function(class) {
   names <- c(
     "0" = "Make statement",
@@ -117,7 +117,7 @@ pentaclass_name <- function(class) {
 #'   [assign_penta()].
 #' @return Character vector of comma-separated CAMEO root codes, `NA` for
 #'   values outside 0-4.
-#' @keywords internal
+#' @noRd
 pentaclass_eventcodes <- function(class) {
   codes <- c(
     "0" = "01, 02",
@@ -153,7 +153,7 @@ pentaclass_eventcodes <- function(class) {
 #' @param code Character or numeric vector of CAMEO event codes (e.g.
 #'   `"0211"`, `"19"`).
 #' @return Integer vector of `ModifiedRootCode` values (1-18).
-#' @keywords internal
+#' @noRd
 assign_modified_root_code <- function(code) {
   code <- stringr::str_pad(as.character(code), width = 2, pad = "0")
   root <- get_root(code)
@@ -193,7 +193,7 @@ assign_modified_root_code <- function(code) {
 #'   [assign_modified_root_code()].
 #' @return Character vector of the corresponding class names, `NA` for
 #'   values outside 1-18.
-#' @keywords internal
+#' @noRd
 modified_root_code_name <- function(class) {
   names <- c(
     "1"  = "Make a public statement",
@@ -237,7 +237,7 @@ modified_root_code_name <- function(class) {
 #'   by [assign_modified_root_code()].
 #' @return Character vector of comma-separated CAMEO root/event codes,
 #'   `NA` for values outside 1-18.
-#' @keywords internal
+#' @noRd
 modified_root_code_eventcodes <- function(class) {
   codes <- c(
     "1"  = "01 except 016, 018, 019",
@@ -279,8 +279,8 @@ modified_root_code_eventcodes <- function(class) {
 #'   "Make statement", root 14 (protest) moves to class 4 (material
 #'   conflict), and root 16 (reduce relations) moves to class 3 (verbal
 #'   conflict);
-#' * `ModifiedRootCode` is an 18-class regrouping of the root codes (see
-#'   [assign_modified_root_code()]).
+#' * `ModifiedRootCode` is an 18-class regrouping of the root codes that
+#'   splits Consult and merges some conflict roots (see [cameo_lookup]).
 #'
 #' [event_class_labels()] labels the classes of a fitted model's
 #' `stan_data` from these columns.
@@ -370,15 +370,11 @@ recode_cameo <- function(data, code_col = "EventCode") {
 
 #' Human-readable labels for a Stan data object's event classes
 #'
-#' The data-driven replacement (0.10.1) for the retired per-scheme
-#' `*_name()` functions (`eventrootcode3_name()` and friends; see
-#' NEWS.md): rather than a standalone namer per CAMEO regrouping that the
-#' caller has to pick by hand, this reads labels straight out of
-#' [cameo_lookup]'s `*Name` column for `scheme`, keyed by event class
-#' VALUE, never by position in `event_classes` -- so it is correct
-#' regardless of where `reference_category` put a class in that order
-#' (unlike the old `class_label_fn(action_index)` pattern this replaces;
-#' see [diagnose_category_merges()]'s `class_labels` argument).
+#' Reads the labels from [cameo_lookup]'s `*Name` column for `scheme`,
+#' keyed by event class value, never by position in `event_classes`, so
+#' the result is correct wherever `reference_category` put a class in that
+#' order. The other post-fit functions use it for their `class_labels`
+#' default.
 #'
 #' `scheme` names a [cameo_lookup] column with a matching `*Name` column:
 #' currently `"QuadClass"` (`QuadClassName`), `"PentaClass"`
@@ -472,9 +468,8 @@ event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var
 #' Resolve a `class_labels` argument to one label per event class, in order
 #'
 #' Shared by [diagnose_category_merges()], [extract_gamma()],
-#' [icc_curves()], and [check_compositional_residuals()] (0.10.1,
-#' replacing each function's own `class_label_fn(action_index)` handling).
-#' Always looks labels up by event class VALUE, never by position, so a
+#' [icc_curves()], and [check_compositional_residuals()]. Always looks
+#' labels up by event class VALUE, never by position, so a
 #' `class_labels` vector (or the default from [event_class_labels()])
 #' need not share `event_classes`' order.
 #'
@@ -497,7 +492,7 @@ event_class_labels <- function(stan_data, scheme = attr(stan_data, "grouping_var
 #'   the attribute is present) is not caught here and propagates.
 #' @return Character vector, `length(event_classes)`, in `event_classes`
 #'   order.
-#' @keywords internal
+#' @noRd
 .resolve_class_labels <- function(class_labels, event_classes, stan_data = NULL) {
   if (is.null(class_labels)) {
     class_labels <- if (!is.null(stan_data) && !is.null(attr(stan_data, "event_classes"))) {

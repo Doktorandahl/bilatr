@@ -22,7 +22,7 @@ in closed form: \code{theta = (mu_j - mu_k) / (alpha_j - alpha_k)}, since
 is strictly increasing, so equal probabilities need equal linear
 predictors) iff \code{alpha_j * theta - mu_j == alpha_k * theta - mu_k}.
 Computed per posterior draw (reusing \code{x}'s stored \code{alpha}/
-\code{mu_intercept} draws -- no re-read of \code{fit}) and summarised to a
+\code{mu_intercept} draws -- no re-read of \code{fit}) and summarized to a
 median and posterior interval; undefined (\code{NA}) for draws where
 \code{alpha_j == alpha_k} exactly.
 }

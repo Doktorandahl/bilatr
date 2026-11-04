@@ -1,8 +1,6 @@
-test_that("every non-legacy registered model's GENERATED partial_log_lik block matches the canonical source", {
-  # Legacy (status = "legacy") .stan files under inst/stan/legacy/ are
-  # frozen snapshots -- data-raw/sync_stan_functions.R deliberately
-  # excludes them from its target_files list, so they are not re-synced
-  # here either (see that script's header).
+test_that("every registered model's GENERATED partial_log_lik block matches the canonical source", {
+  # Every registered model is checked; a model registered with status
+  # "legacy" would be a frozen snapshot and is skipped.
   fragment_path <- system.file(
     "stan", "include", "partial_log_lik.stanfunctions",
     package = "bilatr"

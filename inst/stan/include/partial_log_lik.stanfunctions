@@ -1,20 +1,16 @@
 // Shared reduce_sum likelihood for all bilatr Stan model variants.
 //
-// Indifferent to how `alpha` and `mu_intercept` were constructed upstream
-// (fixed-reference vs. sum-to-zero, static vs. OU-derived theta, ...): it
-// only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
-// vectors.
+// Indifferent to how `theta`, `alpha` and `mu_intercept` were constructed
+// upstream (random walk or OU process, with or without country offsets):
+// it only consumes the already-built `theta`/`alpha`/`mu_intercept`/`phi`
+// values.
 //
-// This is the single canonical source. It is NOT included at compile/
-// sample time via Stan's `#include` (cmdstanr breaks `#include` resolution
-// at $sample()-time whenever include_paths contains a space -- see
-// https://github.com/stan-dev/cmdstanr/issues/820 -- which bites this
-// project's own devtools::load_all() working tree). Instead,
-// `data-raw/sync_stan_functions.R` splices this file's contents verbatim
-// into a marker-delimited block in each registered model's `.stan` file;
-// see `R/stan_includes.R`. Edit only this file, then rerun the sync
-// script -- do not hand-edit the generated blocks, and do not fork this
-// file per variant.
+// This is the single canonical source. It is not included via Stan's
+// `#include`, which cmdstanr cannot resolve at sampling time when the
+// include path contains a space
+// (https://github.com/stan-dev/cmdstanr/issues/820). Instead, its contents
+// are copied verbatim into a marker-delimited block in each model's
+// `.stan` file, and the package tests check that the copies match.
 real partial_log_lik(array[] int slice_d,
                       int start, int end,
                       int T, int A,
@@ -38,39 +34,17 @@ real partial_log_lik(array[] int slice_d,
   return lp;
 }
 
-// Country-offset variant of partial_log_lik(), added alongside it (0.7.0,
-// bilatr_alphanorm_gamma.stan / registered `stable_gamma`) -- not a fork,
-// per this file's own header: partial_log_lik() itself is untouched, and
-// every other registered program (stable, ou, and the legacy soft-anchor
-// pair) gets this spliced in too via data-raw/sync_stan_functions.R, as
-// an unused extra function, so their .stan text changes (one-time
-// recompile) but their data/parameter blocks -- and hence fits already on
-// disk -- are untouched.
+// Country-offset variant of partial_log_lik(), used by the `stable_gamma`
+// model (and present, unused, in the other models' copies of this file).
 //
-// g_d, the per-dyad country offset, is built ONCE PER DYAD, outside the
-// `t` loop -- not stored anywhere (see bilatr_alphanorm_gamma.stan's
-// header, "Part 0b": a per-dyad-period or per-dyad matrix in transformed
-// parameters would be written to the output CSV at prohibitive cost).
+// The per-dyad country offset g_d is built once per dyad, outside the `t`
+// loop, and folded into the intercept (mu_eff = mu_intercept + g_d), so
+// the per-cell expression has the same shape and autodiff cost as
+// partial_log_lik()'s. g_d is not stored: a per-dyad matrix in
+// transformed parameters would be written to the output for every draw.
 // w_send[d] == 1 covers directed data (g_d = gamma[, ctry_a[d]] exactly,
-// ctry_b[d] unused) and the directed-as-degenerate-undirected case alike;
-// any other value mixes ctry_a's and ctry_b's columns by event share (see
-// bilatr_alphanorm_gamma.stan's header for the directed/undirected
-// design this implements).
-//
-// 0.7.1: g_d is folded into the intercept ONCE PER DYAD (mu_eff =
-// mu_intercept + g_d), not subtracted a second time inside the `t`
-// loop's per-cell `eta` -- g_d is dyad-constant, so re-subtracting it at
-// every observed cell was A extra autodiff nodes per cell for nothing
-// (~3-8% more nodes in eta's part of the graph at production scale, all
-// avoidable). The per-cell body below (`eta = alpha .* theta - mu_eff;
-// ...`) is now the same shape, and the same autodiff cost, as
-// partial_log_lik()'s -- the only added work is A new vars per dyad, not
-// per dyad-period. This makes stable_gamma NOT bit-identical to 0.6.x/
-// pre-0.7.1 output at n_countries > 1 ((x - mu) - g and x - (mu + g)
-// differ in floating-point association) -- but bit-identical at
-// n_countries = 1, where gamma is identically zero and mu_intercept + 0
-// is exact in IEEE 754, which is why the exact-nesting test stays valid
-// evidence for the shared-gamma design after this change.
+// ctry_b[d] unused); any other value mixes ctry_a's and ctry_b's columns
+// by event share (see the `stable_gamma` model's header).
 real partial_log_lik_offset(array[] int slice_d,
                              int start, int end,
                              int T, int A,

@@ -7,7 +7,7 @@
 #' ordered by their bracket index (`1, 2, ..., length`) regardless of how
 #' `posterior` happened to order them.
 #'
-#' @keywords internal
+#' @noRd
 .as_ordered_matrix <- function(draws, base_name) {
   mat <- posterior::as_draws_matrix(posterior::subset_draws(draws, variable = base_name))
   idx <- as.integer(stringr::str_extract(colnames(mat), "(?<=\\[)\\d+(?=\\])"))
@@ -24,7 +24,7 @@
 #'
 #' @return A list: `alpha_bar` (length `n_draws`), `var_pi` (length
 #'   `n_draws`), `info_share` (`n_draws x A`, each row summing to 1).
-#' @keywords internal
+#' @noRd
 .var_pi_alpha <- function(alpha_mat, shares) {
   if (is.null(dim(shares))) {
     shares <- matrix(shares, nrow = nrow(alpha_mat), ncol = length(shares), byrow = TRUE)
@@ -41,7 +41,7 @@
 #' alpha_k)^2 / (pi_j + pi_k)` -- see [diagnose_category_merges()] for the
 #' derivation.
 #'
-#' @keywords internal
+#' @noRd
 .pairwise_merge_loss <- function(alpha_mat, shares) {
   if (is.null(dim(shares))) {
     shares <- matrix(shares, nrow = nrow(alpha_mat), ncol = length(shares), byrow = TRUE)
@@ -62,7 +62,7 @@
 #' Loss from merging a general group `S` of categories (columns), relative
 #' to the same fixed `alpha_bar` used for the ungrouped `Var_pi(alpha)`.
 #'
-#' @keywords internal
+#' @noRd
 .group_merge_loss <- function(alpha_mat, shares, alpha_bar, cols) {
   if (is.null(dim(shares))) {
     shares <- matrix(shares, nrow = nrow(alpha_mat), ncol = length(shares), byrow = TRUE)
@@ -83,7 +83,7 @@
 #'   (labels), `loss_mean`, `loss_lower`, `loss_upper` (posterior
 #'   mean/interval of that step's `pct_info_lost`), `cumulative_loss_mean`,
 #'   `n_remaining`.
-#' @keywords internal
+#' @noRd
 .greedy_merge_ladder <- function(alpha_mat, shares, labels, probs) {
   if (is.null(dim(shares))) {
     shares <- matrix(shares, nrow = nrow(alpha_mat), ncol = length(shares), byrow = TRUE)
@@ -196,28 +196,26 @@
 #' Dirichlet concentration is near zero and the cell is effectively
 #' unconstrained.
 #'
-#' **Compute per draw, then summarise.** The loss is nonlinear in `alpha`,
+#' **Compute per draw, then summarize.** The loss is nonlinear in `alpha`,
 #' so its value at the posterior mean is not its posterior mean; every
-#' quantity here is computed for each draw and then summarised, which
+#' quantity here is computed for each draw and then summarized, which
 #' also handles `alpha`'s correlation structure for free (the sum-to-zero
 #' and RMS-1 constraints make the `alpha_k` strongly negatively
 #' correlated, so `sd(alpha_j - alpha_k)` is emphatically not
 #' `sqrt(sd_j^2 + sd_k^2)`).
 #'
-#' **On a `stable_gamma` fit (0.7.0):** every measure here (`alpha`,
+#' **On a `stable_gamma` fit:** every measure here (`alpha`,
 #' its correlation structure, the reference `shares`) is evaluated
 #' exactly as for any other model -- `gamma`/`g_d` never enter this
 #' function's computation at all. For `stable_gamma`, that means the
 #' reference share vector implicitly used (whether the empirical default,
 #' `"theta0"`, or a user-supplied `shares`) is the `gamma = 0` baseline,
 #' the same baseline [icc_curves()]'s `country = NULL` default uses --
-#' not any particular country's actual share vector. Left this way
-#' deliberately (unchanged computation, documented meaning): a
-#' country-specific merge analysis is a coherent further extension but is
-#' not implemented here.
+#' not any particular country's actual share vector. A country-specific
+#' merge analysis is not implemented.
 #'
 #' @param fit A `CmdStanMCMC`-like fit object, or a character vector of
-#'   CmdStan CSV file paths (see [.get_draws()]).
+#'   CmdStan CSV file paths (one per chain).
 #' @param stan_data The Stan data list used to produce `fit`, from
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
@@ -229,13 +227,13 @@
 #'   `A`, in the same order as `stan_data`'s `"event_classes"` attribute.
 #'   `NULL` (default) uses that attribute if present, else `"1", "2", ...`;
 #'   an explicit value wins.
-#' @param class_labels Optional; see [.resolve_class_labels()]. Defaults
-#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
-#'   [event_class_labels()]; falling back
-#'   to the raw `event_classes` if that has nothing to offer).
+#' @param class_labels Optional labels for the event classes: a character
+#'   vector named by event class, or an unnamed one in `event_classes`
+#'   order. `NULL` (default) uses `event_class_labels(stan_data)` (see
+#'   [event_class_labels()]), falling back to the raw `event_classes`.
 #' @param shares Reference category shares: `NULL` (default) uses the
 #'   empirical shares from `stan_data$Y`, summed over dyads/periods and
-#'   normalised (a single, FIXED reference point); `"theta0"` evaluates at
+#'   normalized (a single, FIXED reference point); `"theta0"` evaluates at
 #'   `softmax(-mu_intercept)` instead, per draw; or a user-supplied
 #'   numeric vector of length `A` (fixed). `pi` is a function of `theta`,
 #'   so any single share vector makes this a *local* measure at one point
@@ -252,7 +250,7 @@
 #' @param probs Posterior interval bounds to report alongside the mean
 #'   (first and last are used as the interval; a third, e.g. the median,
 #'   is ignored for `pairwise`/`ladder` but not `categories`). Stored on
-#'   the returned object (0.10.2, B3) so [merge_cost()] reuses the same
+#'   the returned object so [merge_cost()] reuses the same
 #'   outer bounds rather than a hard-coded `c(0.05, 0.5, 0.95)`.
 #' @return A `bilatr_category_merges` object: `categories` (one row per
 #'   class: `action_index`, `event_class`, `class_label`, `post_mean`,

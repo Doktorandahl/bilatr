@@ -193,7 +193,7 @@ test_that("recode_cameo also attaches QuadClassName/PentaClassName/EventCodes co
   expect_equal(out$PentaClassName, c("Verbal cooperation", "Material conflict"))
 })
 
-test_that("recode_cameo does not attach the retired classification schemes", {
+test_that("recode_cameo attaches no classification schemes beyond the documented ones", {
   events <- tibble::tibble(EventCode = c("044", "190"))
   out <- recode_cameo(events, code_col = "EventCode")
   expect_false(any(c(
@@ -285,34 +285,29 @@ test_that("recode_cameo does not warn when no recode columns pre-exist", {
   expect_no_warning(recode_cameo(events, code_col = "EventCode"))
 })
 
-test_that("assign_modified_root_code() reproduces its pre-0.10.1 snapshot exactly (0.10.1, audit §2.2)", {
-  # 0.10.1 inlined the EventRootCode3 logic that assign_modified_root_code()
-  # used to depend on (assign_eventrootcode3(), now deleted along with the
-  # other 11 retired scheme functions) directly into a single case_when(),
-  # renumbering straight to the 18 classes rather than via `erc3 - 1`. The
-  # fixture below was captured from the pre-0.10.1 implementation, over
-  # every cameo_lookup$CAMEOEVENTCODE plus every distinct EventCode in
-  # original_code/gdelt_bilatr.rds (310 distinct codes total; see
-  # dev/summary_0.10.1_api_cleanup.md), so this is a regression test against
-  # actual production-relevant input, not just a handful of hand-picked
-  # codes.
+test_that("assign_modified_root_code() reproduces its frozen snapshot exactly", {
+  # The fixture was captured from an independent implementation of the
+  # scheme, over every cameo_lookup$CAMEOEVENTCODE plus every distinct
+  # EventCode in a large GDELT extract (310 distinct codes in all), so
+  # this is a regression test against real input, not just a handful of
+  # hand-picked codes.
   snapshot <- readRDS(testthat::test_path("fixtures", "modified_root_code_snapshot.rds"))
   expect_equal(assign_modified_root_code(snapshot$code), snapshot$modified_root_code)
 })
 
-test_that(".resolve_class_labels() falls back to raw event_classes when stan_data has no \"event_classes\" attribute (0.10.2, B0b)", {
+test_that(".resolve_class_labels() falls back to raw event_classes when stan_data has no \"event_classes\" attribute", {
   event_classes <- c("2", "5", "18")
   stan_data <- list() # no "event_classes" attribute at all
   expect_equal(.resolve_class_labels(NULL, event_classes, stan_data = stan_data), event_classes)
   expect_equal(.resolve_class_labels(NULL, event_classes, stan_data = NULL), event_classes)
 })
 
-test_that(".resolve_class_labels() calls event_class_labels() (not a swallowed fallback) whenever stan_data has an \"event_classes\" attribute (0.10.2, B0b)", {
-  # 0.10.1 wrapped this call in tryCatch(..., error = function(e) NULL),
-  # which would also swallow a genuine bug inside event_class_labels()
-  # once the attribute exists, not just the "no attribute" case it was
-  # meant to catch. 0.10.2 tests for the attribute directly instead, so
-  # the only case that can produce this function's `NULL`-then-fallback
+test_that(".resolve_class_labels() calls event_class_labels() (not a swallowed fallback) whenever stan_data has an \"event_classes\" attribute", {
+  # Wrapping this call in tryCatch(..., error = function(e) NULL) would
+  # also swallow a genuine bug inside event_class_labels() once the
+  # attribute exists, not just the "no attribute" case. The function
+  # tests for the attribute directly instead, so the only case that can
+  # produce its `NULL`-then-fallback
   # path is the attribute being genuinely absent (tested above); once it
   # is present, event_class_labels()'s own return value -- success or a
   # real error -- is what callers see.

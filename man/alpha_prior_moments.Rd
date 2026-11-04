@@ -9,11 +9,12 @@ alpha_prior_moments(A, n_sim = 2e+06, fold = TRUE, seed = 1L)
 \arguments{
 \item{A}{Number of action classes.}
 
-\item{n_sim}{Number of Monte Carlo draws.}
+\item{n_sim}{Number of Monte Carlo draws. The default, \code{2e6}, gives
+moments accurate to about three decimal places.}
 
-\item{fold}{If \code{TRUE} (default), apply the same sign fold \code{stable}/\code{ou}
-apply to \code{alpha} (see \code{orientation_sign()}); if \code{FALSE}, return the
-unfolded (exchangeable) prior.}
+\item{fold}{If \code{TRUE} (default), apply the models' orientation fold
+(the sign of \code{alpha[1]}, the reference class, is made non-negative);
+if \code{FALSE}, return the unfolded, exchangeable prior.}
 
 \item{seed}{Seed for reproducibility, or \code{NULL} for an unseeded,
 uncached draw. Defaults to \code{1L}.}
@@ -38,21 +39,16 @@ this function's output instead wherever a per-class prior sd/mean is
 needed (see \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}).
 }
 \details{
-Computed by Monte Carlo (see \code{\link[=.simulate_alpha_prior]{.simulate_alpha_prior()}}, via the batched
-\code{\link[=.batched_alpha_prior_sums]{.batched_alpha_prior_sums()}}, 0.10.2) rather than a closed form, so it
-stays correct if the underlying Stan construction ever changes.
+Computed by Monte Carlo, with the same construction of \code{alpha} as the
+Stan programs (a sum-to-zero standard normal vector, scaled to
+root-mean-square 1 and, with \code{fold = TRUE}, multiplied by the sign of
+its first element), simulated in batches to bound memory.
 
-\code{seed} defaults to \code{1L} (0.10.2, B10): earlier versions defaulted to
-\code{NULL} and memoised under a cache key that included the seed, so the
-\emph{first} unseeded call in a session -- effectively seeded by whatever
-state the RNG happened to be in -- got cached and silently reused for
-every later unseeded call, making \code{contraction}/\code{z_score}/
-\code{precision_gain} (via \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}) differ between
-sessions at Monte Carlo precision. Pass \code{seed = NULL} explicitly to
-opt back into that unseeded behaviour; it is never cached, so repeat
-unseeded calls draw fresh Monte Carlo noise each time. Any non-\code{NULL}
-seed (including the \code{1L} default) is memoised per \verb{(A, n_sim, fold, seed)}, via \code{\link[=.with_seed]{.with_seed()}}, so it never disturbs the caller's own
-global RNG stream (0.10.2, B2).
+Results are reproducible: with a seed (the default is \code{1L}), the
+simulation runs under that seed without changing the caller's random
+number stream, and the result is cached for the session per \verb{(A, n_sim, fold, seed)}. \code{seed = NULL} draws from the current random number stream
+and is never cached, so repeated calls give different Monte Carlo
+noise.
 }
 \examples{
 alpha_prior_moments(4)

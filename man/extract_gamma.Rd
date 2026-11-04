@@ -14,12 +14,10 @@ extract_gamma(
 )
 }
 \arguments{
-\item{fit}{A \code{CmdStanMCMC} fit object from a \code{stable_gamma} fit (via
-\code{fit_panel(stan_model = "stable_gamma")}/
-\code{fit_dyad_ts(stan_model = "stable_gamma")}; \code{stable_gamma} is
-experimental, so fitting it emits a one-time message -- see
-\code{\link[=.bilatr_warn_if_experimental]{.bilatr_warn_if_experimental()}}),
-or a character vector of raw CmdStan CSV file paths.}
+\item{fit}{A \code{CmdStanMCMC} fit object from
+\code{fit_panel(stan_model = "stable_gamma")} or
+\code{fit_dyad_ts(stan_model = "stable_gamma")}, or a character vector of
+raw CmdStan CSV file paths.}
 
 \item{stan_data}{The Stan data list used to produce \code{fit}, from
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
@@ -35,35 +33,32 @@ columns).}
 in the same order used to build \code{stan_data}. \code{NULL} (default) uses
 \code{stan_data}'s \code{"event_classes"} attribute; an explicit value wins.}
 
-\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Ignored
-when \code{event_classes} is \code{NULL} (nothing to key labels by). Defaults
-to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\item{class_labels}{Optional labels for the event classes: a character
+vector named by event class, or an unnamed one in \code{event_classes}
+order. Ignored when \code{event_classes} is \code{NULL} (nothing to key labels
+by). \code{NULL} (default) uses \code{event_class_labels(stan_data)} (see
 \code{\link[=event_class_labels]{event_class_labels()}}).}
 }
 \value{
-A tibble (subclassed \code{bilatr_gamma}, with an \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}/
-\code{\link[=plot]{plot()}} method) with one row per (country, action type):
+A tibble (subclassed \code{bilatr_gamma}, with \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} and
+\code{plot()} methods) with one row per (country, action type):
 \code{country_code}, \code{country_index}, \code{action_index} (and
 \code{event_class}/\code{class_label} if supplied), the posterior \code{mean} of
 \code{gamma}, and one column per requested quantile.
 }
 \description{
 Pulls posterior summaries of the country-level category-offset matrix
-\code{gamma} out of a \code{stable_gamma} fit (0.7.0; see \code{R/model_registry.R}
--- the only currently-registered model with one). \code{gamma} is fully
-identified by construction (three constraints enforced in
-\verb{transformed parameters}; see \code{inst/stan/bilatr_alphanorm_gamma.stan}'s
-header) and orientation-FREE (the alpha/theta reflection symmetry's
-fold does not touch it -- see that header, "gamma is NOT multiplied by
-orientation_sign"), so no post-hoc relabeling applies to it either.
+\code{gamma} out of a \code{stable_gamma} fit, the only model with one (see
+\code{\link[=compile_bilatr_model]{compile_bilatr_model()}}, "Models"). \code{gamma} is identified by three
+constraints built into the model: for each country it sums to zero
+over action classes and is orthogonal to \code{alpha}, and for each action
+class it sums to zero over countries. It is unaffected by the models'
+orientation fold, so no relabeling applies to it.
 }
 \details{
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths,
-the same forms \code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=.get_draws]{.get_draws()}} accept. \code{gamma} is
-Tier 1 (small: \verb{A x n_countries}, see \code{.bilatr_tier1_names} in
-\code{R/diagnose_convergence.R}), so -- like \code{extract_alpha()}/
-\code{extract_mu_intercept()} -- this is one plain, unchunked read, never
-the chunked Tier 3 machinery \code{extract_theta()} needs.
+as \code{\link[=extract_alpha]{extract_alpha()}} does. \code{gamma} has \verb{A x n_countries} values, so
+the files are read in one pass, without chunking.
 }
 \examples{
 gamma <- extract_gamma(bilatr_example_fit("stable_gamma"))

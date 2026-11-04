@@ -15,12 +15,10 @@ write_residual_check(x, dir)
 \code{x}, invisibly.
 }
 \description{
-The one-call convenience for a thin runscript: \code{\link[=check_compositional_residuals]{check_compositional_residuals()}}
-itself never touches disk (a function that writes as a side effect is
-untestable and awkward to compose), so this is a separate,
-non-exported-computation wrapper writing \code{dyads}/\code{categories}/
-\code{global}/\code{eps_sensitivity} as CSVs and the three \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}
-diagnostics as PNGs into \code{dir}.
+Saves the result of \code{\link[=check_compositional_residuals]{check_compositional_residuals()}}, which itself
+never writes to disk: \code{dyads}, \code{categories}, \code{global} and
+\code{eps_sensitivity} as CSV files, and the three \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} diagnostics
+as PNG files, into \code{dir}. Useful at the end of a batch job.
 }
 \examples{
 if (requireNamespace("ggplot2", quietly = TRUE)) {

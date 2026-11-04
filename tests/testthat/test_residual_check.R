@@ -9,7 +9,7 @@ test_that(".clr(softmax(eta)) recovers eta - mean(eta) to numerical tolerance", 
   expect_equal(bilatr:::.clr(p_mat), eta_mat - rowMeans(eta_mat), tolerance = 1e-10)
 })
 
-test_that(".clr() of a composition with an exactly-zero component returns finite values (0.6.1 Cause 2)", {
+test_that(".clr() of a composition with an exactly-zero component returns finite values", {
   p <- c(0.5, 0.5, 0)
   expect_true(all(is.finite(bilatr:::.clr(p))))
 
@@ -21,7 +21,7 @@ test_that(".clr() of a composition with an exactly-zero component returns finite
   expect_equal(out[2, ], bilatr:::.clr(p_mat[2, ]), tolerance = 1e-12)
 })
 
-test_that(".rdirichlet_rows() stays finite at tiny concentrations and matches Dirichlet moments where the old sampler is safe (0.6.1 Cause 1)", {
+test_that(".rdirichlet_rows() stays finite at tiny concentrations and matches Dirichlet moments where the naive sampler is safe", {
   set.seed(101)
   A <- 23
   for (phi in c(1e-3, 1e-4, 1e-5, 1e-6)) {
@@ -54,8 +54,8 @@ test_that("RMS-1 identification: sd(outer(theta, alpha)) == sqrt(mean(theta^2)) 
   # (implied_beta_rms's per-component comparator reduces to the RMS of
   # theta itself because mean(alpha_k^2) = 1 exactly) -- asserted here as
   # a free check on the identification, not recomputed inside
-  # check_compositional_residuals() itself. Verified in the prompt against
-  # a real simulated panel: 1.82148 vs 1.82147.
+  # check_compositional_residuals() itself. On a larger simulated panel
+  # the two agree to five significant figures (1.82148 vs 1.82147).
   set.seed(2)
   A <- 10
   alpha_raw <- rnorm(A)
@@ -89,7 +89,7 @@ test_that(".stratified_dyad_sample() returns the target size, spans strata, and 
   expect_equal(length(s3), 10)
 })
 
-test_that(".stratified_dyad_sample() returns every element when a stratum is a singleton (B1)", {
+test_that(".stratified_dyad_sample() returns every element when a stratum is a singleton", {
   # sample(idx, k) on a length-1 idx samples from 1:idx instead of
   # returning that element (R's classic sample()-on-a-single-number
   # trap) -- needs D < 2 * n_strata so at least one stratum has exactly
@@ -102,7 +102,7 @@ test_that(".stratified_dyad_sample() returns every element when a stratum is a s
   }
 })
 
-test_that(".stratified_dyad_sample() draws a sub-D sample, one per stratum's range, even with singleton strata (B1)", {
+test_that(".stratified_dyad_sample() draws a sub-D sample, one per stratum's range, even with singleton strata", {
   n_d <- 1:10
   strat <- dplyr::ntile(n_d, 8)
   for (seed in 1:50) {
@@ -233,7 +233,7 @@ test_that("determinism: the same seed on the same fit/stan_data reproduces ident
   expect_equal(r1$dyads, r2$dyads)
 })
 
-test_that(".drop_nonfinite_draws() drops affected draws, warns once, and reports the count (0.6.1 Cause 3)", {
+test_that(".drop_nonfinite_draws() drops affected draws, warns once, and reports the count", {
   n_draws <- 30
   A <- 4
   T_obs_acc <- matrix(1, n_draws, 2)
@@ -294,7 +294,7 @@ test_that(".drop_nonfinite_draws() stops rather than reports when too few draws 
   )
 })
 
-test_that("check_compositional_residuals() reports phi_min per dyad and overall (0.6.1)", {
+test_that("check_compositional_residuals() reports phi_min per dyad and overall", {
   dat <- .make_fake_residual_data(D = 60, Tn = 8, A = 5, seed = 71, beta = NULL, phi_val = 10)
   fit <- .make_fake_residual_fit(dat, n_pseudo_draws = 50)
 
@@ -340,7 +340,7 @@ test_that("check_compositional_residuals() runs end to end on a real CmdStan fix
   expect_true(file.exists(file.path(outdir, "residual_check_perp_vs_n.png")))
 })
 
-test_that("check_compositional_residuals() does not disturb the caller's global RNG stream (0.10.2, B2)", {
+test_that("check_compositional_residuals() does not disturb the caller's global RNG stream", {
   skip_if_no_cmdstan()
   fx <- make_csv_diagnostics_fixture()
 

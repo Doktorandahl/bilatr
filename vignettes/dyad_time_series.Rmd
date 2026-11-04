@@ -120,12 +120,12 @@ higher values make `reference_category` more likely relative to the
 other action types. With a cooperative reference category, higher θ
 means more cooperative relations, so here we use PentaClass 1 (verbal
 cooperation). It becomes `alpha[1]`, the discrimination parameter the
-model always reports as non-negative via an orientation fold (see
-`inst/stan/bilatr_alphanorm.stan`'s header, "IDENTIFICATION: ORIENTATION
-FOLD"); the `reference_category` argument of `?prepare_stan_data` has
-the details. Every other action class's discrimination is
-freely estimated subject to `alpha` summing to exactly 0 across all
-classes (RMS normalized to 1) -- there is no single fixed-at-1 element.
+model always reports as non-negative (the model's orientation fold,
+described in the header of its Stan program); the `reference_category`
+argument of `?prepare_stan_data` has the details. Every other action
+class's discrimination is freely estimated subject to `alpha` summing
+to exactly 0 across all classes (RMS normalized to 1) -- there is no
+single fixed-at-1 element.
 
 The example below uses a short warmup/sampling run (this vignette was
 computed ahead of time, with CmdStan, and is kept quick to re-run); real

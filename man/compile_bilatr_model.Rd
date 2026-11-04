@@ -40,20 +40,9 @@ before submitting batch jobs) or with a non-default \code{opt_level}.
 
 Three models are available:
 \itemize{
-\item \code{"stable"} (the default): the dynamic IRT model. Each dyad's latent
-state \code{theta} follows a random walk; action counts follow a
-Dirichlet-multinomial whose category probabilities depend on \code{theta}
-through the discrimination vector \code{alpha} and the intercepts
-\code{mu_intercept}. Process noise, the dispersion \code{phi} and the initial
-state are partially pooled across dyads.
-\item \code{"ou"} (experimental): as \code{"stable"}, but \code{theta} follows a
-mean-reverting Ornstein-Uhlenbeck (AR(1)) process around a
-dyad-specific level, with a shared persistence \code{rho} (prior
-\code{beta(rho_prior_a, rho_prior_b)}; see \code{\link[=prepare_stan_data]{prepare_stan_data()}}).
-\item \code{"stable_gamma"} (experimental): as \code{"stable"}, plus a country-level
-offset \code{gamma} on each action category, which absorbs a country's
-habitual repertoire. Needs actor columns in the data; see
-\code{\link[=extract_gamma]{extract_gamma()}}.
+\item \code{"stable"} (the default): The dynamic IRT model. Each dyad's latent state \code{theta} follows a random walk; its event counts follow a Dirichlet-multinomial whose class probabilities depend on \code{theta} through the discrimination vector \code{alpha} and the intercepts \code{mu_intercept}. Process noise, the dispersion \code{phi} and the initial states are partially pooled across dyads.
+\item \code{"ou"} (experimental): As \code{"stable"}, but \code{theta} follows a mean-reverting Ornstein-Uhlenbeck (AR(1)) process around a dyad-specific level \code{mu_dyad}, with a shared persistence \code{rho} (prior \code{beta(rho_prior_a, rho_prior_b)}; see \code{\link[=prepare_stan_data]{prepare_stan_data()}}). \code{within_between_ratio} is the ratio of within-dyad to between-dyad standard deviation.
+\item \code{"stable_gamma"} (experimental): As \code{"stable"}, plus a country-level offset \code{gamma} on each action class, which absorbs a country's habitual repertoire, so \code{theta} is measured net of each country's baseline mix of event types. Directed and undirected data estimate the same \code{gamma}; for an undirected pair the two countries' offsets are averaged by event share, a first-order approximation. Needs actor columns in the data; see \code{\link[=extract_gamma]{extract_gamma()}}.
 }
 
 The experimental models have not yet been calibrated or tested at
@@ -66,8 +55,7 @@ session.
 The \code{.stan} file is copied into a cache directory and compiled there:
 by default \verb{file.path(tools::R_user_dir("bilatr", "cache"), "models", <bilatr version>)}, so each package version compiles its own
 executables. Set \code{options(bilatr.model_dir = "<directory>")} to use
-another directory, for example one shared by the jobs of a cluster
-run. Compiled models are reused across sessions until the \code{.stan} file
+another directory, for example one shared by several batch jobs. Compiled models are reused across sessions until the \code{.stan} file
 changes. \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}} deletes them.
 
 Compiling needs the 'cmdstanr' package and a working CmdStan

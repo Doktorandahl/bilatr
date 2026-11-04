@@ -23,7 +23,7 @@ check_compositional_residuals(
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object, or a character vector of raw
 CmdStan CSV file paths (one per chain) -- the same forms
-\code{\link[=extract_alpha]{extract_alpha()}}/\code{\link[=.get_draws]{.get_draws()}} accept.}
+\code{\link[=extract_alpha]{extract_alpha()}} accepts.}
 
 \item{stan_data}{The Stan data list used to produce \code{fit}, from
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
@@ -42,8 +42,8 @@ country offset \code{g_d}.}
 \item{n_dyads}{Target size of the stratified dyad subsample (capped at
 the number of eligible -- i.e. \code{n_d > 0} -- dyads). Default \code{1500}.}
 
-\item{n_strata}{Number of volume strata for \code{\link[=.stratified_dyad_sample]{.stratified_dyad_sample()}}.
-Default \code{8}.}
+\item{n_strata}{Number of strata of dyads by event volume (quantiles of
+\code{n_d}) the subsample is stratified over. Default \code{8}.}
 
 \item{n_draws}{Target number of posterior draws to subsample (capped
 at the number available). Default \code{200}.}
@@ -68,8 +68,9 @@ medians (\code{dyads$along_lower}/\code{along_upper},
 in \code{stan_data}'s action-dimension order. \code{NULL} (default) uses
 \code{stan_data}'s \code{"event_classes"} attribute; an explicit value wins.}
 
-\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
-to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
+\item{class_labels}{Optional labels for the event classes: a character
+vector named by event class, or an unnamed one in \code{event_classes}
+order. \code{NULL} (default) uses \code{event_class_labels(stan_data)} (see
 \code{\link[=event_class_labels]{event_class_labels()}}).}
 }
 \value{
@@ -77,7 +78,7 @@ A \code{bilatr_residual_check} object: \code{dyads} (one row per sampled
 dyad: \code{dyad_id}, \code{dyad}, \code{dyad2}, \code{n_d}, \code{n_obs_t}, \code{along_mean},
 \code{along_lower}/\code{along_upper}, \code{perp_norm2_mean}, \code{ppp_dyad},
 \code{phi_min} -- the smallest \code{phi_d} posterior draw seen for that dyad,
-a modelling signal worth seeing in its own right when a dyad's \code{phi}
+a modeling signal worth seeing in its own right when a dyad's \code{phi}
 is barely identified),
 \code{categories} (one row per action category: \code{action_index},
 \code{event_class}, \code{class_label}, \code{contribution_obs}/\code{contribution_rep}
@@ -86,8 +87,7 @@ and their intervals, \code{contribution_ratio}), \code{global} (\code{pooled_ppp
 \code{theta_total_rms}, \code{beta_signal_ratio}, \code{eps_sensitivity},
 \code{D_sample}, \code{n_draws_used}, \code{n_draws_dropped} -- posterior draws
 excluded from the pooled statistics because they produced a
-non-finite compositional residual, see \code{\link[=.drop_nonfinite_draws]{.drop_nonfinite_draws()}} --
-and \code{phi_min}, the minimum of \code{dyads$phi_min}), and \code{settings} (the
+non-finite compositional residual (with a warning) -- and \code{phi_min}, the minimum of \code{dyads$phi_min}), and \code{settings} (the
 resolved arguments, including \code{sampled_dyad_ids} and
 \code{n_draws_dropped}).
 }
@@ -116,8 +116,8 @@ in every registered model) -- keep it, so a future model whose \code{alpha}
 does not sum to zero stays correct.
 
 \strong{The pooled statistic is the one with power; the per-dyad check is
-calibrated but nearly powerless} (see the prompt's own simulation:
-at \code{D = 400}, a per-dyad \code{beta} of RMS 0.40 flags only a fifth of
+calibrated but nearly powerless} (in simulations at \code{D = 400}, a
+per-dyad \code{beta} of RMS 0.40 flags only a fifth of
 dyads, while the pooled statistic \verb{T = sum_d ||perp_d||^2} detects
 decisively from about \code{beta} RMS 0.15). Accordingly:
 \itemize{
@@ -125,7 +125,7 @@ decisively from about \code{beta} RMS 0.15). Accordingly:
 headline test, in \code{global$pooled_ppp};
 \item \code{dyads$ppp_dyad} is a \emph{secondary} diagnostic for \emph{which} dyads,
 never the test itself;
-\item at production scale the pooled p-value saturates (rejects for
+\item in a large panel the pooled p-value saturates (rejects for
 almost any non-zero \code{beta}), so \code{global$implied_beta_rms} -- a
 \strong{rough moment estimator}, \code{sqrt(max(0, (T_obs - mean(T_rep)) / D) / A)}, good to a few tens of percent and biased slightly high, not a
 calibrated estimate -- is the number that actually carries decision
@@ -153,8 +153,8 @@ deliberate bias against proposing \verb{D x (A - 2)} new parameters. A
 ratio near 0.05 is a curiosity; approaching 0.3-0.5 is a real case for
 \code{beta_d}. (The equivalence this reduction relies on --
 \code{sd(outer(theta_dt, alpha)) == sqrt(mean(theta_dt^2))} -- is asserted
-as a test of \code{alpha}'s RMS-1 identification, not recomputed here; see
-\code{tests/testthat/test_residual_check.R}.)
+in the package tests as a check of \code{alpha}'s RMS-1 identification, not
+recomputed here.)
 
 \strong{Two further interpretation points:}
 \itemize{
@@ -176,7 +176,7 @@ itself by category (\verb{sum_d perp_dk^2}, observed vs. replicate), to
 show which categories drive the dispersion.
 }
 
-\strong{Scale and subsampling.} At production scale (\code{D} ~ 16750, \code{T} ~ 35)
+\strong{Scale and subsampling.} For a large panel (\code{D} ~ 16750, \code{T} ~ 35)
 a full sweep needs ~586k Dirichlet-multinomial simulations per draw --
 not feasible, and not necessary for a PPC. Dyads are subsampled
 (stratified by volume, \code{n_dyads}/\code{n_strata}, reproducible from \code{seed};
@@ -184,7 +184,7 @@ the volume gradient is scientifically interesting in its own right,
 since whether \code{beta} is needed may depend on it) and draws are
 subsampled (\code{n_draws}; a PPC does not need the full posterior). Only
 \code{theta[d,t]} for the sampled dyads' \emph{observed} periods is ever read
-(via \code{\link[=.get_draws]{.get_draws()}}, the same reader \code{\link[=extract_theta]{extract_theta()}} uses), and the
+(with the same reader \code{\link[=extract_theta]{extract_theta()}} uses), and the
 pooled statistic is reported per sampled dyad (\code{D_sample}, in
 \code{settings}) so results are comparable across subsample sizes.
 }

@@ -9,7 +9,7 @@
 #' @return `value` (coerced to character) if it is present in `classes`.
 #'   `NULL` is returned as-is: the only way to say "no preference", which
 #'   in [prepare_stan_data()] anchors on the first action column.
-#' @keywords internal
+#' @noRd
 validate_reference_class <- function(value, classes, arg_name,
                                      null_hint = "the first class instead (C-locale numeric sort)") {
   if (is.null(value)) {
@@ -44,13 +44,13 @@ validate_reference_class <- function(value, classes, arg_name,
 #' @param classes Vector of observed event-class values.
 #' @param reference_category Value to place first, or `NULL`.
 #' @return Character vector of unique classes in anchor order.
-#' @keywords internal
+#' @noRd
 order_event_classes <- function(classes, reference_category = NULL) {
-  # locale = "C" (0.7.1): str_sort()'s default locale is the system's
+  # locale = "C": str_sort()'s default locale is the system's
   # ("en" here), which is locale-COLLATION-dependent -- and this ordering
   # *defines* what alpha/mu_intercept/gamma's action-index columns mean
-  # (the same class of concern as prepare_stan_data()'s country index;
-  # see R/stan_data.R). "C" gives byte/ASCII-order collation, so a
+  # (the same class of concern as prepare_stan_data()'s country index).
+  # "C" gives byte/ASCII-order collation, so a
   # stan_data.rds re-derived on a machine with a different locale can't
   # silently relabel action classes; `numeric = TRUE` still gives the
   # intended natural/numeric-aware ordering ("2" before "10") under "C".
@@ -66,9 +66,7 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #' identifiers (see [extract_theta()]). Builds the table directly from the
 #' (already sorted, already `min_n_events`-filtered) dyads and the full
 #' time range, so its rows are in the same order as `Y`'s: dyad
-#' (`dyad_id`), then time. Until 0.12.0 this was `.make_dyad_ids_generic()`;
-#' the `make_dyad_ids()` of bilatr 0.11.0 and earlier built the old
-#' `actor_a`/`actor_b` table.
+#' (`dyad_id`), then time.
 #'
 #' @param dyads Character vector of retained dyads, in `dyad_id` order.
 #' @param actor1,actor2 Character vectors of each dyad's actors (aligned
@@ -81,7 +79,7 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #'   (the undirected dyad key), `actor1`, `actor2` (`dyad2`/`actor1`/
 #'   `actor2` are `NA` when `actor1` is `NULL`), the time column, and any
 #'   `time_labels` columns.
-#' @keywords internal
+#' @noRd
 make_dyad_ids <- function(dyads, actor1, actor2, time_values, time_col, time_labels = NULL) {
   D <- length(dyads)
   Tn <- length(time_values)

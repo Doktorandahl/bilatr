@@ -19,7 +19,7 @@
 A \code{ggplot} object.
 }
 \description{
-Summarises the runs with \code{\link[=summarise_benchmark]{summarise_benchmark()}}, marks the Pareto
+Summarizes the runs with \code{\link[=summarize_benchmark]{summarize_benchmark()}}, marks the Pareto
 front with \code{\link[=benchmark_pareto]{benchmark_pareto()}}, and draws the heatmap of
 \code{\link[=plot_benchmark]{plot_benchmark()}}.
 }

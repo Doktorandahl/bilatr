@@ -59,8 +59,9 @@ action types. With a cooperative reference category, higher
 
 The reference category is placed first, and every bilatr model folds
 the sign of its discrimination \code{alpha[1]} into the reported \code{alpha}
-and \code{theta}, so the reported \code{alpha[1]} is never negative (see each
-\code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"). Since
+and \code{theta}, so the reported \code{alpha[1]} is never negative (see the
+header of each
+model's Stan program, "Sign: the ORIENTATION FOLD"). Since
 \code{alpha} sums to zero, \code{alpha[1]} is at least the average
 discrimination of the other classes, and the reference class gains
 probability relative to them as \eqn{\theta} rises.
@@ -117,8 +118,9 @@ file's \verb{generated quantities} block) as opposed to the smoothed
 \code{theta} every fit already returns. Left off by default: computing it
 for every dyad is \code{D * T} iterations with \code{A} \code{digamma()} calls each,
 single-threaded (no \code{reduce_sum} in \verb{generated quantities}), on the
-order of a minute or two per chain for a full production-sized dyad
-set, and adds two more \verb{D x T}-scaled Tier 3 blocks to the output.}
+order of a minute or two per chain for a panel of about 17,000 dyads
+over 35 years, and adds two more \verb{D x T}-scaled Tier 3 blocks to the
+output.}
 
 \item{filter_dyads}{Optional character vector of dyad names (matched
 against the \code{dyad_ids} attribute's \code{dyad} column) naming which dyads
@@ -166,7 +168,7 @@ for undirected dyads, else \code{FALSE}.
 Packages a dyad x time-period table of action counts (see
 \code{?bilatr_dyad_period_data}), from \code{\link[=aggregate_events]{aggregate_events()}} or any other
 source, as the data list expected by the package's Stan models (see
-\code{R/model_registry.R}).
+\code{\link[=compile_bilatr_model]{compile_bilatr_model()}}, "Models").
 }
 \details{
 In order:

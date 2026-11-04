@@ -12,7 +12,7 @@
 
 \item{n_tier2}{Maximum number of Tier 2 rows to print.}
 
-\item{n_gamma}{(0.7.1) Maximum number of \code{gamma} rows to print, PER
+\item{n_gamma}{Maximum number of \code{gamma} rows to print, PER
 ranking (worst by \code{rhat}, worst by \code{ess_bulk} -- so up to \code{2 * n_gamma} rows total, fewer if the two rankings overlap or there are
 fewer flagged elements than that).}
 
@@ -24,9 +24,8 @@ fewer flagged elements than that).}
 \description{
 Tier 1 (global/shared parameters) is always printed in full, since it
 should never be silently summarized away. \code{stable_gamma}'s \code{gamma}
-(0.7.1) gets its own section instead of being part of that full-print
-promise -- at production scale it is thousands of parameters, and a
-routine number will flag as a matter of course, so only the worst few
+gets its own section instead: in a large panel it has thousands of
+elements, and a routine number will be flagged, so only the worst few
 by Rhat and by ESS are shown (silently absent for a model without
 \code{gamma}; see \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s \code{stan_model} argument). Tier 2
 (per-dyad hierarchical parameters) is printed as a compact table

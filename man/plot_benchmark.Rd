@@ -7,9 +7,9 @@
 plot_benchmark(summary_df, metric = "iter_per_sec_median", facet = "scenario")
 }
 \arguments{
-\item{summary_df}{A benchmark summary from \code{\link[=summarise_benchmark]{summarise_benchmark()}},
+\item{summary_df}{A benchmark summary from \code{\link[=summarize_benchmark]{summarize_benchmark()}},
 optionally passed through \code{\link[=benchmark_pareto]{benchmark_pareto()}}. A
-\code{bilatr_benchmark} result from \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} is summarised
+\code{bilatr_benchmark} result from \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} is summarized
 (and its Pareto front marked) first.}
 
 \item{metric}{Column to map to the fill. Default
@@ -33,9 +33,9 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
   runs$sampling_sec <- c(40, 38, 25, 26)
   runs$iter_per_sec <- 100 / runs$sampling_sec
   runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
-  plot_benchmark(benchmark_pareto(summarise_benchmark(runs)))
+  plot_benchmark(benchmark_pareto(summarize_benchmark(runs)))
 }
 }
 \seealso{
-\code{\link[=summarise_benchmark]{summarise_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}}
+\code{\link[=summarize_benchmark]{summarize_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}}
 }

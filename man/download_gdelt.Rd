@@ -39,8 +39,8 @@ See "Details" above.
 }
 \description{
 Lists the files covering \verb{[start, end]} with \code{\link[=gdelt_files]{gdelt_files()}}, then
-downloads each (this fixes audit G2/G3: one request per file, under a
-locally-raised, generous \code{timeout}, never a swallowed failure).
+downloads each: one request per file, with a generous \code{timeout}, and
+every failure reported.
 }
 \details{
 \strong{\code{dest_dir = NULL}} (default): each file is downloaded to a

@@ -5,10 +5,10 @@
 #' (a stratified dyad subsample, a fallback theta-range subsample, the
 #' `alpha` prior simulation) without imposing that reproducibility on
 #' whatever else the caller's session is doing with randomness. Calling
-#' `set.seed()` directly, as these all used to, resets the *global*
-#' `.Random.seed`, so e.g. calling [check_compositional_residuals()] in
-#' the middle of an unrelated simulation silently resets that
-#' simulation's stream too (0.10.2, B2). This saves `.Random.seed`
+#' `set.seed()` directly would reset the *global* `.Random.seed`, so e.g.
+#' calling [check_compositional_residuals()] in the middle of an
+#' unrelated simulation would silently reset that simulation's stream
+#' too. This saves `.Random.seed`
 #' (or notes that it was absent, e.g. before any random-number function
 #' has run this session), seeds, evaluates `code`, and restores the saved
 #' state -- or removes `.Random.seed` again if there wasn't one -- on
@@ -17,7 +17,7 @@
 #' @param seed Seed to set for the duration of `code`.
 #' @param code An expression to evaluate under that seed.
 #' @return The value of `code`.
-#' @keywords internal
+#' @noRd
 .with_seed <- function(seed, code) {
   has_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
   old_seed <- if (has_seed) get(".Random.seed", envir = .GlobalEnv, inherits = FALSE) else NULL

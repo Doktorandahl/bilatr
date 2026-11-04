@@ -17,7 +17,7 @@ in the same order used to build the Stan data (i.e. its
 an \code{event_class} column is added alongside the raw action index.
 \code{NULL} (default) uses the \code{event_classes} of the Stan data attached to
 \code{fit} by \code{\link[=fit_panel]{fit_panel()}}/\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}, if any; otherwise the output
-is unlabelled.}
+is unlabeled.}
 
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
@@ -29,29 +29,22 @@ A tibble with one row per action type: \code{action_index}
 }
 \description{
 Pulls posterior summaries of the action-type discrimination parameters
-\code{alpha} out of a fitted model. \code{alpha} sums to exactly 0 and has RMS 1
-for \code{stable}/\code{ou}; \code{alpha[1]}, the discrimination of the
-\code{reference_category} class, is always reported non-negative via the
-orientation fold (see each \code{.stan} file's header, "IDENTIFICATION:
-ORIENTATION FOLD"). See the package's identification notes in
-\code{vignette("dyad_time_series")}. \code{alpha}'s sign is already canonical by
-construction, so no post-hoc relabeling is needed here.
+\code{alpha} out of a fitted model. \code{alpha} sums to exactly 0 and has
+root-mean-square 1 in every model; \code{alpha[1]}, the discrimination of
+the \code{reference_category} class, is always reported non-negative (the
+models' orientation fold), so no post-hoc relabeling is needed. See
+the identification notes in \code{vignette("dyad_time_series", package = "bilatr")}.
 }
 \details{
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
-(one per chain), for the case where there is no in-memory fit at all
--- e.g. a post-hoc, cross-chain roll-up script run after several
-independently-submitted single-chain SLURM jobs have all completed,
-with only their saved CSVs on disk. Unlike \code{\link[=extract_theta]{extract_theta()}}'s
-CSV-path mode, \code{alpha} is small (Tier 1: a handful of values
-regardless of dyad-set size), so there is no chunking machinery
-here -- just one plain read (via \link{.get_draws}) across all
-of \code{fit}, then the same extraction logic either way.
+(one per chain), for when there is no fit object in memory, for
+example after chains were run as separate jobs. \code{alpha} has only \code{A}
+values, so the files are read in one pass, without chunking.
 }
 \examples{
 # cross-chain roll-up from saved CSVs, no in-memory fit (here, the
 # example fit shipped with bilatr). A fit object from fit_panel() is
-# labelled from attr(fit, "stan_data"); CSVs need `event_classes`.
+# labeled from attr(fit, "stan_data"); CSVs need `event_classes`.
 csv_files <- bilatr_example_fit()
 stan_data <- readRDS(file.path(dirname(csv_files[1]), "example_stan_data.rds"))
 extract_alpha(csv_files, event_classes = attr(stan_data, "event_classes"))

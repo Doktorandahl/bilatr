@@ -1,0 +1,23 @@
+citHeader(paste(
+  "To cite bilatr, the method or the software, please use the entry below.",
+  "For the estimated theta trajectories, please also cite the data release",
+  "and the GDELT references given in ?theta_trajectories."
+))
+
+bibentry(
+  bibtype = "Manual",
+  title = "{bilatr}: Hierarchical Dynamic {IRT} Models for Latent Bilateral Relations",
+  author = c(
+    person("David", "Randahl", comment = c(ORCID = "0000-0003-1069-6067")),
+    person("Magnus", "Lundgren", comment = c(ORCID = "0000-0002-9961-3645")),
+    person("Carl", "Vikberg", comment = c(ORCID = "0000-0001-7523-9196"))
+  ),
+  year = "2026",
+  note = "R package version 1.0.0",
+  url = "https://github.com/doktorandahl/bilatr",
+  textVersion = paste(
+    "Randahl, D., Lundgren, M. and Vikberg, C. (2026).",
+    "bilatr: Hierarchical Dynamic IRT Models for Latent Bilateral Relations.",
+    "R package version 1.0.0, <https://github.com/doktorandahl/bilatr>."
+  )
+)

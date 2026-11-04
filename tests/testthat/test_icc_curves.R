@@ -86,7 +86,7 @@ test_that("theta_range resolution: explicit range takes precedence, then theta_s
   )
 })
 
-test_that("icc_curves()'s dyad-subsample fallback does not disturb the caller's global RNG stream (0.10.2, B2)", {
+test_that("icc_curves()'s dyad-subsample fallback does not disturb the caller's global RNG stream", {
   fx <- .make_icc_fixture(D = 8, Tn = 3)
 
   runif(1) # ensure .Random.seed exists before capturing it

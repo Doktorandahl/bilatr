@@ -4,9 +4,7 @@ test_that("the registry contains exactly stable/ou/stable_gamma", {
     c("stable", "ou", "stable_gamma")
   )
   expect_identical(.BILATR_DEFAULT_MODEL, "stable")
-  # retired variants must not be registered: the pre-0.4.0 stable/ou
-  # themselves, phi_logn, and (0.10.0) the pre-0.4.2 soft-anchor stack
-  # and its pre-0.4.0 aliases
+  # names of unsupported development models must not be registered
   expect_false(any(
     c(
       "phi_logn", "stable_ncproc", "phi_logn_ncproc",
@@ -41,7 +39,7 @@ test_that(".bilatr_model_has_gamma() is TRUE only for stable_gamma", {
 test_that(".resolve_stan_model() errors informatively on an unknown name", {
   expect_error(.resolve_stan_model("not_a_real_model"), "Unknown stan_model")
   expect_error(.resolve_stan_model("not_a_real_model"), "stable")
-  # phi_logn is retired -> also an unknown name now (never registered)
+  # an unsupported development model name is also unknown
   expect_error(.resolve_stan_model("phi_logn"), "Unknown stan_model")
 })
 
@@ -65,10 +63,8 @@ test_that("every registered model's file actually exists under inst/stan/", {
   }
 })
 
-# The following two blocks moved from tests/testthat/test_fit_dev.R
-# (0.10.1: fit_dyad_ts()/fit_panel() gained stan_model directly, so the
-# dispatch/validation these exercised is reached through the public
-# functions now, not the removed fit_dyad_ts_dev()/fit_panel_dev()).
+# The following two blocks check that fit_dyad_ts()/fit_panel() validate
+# `stan_model` before doing anything else.
 
 test_that("fit_dyad_ts()/fit_panel() reject an unknown stan_model before touching Stan", {
   fake_data_d1 <- list(D = 1, T = 3, A = 4)

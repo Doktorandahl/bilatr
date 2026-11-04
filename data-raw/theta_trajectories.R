@@ -1,6 +1,12 @@
 # theta_trajectories.R
 #
-# Builds data/theta_directed.rda and data/theta_undirected.rda (documented
+# NOTE: since bilatr 1.0.0 the theta tables are no longer in data/. They are
+# published as a data release (data-raw/make_data_release.R, fetched with
+# bilatr_theta()); data/theta_sample.rda is built by
+# data-raw/make_theta_sample.R. This script is kept as the record of how
+# the v2026.11 tables were first saved.
+#
+# Built data/theta_directed.rda and data/theta_undirected.rda (documented
 # in R/data.R, ?theta_trajectories) from the processed theta series written
 # by runscripts/process_theta_16cat.R (same code as
 # runscripts/bilatr_replication/04_process_theta.R), copied to

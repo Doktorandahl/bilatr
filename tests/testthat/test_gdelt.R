@@ -1,8 +1,7 @@
-# Tests for the 0.9.1 GDELT rewrite (dev/claude_code_prompt_0.9.1_gdelt.md,
-# Parts 1-4): gdelt_files(), read_gdelt(), download_gdelt(),
-# count_gdelt_actor_types(), gdelt_columns(). Offline only: no network, no
-# CmdStan. Fixtures are built once per test via .build_gdelt_fixtures()
-# (tests/testthat/helper_gdelt.R), which skip()s if no `zip` binary is on
+# Tests for gdelt_files(), read_gdelt(), download_gdelt(),
+# count_gdelt_actor_types() and gdelt_columns(). Offline only: no network,
+# no CmdStan. Fixtures are built once per test via .build_gdelt_fixtures()
+# (helper_gdelt.R), which skip()s if no `zip` binary is on
 # PATH.
 
 # ---------------------------------------------------------------------------
@@ -73,16 +72,16 @@ test_that("read_gdelt() reads the 58-column daily layout with correct types", {
   expect_false(any(is.na(events$SOURCEURL))) # daily file: SOURCEURL present
 })
 
-test_that(".gdelt_count_fields() counts a trailing empty field correctly (0b)", {
+test_that(".gdelt_count_fields() counts a trailing empty field correctly", {
   expect_equal(bilatr:::.gdelt_count_fields("a\tb\tc"), 3L)
   expect_equal(bilatr:::.gdelt_count_fields("a\tb\t"), 3L) # trailing empty SOURCEURL
   expect_equal(bilatr:::.gdelt_count_fields("a\t\tc"), 3L) # empty middle field
 })
 
-test_that("a daily file whose first row ends in an empty field is still read as 58 columns (0b)", {
+test_that("a daily file whose first row ends in an empty field is still read as 58 columns", {
   # strsplit()-based field counting drops a trailing empty string
   # (strsplit("a\tb\t", "\t") has length 2, not 3), so a first row with an
-  # empty SOURCEURL used to be miscounted as 57 fields, triggering the
+  # empty SOURCEURL would be miscounted as 57 fields, triggering the
   # "trust the file" branch and dropping SOURCEURL for the whole file.
   fx <- .build_gdelt_fixtures()
   rows <- fx$daily_rows
@@ -120,7 +119,7 @@ test_that("read_gdelt() survives an embedded double-quote in a free-text field",
   expect_equal(events$Actor1Name[10], 'John "Big Jim" Smith')
 })
 
-test_that("a small chunk_size gives identical results to the default (0c)", {
+test_that("a small chunk_size gives identical results to the default", {
   fx <- .build_gdelt_fixtures()
   f <- file.path(fx$dir, fx$daily_file)
   default_chunks <- read_gdelt(f, columns = "all", actor_types = NULL, cross_border = FALSE)
@@ -251,7 +250,7 @@ test_that("filtering on a column not requested in `columns` still works", {
   expect_equal(nrow(out), 17L)
 })
 
-test_that("unknown `columns`/empty `files` error clearly; unknown `actor_types` only warns (0d)", {
+test_that("unknown `columns`/empty `files` error clearly; unknown `actor_types` only warns", {
   fx <- .build_gdelt_fixtures()
   f <- file.path(fx$dir, fx$daily_file)
   expect_error(read_gdelt(f, columns = c("NotAColumn")), "unknown column")
@@ -268,17 +267,16 @@ test_that("unknown `columns`/empty `files` error clearly; unknown `actor_types` 
 })
 
 # ---------------------------------------------------------------------------
-# 4. Parity with 0.9.0's extract_all_relevant_gdelt()
+# 4. Parity with a hand-computed reference filter
 # ---------------------------------------------------------------------------
 
-test_that("the default read_gdelt() call matches extract_all_relevant_gdelt()'s (0.9.0) filter exactly", {
+test_that("the default read_gdelt() call matches the reference GOV/MIL/SPY filter exactly", {
   fx <- .build_gdelt_fixtures()
   f <- file.path(fx$dir, fx$daily_file)
 
-  # extract_all_relevant_gdelt() (0.9.0, R/data_ingestion.R, now removed):
-  # cross-border (both actor country codes non-NA and different) AND both
-  # actors carry GOV/MIL/SPY in one of Type1/2/3Code -- computed by hand
-  # here from the fixture's own rows, since the old function is gone.
+  # The reference filter: cross-border (both actor country codes non-NA
+  # and different) AND both actors carry GOV/MIL/SPY in one of
+  # Type1/2/3Code -- computed by hand here from the fixture's own rows.
   relevant_actors <- c("GOV", "MIL", "SPY")
   expected <- fx$daily_rows %>%
     dplyr::filter(
@@ -314,7 +312,7 @@ test_that("download_gdelt() temp mode returns events and leaves tempdir() untouc
   expect_false(file.exists(file.path(tempdir(), "20200101.export.CSV.zip.part")))
 })
 
-test_that(".gdelt_download_one() reports 'failed' when the final rename fails (0e.1)", {
+test_that(".gdelt_download_one() reports 'failed' when the final rename fails", {
   fx <- .build_gdelt_fixtures()
   withr_base_url <- getOption("bilatr.gdelt_base_url")
   options(bilatr.gdelt_base_url = paste0("file://", fx$dir, "/"))
@@ -322,9 +320,8 @@ test_that(".gdelt_download_one() reports 'failed' when the final rename fails (0
 
   # `destfile` is an existing directory: the download itself succeeds (the
   # .part file is written next to it), but file.rename(part, destfile)
-  # cannot rename a file over an existing directory and returns FALSE --
-  # before the 0e.1 fix, this was reported as "downloaded" with no file at
-  # `path`.
+  # cannot rename a file over an existing directory and returns FALSE,
+  # which must not be reported as "downloaded" with no file at `path`.
   destfile <- tempfile("gdelt_dest_dir_")
   dir.create(destfile)
   url <- paste0(bilatr:::.gdelt_base_url(), fx$monthly_file)
@@ -338,7 +335,7 @@ test_that(".gdelt_download_one() reports 'failed' when the final rename fails (0
   expect_true(is.na(res$path))
 })
 
-test_that("download_gdelt() temp mode returns a correctly-shaped empty tibble when every file fails (0e.2)", {
+test_that("download_gdelt() temp mode returns a correctly-shaped empty tibble when every file fails", {
   fx <- .build_gdelt_fixtures()
   withr_base_url <- getOption("bilatr.gdelt_base_url")
   options(bilatr.gdelt_base_url = paste0("file://", fx$dir, "/"))

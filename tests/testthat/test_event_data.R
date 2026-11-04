@@ -1,16 +1,13 @@
-# Tests for the 0.9.0 event-data contract: ?bilatr_event_data,
-# validate_bilatr_events(), and the D1-D4 fixes in
-# dev/audit_2026-09-23.md / dev/claude_code_prompt_0.9.0_data_contract.md.
-# No CmdStan needed. The aggregation blocks were ported in 0.12.0 from
-# grouped_events_to_dyad_period()/assemble_stan_data() to
-# aggregate_events()/prepare_stan_data().
+# Tests for the event-data contract: ?bilatr_event_data,
+# validate_bilatr_events(), and how aggregate_events()/prepare_stan_data()
+# handle actor codes, missing classes and the time window. No CmdStan
+# needed.
 
-test_that("D1: non-3-letter actor codes work for directed and undirected data (COW numeric codes)", {
-  # Before 0.9.0: directed data with non-3-letter codes errored
-  # ("Internal invariant violated: computed w_send != 1 for directed
-  # data ..."), because side A/B were parsed back out of the `dyad`
-  # string with str_sub(dyad, 1, 3)/(5, 7). Undirected data silently got
-  # garbage country codes/dyad keys from the same parsing (audit D1).
+test_that("non-3-letter actor codes work for directed and undirected data (COW numeric codes)", {
+  # Side A/B must come from the actor columns, not be parsed back out of
+  # the `dyad` string by position (str_sub(dyad, 1, 3)/(5, 7)), which
+  # breaks directed data with non-3-letter codes and gives undirected
+  # data garbage country codes/dyad keys.
   events <- tibble::tibble(
     Actor1CountryCode = c("2", "2", "365", "710", "710"),
     Actor2CountryCode = c("365", "710", "2", "2", "365"),
@@ -50,7 +47,7 @@ test_that("D1: non-3-letter actor codes work for directed and undirected data (C
   expect_equal(by_dyad$dyad2[by_dyad$dyad == "365_2"], "2_365")
 })
 
-test_that("D1: ISO2 and mixed-length actor labels work, directed and undirected", {
+test_that("ISO2 and mixed-length actor labels work, directed and undirected", {
   events <- tibble::tibble(
     Actor1CountryCode = c("US", "US", "Freedonia"),
     Actor2CountryCode = c("CN", "Freedonia", "CN"),
@@ -148,7 +145,7 @@ test_that("validate_bilatr_events() collects every broken rule into one error", 
   expect_match(err, "date")
 })
 
-test_that("D2: an NA grouping_var value errors, naming the count (bare ModifiedRootCode root, NEWS 0.8.0 case)", {
+test_that("an NA grouping_var value errors, naming the count (a bare ModifiedRootCode root)", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS"),
@@ -168,7 +165,7 @@ test_that("D2: an NA grouping_var value errors, naming the count (bare ModifiedR
   )
 })
 
-test_that("D3: a class present only outside the window is absent from event_classes/Y, and named in the message", {
+test_that("a class present only outside the window is absent from event_classes/Y, and named in the message", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -193,7 +190,7 @@ test_that("D3: a class present only outside the window is absent from event_clas
   expect_true(any(grepl("zero in-window events and get no column: 9", msgs, fixed = TRUE)))
 })
 
-test_that("D4: a reference_category absent from the in-window data errors (present only outside the window too, D3+D4)", {
+test_that("a reference_category absent from the in-window data errors, including one present only outside the window", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", "USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -219,8 +216,8 @@ test_that("D4: a reference_category absent from the in-window data errors (prese
   )
 })
 
-test_that("0a: .parse_event_date() is strict about malformed input and wide about accepted forms", {
-  # Reproduction table from dev/claude_code_prompt_0.9.1_gdelt.md 0a.
+test_that(".parse_event_date() is strict about malformed input and wide about accepted forms", {
+  # Malformed inputs that a lenient parser would read as 2020-01-01.
   expect_true(is.na(.parse_event_date("2020011"))) # 7 chars: was wrongly 2020-01-01
   expect_true(is.na(.parse_event_date("20200101abc"))) # trailing text: was wrongly 2020-01-01
   expect_true(is.na(.parse_event_date("2020 0101"))) # embedded space: was wrongly 2020-01-01
@@ -242,7 +239,7 @@ test_that("0a: .parse_event_date() is strict about malformed input and wide abou
   expect_true(is.na(.parse_event_date(NA_character_)))
 })
 
-test_that("0b: leading/trailing whitespace in an actor code is a validator error, not a silent trim", {
+test_that("leading/trailing whitespace in an actor code is a validator error, not a silent trim", {
   events <- tibble::tibble(
     Actor1CountryCode = c(" USA", "USA"),
     Actor2CountryCode = c("RUS", "RUS"),
@@ -264,7 +261,7 @@ test_that("0b: leading/trailing whitespace in an actor code is a validator error
   expect_match(err2, "whitespace")
 })
 
-test_that("0c: validate_bilatr_events() runs on every row, including rows outside the window", {
+test_that("validate_bilatr_events() runs on every row, including rows outside the window", {
   # Reproduction: an NA class in a row outside the window must still error,
   # even though that row would be dropped by the window filter.
   events <- tibble::tibble(

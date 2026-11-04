@@ -17,34 +17,14 @@ diagnose_convergence(
 )
 }
 \arguments{
-\item{fit}{One of three things. (a) A \code{posterior::draws_array}/
-\code{draws_df} -- already fully materialized in memory, so \code{tiers}
-controls what gets summarised but not what gets read (there is
-nothing left to avoid reading), and \code{max_memory_mb}/\code{chunk_size}/
-\code{n_cores} are unused. (b) A \code{CmdStanMCMC}/\code{CmdStanFit}-
-like fit object (anything with \verb{$metadata()} and
-\verb{$draws(variables = ...)} methods) -- variable names are read via
-\verb{$metadata()$variables} without touching a single draw, classified
-into tiers, and only the tiers actually requested are read via
-\verb{$draws(variables = keep_vars)}; a quantity outside \code{tiers} is
-therefore never read into memory at all, same as case (c) below.
-\code{max_memory_mb}/\code{chunk_size}/\code{n_cores} are still unused
-here -- chunking only applies to the raw-CSV path, since \verb{$draws()}
-already holds whatever it returns as one in-memory array. (c) A
-character vector of raw CmdStan CSV file paths (one per chain, e.g.
-from a completed SLURM run never loaded into this R session) -- in
-this case Tier 1/2 variables are read in one small call, and Tier 3
-variables (typically the overwhelming majority for production-sized
-panels) are read and summarised directly from the raw CSVs in
-memory-bounded chunks (see \link{.fast_read_post_warmup_draws}),
-discarding each chunk's draws before moving to the next, so the
-full draws array is never materialized at once. Total file touches
-per chain file: one metadata scan plus one validation probe (both in
-\link{.prepare_fast_csv_read}), one Tier 1/2 read, and one per Tier 3
-chunk -- or, when Tier 3 fits in a single chunk, Tier 1/2 is folded
-into that one read instead of being separate. This is the path that
-matters for production Stan output too large to read normally
-(tested against panels with millions of Tier 3 columns).}
+\item{fit}{One of: a \code{posterior} draws object (\code{draws_array} or
+\code{draws_df}), already in memory; a \code{CmdStanMCMC} fit (or any object
+with \verb{$metadata()} and \verb{$draws(variables = )} methods), whose
+requested tiers are read with \verb{$draws()}; or a character vector of
+CmdStan CSV files, one per chain, for example from a run in another
+session, which are read in memory-bounded chunks (see "Large fits
+from CSV files"). \code{max_memory_mb}, \code{chunk_size} and \code{n_cores} apply
+only to CSV files.}
 
 \item{n_dt}{Each dyad's total number of events, which tiers 2 and 3
 screen diagnostics against. \code{NULL} (default) computes it from the
@@ -70,72 +50,27 @@ A tier not requested is left as \code{NULL} in the returned object rather
 than an empty tibble, so \code{is.null(diag$tier3)} distinguishes "not
 computed" from "computed, nothing to report".}
 
-\item{max_memory_mb}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Target ceiling, in MB, for Tier 3's peak memory per
-chunk; drives the automatically-derived \code{chunk_size} (see
-\code{chunk_size} below) so you don't have to guess a variable count
-yourself. Defaults to \code{8192} (8 GB) -- a guess, not a calibration
-against your hardware, and this function says so via \code{message()}
-the first time you rely on that default rather than setting it
-explicitly. This is a sanity-check number, not a guarantee: actual
-peak memory depends on \code{data.table::fread()}/\code{summarise_draws()}
-internals this function doesn't control (see
-\code{\link[=.compute_chunk_size]{.compute_chunk_size()}} for the model and its derivation). Reading
-is single-threaded, and each chunk's cost is roughly a full parse
-of the largest chain file regardless of how many variables are
-kept -- \code{max_memory_mb} must be large enough to cover that file
-size, plus a fixed R/package-loading floor, at minimum (this
-\code{stop()}s with a clear message naming the shortfall if it isn't).
-Beyond that, fewer/larger chunks are cheaper in read wall-time, but
--- see \code{n_cores} below -- a larger \code{n_cores} shrinks the
-largest chunk size the SAME \code{max_memory_mb} budget can afford, so
-the two are not independent: prefer the LARGEST \code{max_memory_mb}
-your job's allocation can afford, and check the resolved chunk
-count in the pre-flight \code{message()} before committing to a large
-\code{n_cores} on a tight budget.}
+\item{max_memory_mb}{CSV files with Tier 3 only. The memory budget, in
+MB, that sets how many Tier 3 variables are read per chunk. Defaults
+to \code{8192} (8 GB). It must cover at least the largest chain file plus
+about 200 MB; otherwise the function stops and says how much is
+needed. The estimate is a guide, not a guarantee. See "Large fits
+from CSV files".}
 
-\item{chunk_size}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Explicit override: number of Tier 3 variables read per
-chunk. \code{NULL} (the default) derives this from \code{max_memory_mb}
-instead; set this directly only if you want to bypass that
-calculation (e.g. you've measured actual memory use and want to
-tune it by hand).}
+\item{chunk_size}{CSV files with Tier 3 only. The number of Tier 3
+variables per chunk, to override the one derived from
+\code{max_memory_mb}. \code{NULL} (default) derives it.}
 
-\item{n_cores}{Only used when \code{fit} is CSV file paths and \code{tiers}
-includes \code{3}. Chunks are always read strictly sequentially regardless
-of this argument -- reading is disk-bound and single-threaded no
-matter how many cores are available (see
-\link{.fast_read_post_warmup_draws}), so there is nothing to gain, and
-\code{n_cores} chunks' worth of memory to lose, by reading more than one
-chunk at a time. \code{n_cores} instead controls whether the CPU-bound
-part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
-that many cores (via \code{posterior::summarise_draws()}'s \code{.cores}
-argument, which forks \code{n_cores} worker processes) or just one.
-Measured (\code{dev/bench_memory.R}, see \link{.BILATR_CHUNK_CORES_PER_CORE_FACTOR}):
-this genuinely costs memory roughly proportional to \code{n_cores}, not
-a fixed amount regardless of it, and that cost comes out of the SAME
-\code{max_memory_mb} budget the read uses -- so a larger \code{n_cores}
-indirectly means MORE, not fewer, passes over each chain file at a
-fixed \code{max_memory_mb}, trading read wall-time for summary wall-time
-rather than being free on top of it. Worth checking the resolved
-chunk count (in the pre-flight \code{message()}) at your intended
-\code{n_cores} before committing a long run to it -- a very large
-\code{n_cores} on a large \code{n_vars} sweep can end up costing MORE total
-wall-time than a smaller one, if it forces enough extra chunks. More
-cores is NOT monotonically better on either axis --
-\code{\link[=.bilatr_worker_tradeoff]{.bilatr_worker_tradeoff()}} can estimate the actual trade-off for
-your job, given a wall-time reading from your own logs, rather than
-guessing at it from this description alone. Defaults to \code{1L}
-(today's default behaviour). Inside a SLURM allocation,
-\code{parallelly::availableCores()} is the right way to fill this in --
-unlike \code{parallel::detectCores()}, it respects
-\code{SLURM_CPUS_PER_TASK} (among other cluster/container schedulers)
-rather than reporting the whole node's core count -- but this is a
-genuine memory/wall-time trade-off, not a free choice, so consider
-an explicit, moderate value for a memory-constrained job rather
-than the largest available. On Unix-alikes, a session that fits a
-model between two \code{n_cores > 1} calls can print "Error while
-shutting down parallel" when R exits; this is harmless.}
+\item{n_cores}{CSV files with Tier 3 only. The number of processes that
+compute R-hat and ESS for each chunk (chunks are always read one at a
+time). Defaults to \code{1}. More cores speed up the summaries but use
+memory from the same \code{max_memory_mb} budget; see "Large fits from CSV
+files". Under a job scheduler or in a container,
+\code{parallelly::availableCores()} gives the cores actually allocated,
+unlike \code{parallel::detectCores()}.
+On Unix-alikes, a session that fits a model between two \code{n_cores > 1}
+calls can print "Error while shutting down parallel" when R exits;
+this is harmless.}
 
 \item{stan_model}{The model that was fit: \code{"stable"}, \code{"ou"} or
 \code{"stable_gamma"}. \code{NULL} (default) uses the model recorded on the fit
@@ -151,75 +86,103 @@ A list of class \code{bilatr_diagnostics} with elements:
 \describe{
 \item{tier1}{Tibble of global/shared diagnostics, one row per
 monitored quantity, with a \code{flagged} column; \code{NULL} if \code{1} was
-not in \code{tiers}. Excludes \code{gamma} when \code{stan_model} has one (see
-\code{gamma} below) -- \code{n_tier1_flagged}/\code{n_tier1_total} in \code{summary}
-count only this table, same meaning as pre-0.7.1.}
-\item{gamma}{(0.7.1) Tibble of \code{stable_gamma}'s country-level
-offset diagnostics -- \code{variable}, \code{action_index},
-\code{country_index}, \code{rhat}, \code{ess_bulk}, \code{ess_tail}, \code{flagged}; one
-row per \code{gamma[k,c]} element. \code{NULL} whenever \code{1} was not in
-\code{tiers} or \code{stan_model} has no \code{gamma} (silently absent, not an
-empty tibble) -- see \code{.bilatr_model_has_gamma()}. \code{summary}'s
-\code{n_gamma_flagged}/\code{n_gamma_total} count this table.}
+not in \code{tiers}. Excludes \code{gamma} when the model has one (see
+\code{gamma} below); \code{n_tier1_flagged}/\code{n_tier1_total} in \code{summary}
+count only this table.}
+\item{gamma}{Tibble of \code{stable_gamma}'s country-level offset
+diagnostics -- \code{variable}, \code{action_index}, \code{country_index} (and
+\code{country_code} when the Stan data is available), \code{rhat},
+\code{ess_bulk}, \code{ess_tail}, \code{flagged}; one row per \code{gamma[k,c]}
+element. \code{NULL} when \code{1} was not in \code{tiers} or the model has no
+\code{gamma}. \code{summary}'s \code{n_gamma_flagged}/\code{n_gamma_total} count this
+table.}
 \item{tier2}{Tibble with one row per dyad found in \code{n_dt} (or in
 the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 and a \code{worse_than_expected} column; \code{NULL} if \code{2} was not in
 \code{tiers}.}
 \item{tier3}{Tibble with one row per dyad summarizing \code{theta}'s
-per-dyad-period latent-state diagnostics (min ESS, share of
-entries breaching thresholds); \code{NULL} if \code{3} was not in \code{tiers}.
-Holds \code{theta} only (0.10.2, B4) -- \code{theta_filtered}/
-\code{theta_filtered_sd}/\code{log_lik} moved to \code{tier3_other} below, since
-grouping them here by their first index as \code{dyad_id} mis-joined
-\verb{theta_filtered*} whenever \code{filter_dyads} narrowed the dyad set
-(see \code{\link[=.compute_tier3]{.compute_tier3()}}).}
-\item{tier3_other}{(0.10.2) Tibble with one row per Tier 3 base
-name other than \code{theta} (e.g. \code{theta_filtered},
-\code{theta_filtered_sd}, \code{log_lik}, whichever are present): \code{n},
-\code{n_rhat_above}, \code{n_ess_below}, \code{max_rhat}, \code{min_ess_bulk},
-\code{min_ess_tail}. No per-dyad breakdown, so no \code{filter_dyads}
-index-translation is needed. \code{NULL} if \code{3} was not in \code{tiers};
-zero rows (not \code{NULL}) if \code{3} was computed but the fit has no
-Tier 3 quantity besides \code{theta}.}
+per-dyad-period diagnostics (minimum ESS, maximum R-hat, share of
+entries breaching the thresholds); \code{NULL} if \code{3} was not in
+\code{tiers}. Holds \code{theta} only; other per-dyad-period quantities are
+in \code{tier3_other}.}
+\item{tier3_other}{Tibble with one row per Tier 3 quantity other
+than \code{theta} (\code{theta_filtered}, \code{theta_filtered_sd}, \code{log_lik},
+whichever are present): \code{n}, \code{n_rhat_above}, \code{n_ess_below},
+\code{max_rhat}, \code{min_ess_bulk}, \code{min_ess_tail}, with no per-dyad
+breakdown (\code{theta_filtered}'s first index is the position in
+\code{filter_dyads}, not a dyad id). \code{NULL} if \code{3} was not in \code{tiers};
+zero rows if the fit has no Tier 3 quantity besides \code{theta}.}
 \item{summary}{A short named list of headline counts (see
-\link{print.bilatr_diagnostics}), including \code{n_tier3_other_groups},
-\code{n_tier3_other_rhat_above}, \code{n_tier3_other_ess_below} (0.10.2).}
+\code{\link[=print.bilatr_diagnostics]{print.bilatr_diagnostics()}}), including \code{n_tier3_other_groups},
+\code{n_tier3_other_rhat_above} and \code{n_tier3_other_ess_below}.}
 }
 }
 \description{
-Runs \code{\link[posterior:draws_summary]{posterior::summarise_draws()}} over a fitted \code{bilatr} model and
-splits the result into three diagnostic tiers before applying Rhat/ESS
-thresholds, so that pathologies in global/shared parameters are never
-masked by the wide, poorly-identified posteriors expected for
-sparsely-observed dyads. See \code{vignette("diagnostics")} for a worked
-example and the rationale behind the tiering.
+Computes R-hat and effective sample sizes for a fitted bilatr model
+and splits them into three tiers before applying thresholds, so that
+problems in the global parameters are never masked by the wide,
+weakly identified posteriors expected for sparsely observed dyads. See
+\code{vignette("diagnostics", package = "bilatr")} for a worked example and
+the rationale.
 }
 \details{
-Tier 1 (global/shared parameters plus \code{lp__}) is always reported in
-full and never summarized away. Tier 2 (per-dyad hierarchical
-parameters, e.g. \code{phi}, \code{process_noise}, \code{theta0}) and Tier 3
-(per-dyad-period latent states, e.g. \code{theta}, \code{theta_raw}) are joined
-against \code{n_dt} and screened for dyads whose diagnostics are worse than
-a smooth degradation-with-sparsity trend predicts (see
-\link{.flag_worse_than_expected}), so sparse-but-unremarkable dyads don't
-flood the report. See \link{.classify_bilatr_tier} for how parameter names
-are assigned to tiers.
-
-\code{tiers} limits \emph{which} of these are computed at all: quantities not
-assigned to a requested tier are never read into memory in the first
-place (see \code{fit} below), rather than being read and then hidden. This
-matters in practice because Tier 3 (\code{theta}/\code{theta_raw}) typically
-has, by far, the most monitored quantities of the three tiers (one per
-dyad-period); requesting only \code{tiers = 1} or \code{tiers = 1:2} skips
-reading/computing Rhat/ESS for all of them.
-
-Every \code{fit} case (a)-(c) below summarises via the same fixed measure
-set (\code{\link[=.summarise_bilatr_draws]{.summarise_bilatr_draws()}}: \code{mean}, \code{quantile2}, \code{median},
-\code{rhat}, \code{ess_bulk}, \code{ess_tail}), not \code{posterior::summarise_draws()}'s
-own defaults (which also compute \code{sd}/\code{mad}, unused by every consumer
-here) -- so the tibble you get back has the same columns regardless
-of which kind of \code{fit} produced it.
+\itemize{
+\item \strong{Tier 1}, global parameters (\code{alpha}, \code{mu_intercept}, the
+hierarchical scales and \code{lp__}), is always reported in full.
+\item \strong{Tier 2}, per-dyad parameters (e.g. \code{phi}, \code{process_noise},
+\code{theta0}), and \strong{Tier 3}, the per-dyad-period latent states
+(\code{theta}), are joined to each dyad's event count \code{n_dt}. A dyad is
+flagged only when its diagnostics are worse than the trend of
+diagnostics against sparsity predicts, so sparse but unremarkable
+dyads do not flood the report.
 }
+
+Quantities are assigned to tiers by name and by their number of
+indices: Tier 1 names are listed explicitly, a single index means a
+per-dyad parameter (Tier 2), and two indices a per-dyad-period
+quantity (Tier 3). The raw parameters the models' orientation fold is
+built from (\code{alpha_raw}, \code{z_theta0} or \code{mu_dyad_raw}, \code{theta_raw}, and
+\code{gamma_z} in \code{stable_gamma}) are sign-ambiguous or informed only by
+their prior, so their R-hat is meaningless; they are left out of every
+tier.
+
+\code{tiers} limits which tiers are computed: quantities outside the
+requested tiers are not read at all, rather than read and hidden. Tier
+3 usually has by far the most quantities (one per dyad-period), so
+\code{tiers = 1} or \code{tiers = 1:2} is much faster on a large fit.
+
+Every kind of \code{fit} is summarized with the same measures (\code{mean}, the
+5\% and 95\% quantiles, \code{median}, \code{rhat}, \code{ess_bulk}, \code{ess_tail}), so the
+returned tables have the same columns whichever kind was given.
+}
+\section{Large fits from CSV files}{
+
+With CmdStan CSV files, Tier 1 and 2 are read in one call and Tier 3 is
+read and summarized in chunks, discarding each chunk before reading the
+next, so the full set of draws is never in memory at once. Reading is
+single-threaded and each chunk costs about one pass over the largest
+chain file, however few columns it keeps, so fewer, larger chunks are
+faster.
+\itemize{
+\item \code{max_memory_mb} sets the chunk size. Use the largest budget your
+machine or job allows. The default, 8 GB, is a guess, and the
+function says so when you rely on it. Peak memory is estimated as
+the size of the largest chain file, plus about 200 MB for R and the
+loaded packages, plus a multiple of the chunk's raw size (draws x
+chains x variables x 8 bytes): 3.5 times it for four chains on one
+core.
+\item \code{n_cores} > 1 computes each chunk's R-hat and ESS in that many forked
+processes, which is faster but costs memory from the same budget:
+roughly 4.5x the chunk's raw size for the first extra process and
+2.5x for each one after that (estimates that are conservative and
+were measured up to 8 cores). At a fixed \code{max_memory_mb}, more cores
+therefore mean smaller chunks and more passes over the files, and a
+large \code{n_cores} can be slower overall. A message before reading
+reports the chunk size, the number of chunks and the estimated peak
+memory; check it before a long run.
+}
+}
+
 \examples{
 # CmdStan CSV files from an earlier run, with the *_stan_data.rds file
 # that fit_panel(output_dir = ) wrote next to them (here, the example
@@ -236,4 +199,10 @@ diagnose_convergence(csv_files, tiers = 1)
 
 # a stable_gamma fit gets its own `gamma` report element
 diagnose_convergence(bilatr_example_fit("stable_gamma"), tiers = 1)$gamma
+}
+\references{
+Vehtari, A., Gelman, A., Simpson, D., Carpenter, B. and
+Burkner, P.-C. (2021). Rank-normalization, folding, and localization:
+an improved R-hat for assessing convergence of MCMC. \emph{Bayesian
+Analysis} 16(2), 667-718. \doi{10.1214/20-BA1221}
 }

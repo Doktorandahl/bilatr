@@ -1,20 +1,20 @@
-# The case grid of test_prepare_stan_data_equivalence.R, shared with
-# data-raw/make_equivalence_reference.R, which ran each case through
-# assemble_stan_data() (bilatr <= 0.12.0b) and stored the result in
-# fixtures/assemble_stan_data_0.11.0_reference.rds. Both sides build the
-# events from these functions, so the inputs are the same by construction.
+# The case grid of test_prepare_stan_data_equivalence.R. The stored
+# reference, fixtures/assemble_stan_data_0.11.0_reference.rds, is a frozen
+# output of an earlier, independent implementation of the data
+# preparation, run on these same cases. Both sides build the events from
+# these functions, so the inputs are the same by construction.
 #
 # Each case is a list:
 #   events      the event table
 #   grouping_var, years, resolution, directed, actor1, actor2, date
-#   prep        named list of the Stan-data arguments shared by
-#               assemble_stan_data() and prepare_stan_data()
+#   prep        named list of the Stan-data arguments shared by the
+#               reference implementation and prepare_stan_data()
 #               (reference_category, min_n_events, chunk_size, ...);
 #               chunk_size is 100 unless a case sets it
 # `years = a:b` maps to aggregate_events(start = "a-01-01", end = "b-12-31").
 #
-# Do not edit a case without regenerating the reference against a
-# <= 0.12.0b tree: the stored outputs only mean something for these inputs.
+# Do not edit a case: the stored outputs only mean something for these
+# inputs, and the reference cannot be regenerated with this version.
 
 # This is a regression test of aggregate_events()/prepare_stan_data(),
 # not of the CAMEO schemes. So the QuadClass/PentaClass columns of the
@@ -227,7 +227,7 @@ equivalence_cases <- function() {
   cases
 }
 
-# The 0.12.0 path for one case: aggregate_events() then prepare_stan_data().
+# One case through aggregate_events() then prepare_stan_data().
 new_path_stan_data <- function(case) {
   agg <- suppressMessages(aggregate_events(
     case$events,

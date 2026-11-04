@@ -16,7 +16,7 @@ diagnose_category_merges(
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC}-like fit object, or a character vector of
-CmdStan CSV file paths (see \code{\link[=.get_draws]{.get_draws()}}).}
+CmdStan CSV file paths (one per chain).}
 
 \item{stan_data}{The Stan data list used to produce \code{fit}, from
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. \code{NULL} (default) uses the one \code{\link[=fit_panel]{fit_panel()}}/
@@ -31,14 +31,14 @@ figure's mean event count.}
 \code{NULL} (default) uses that attribute if present, else \verb{"1", "2", ...};
 an explicit value wins.}
 
-\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
-to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
-\code{\link[=event_class_labels]{event_class_labels()}}; falling back
-to the raw \code{event_classes} if that has nothing to offer).}
+\item{class_labels}{Optional labels for the event classes: a character
+vector named by event class, or an unnamed one in \code{event_classes}
+order. \code{NULL} (default) uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}), falling back to the raw \code{event_classes}.}
 
 \item{shares}{Reference category shares: \code{NULL} (default) uses the
 empirical shares from \code{stan_data$Y}, summed over dyads/periods and
-normalised (a single, FIXED reference point); \code{"theta0"} evaluates at
+normalized (a single, FIXED reference point); \code{"theta0"} evaluates at
 \code{softmax(-mu_intercept)} instead, per draw; or a user-supplied
 numeric vector of length \code{A} (fixed). \code{pi} is a function of \code{theta},
 so any single share vector makes this a \emph{local} measure at one point
@@ -57,7 +57,7 @@ representative figure, not a per-dyad-period computation).}
 \item{probs}{Posterior interval bounds to report alongside the mean
 (first and last are used as the interval; a third, e.g. the median,
 is ignored for \code{pairwise}/\code{ladder} but not \code{categories}). Stored on
-the returned object (0.10.2, B3) so \code{\link[=merge_cost]{merge_cost()}} reuses the same
+the returned object so \code{\link[=merge_cost]{merge_cost()}} reuses the same
 outer bounds rather than a hard-coded \code{c(0.05, 0.5, 0.95)}.}
 }
 \value{
@@ -117,25 +117,23 @@ identification hygiene, and whether a category is so sparse that its
 Dirichlet concentration is near zero and the cell is effectively
 unconstrained.
 
-\strong{Compute per draw, then summarise.} The loss is nonlinear in \code{alpha},
+\strong{Compute per draw, then summarize.} The loss is nonlinear in \code{alpha},
 so its value at the posterior mean is not its posterior mean; every
-quantity here is computed for each draw and then summarised, which
+quantity here is computed for each draw and then summarized, which
 also handles \code{alpha}'s correlation structure for free (the sum-to-zero
 and RMS-1 constraints make the \code{alpha_k} strongly negatively
 correlated, so \code{sd(alpha_j - alpha_k)} is emphatically not
 \code{sqrt(sd_j^2 + sd_k^2)}).
 
-\strong{On a \code{stable_gamma} fit (0.7.0):} every measure here (\code{alpha},
+\strong{On a \code{stable_gamma} fit:} every measure here (\code{alpha},
 its correlation structure, the reference \code{shares}) is evaluated
 exactly as for any other model -- \code{gamma}/\code{g_d} never enter this
 function's computation at all. For \code{stable_gamma}, that means the
 reference share vector implicitly used (whether the empirical default,
 \code{"theta0"}, or a user-supplied \code{shares}) is the \code{gamma = 0} baseline,
 the same baseline \code{\link[=icc_curves]{icc_curves()}}'s \code{country = NULL} default uses --
-not any particular country's actual share vector. Left this way
-deliberately (unchanged computation, documented meaning): a
-country-specific merge analysis is a coherent further extension but is
-not implemented here.
+not any particular country's actual share vector. A country-specific
+merge analysis is not implemented.
 }
 \examples{
 merges <- diagnose_category_merges(bilatr_example_fit())

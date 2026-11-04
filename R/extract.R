@@ -9,33 +9,24 @@
 #' output. Works the same way for
 #' single-dyad ([fit_dyad_ts()]) and panel ([fit_panel()]) fits.
 #'
-#' `stable`/`ou` fold `alpha[1]`'s sign into the reported `alpha`/`theta`
-#' (see each `.stan` file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-#' so `theta` is already oriented, with no post-hoc relabeling needed:
-#' higher values make `reference_category` more likely relative to the
+#' Every model folds `alpha[1]`'s sign into the reported `alpha` and
+#' `theta`, so `theta` is already oriented, with no post-hoc relabeling
+#' needed: higher values make `reference_category` more likely relative to the
 #' other action types, and so mean more cooperative relations when the
 #' reference category is cooperative. See the `reference_category`
 #' argument of [prepare_stan_data()].
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
-#' (one per chain), matching [diagnose_convergence()]'s CSV-path mode --
-#' reads and summarises `theta` directly from the raw CSVs in
-#' memory-bounded chunks via [.chunked_summarise_csv] rather than
-#' materializing the full draws array, for the same production-scale-panel
-#' reason `diagnose_convergence()` needed it. **This trades memory for
-#' wall-time, and the exchange rate can be steep**: reading is
-#' single-threaded, and each chunk's cost is roughly a full parse of the
-#' largest chain file regardless of how many columns are requested (see
-#' `max_memory_mb` below and in [diagnose_convergence()]'s documentation),
-#' so total sweep time scales with chunk COUNT, not memory saved. Prefer
-#' the in-memory path when you already have `fit` in memory (no benefit
-#' to re-reading), and the CSV path's default `max_memory_mb` as large as
-#' your job's memory allocation can afford, not as small as "safely"
-#' possible. This mode only supports the default `probs`, since it reuses
-#' [diagnose_convergence()]'s chunked-read helper (which always computes
-#' a fixed `q5`/`median`/`q95` summary, not user-configurable quantiles)
-#' rather than re-reading data already summarised once; pass an
-#' in-memory `fit` if you need other quantiles.
+#' (one per chain), as [diagnose_convergence()] does: `theta` is then read
+#' and summarized from the CSV files in memory-bounded chunks, so the full
+#' set of draws is never in memory at once. **This trades memory for
+#' time**: each chunk costs about one pass over the largest chain file,
+#' however few columns it keeps, so the total time grows with the number
+#' of chunks. Use an in-memory `fit` when you have one, and otherwise set
+#' `max_memory_mb` as large as you can afford (see "Large fits from CSV
+#' files" in [diagnose_convergence()]). This mode supports only the
+#' default `probs` (the 5%, 50% and 95% quantiles); pass an in-memory
+#' `fit` for other quantiles.
 #'
 #' @param fit A `CmdStanMCMC` fit object from [fit_dyad_ts()] or
 #'   [fit_panel()], or a character vector of raw CmdStan CSV file paths
@@ -49,10 +40,9 @@
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
 #' @param max_memory_mb,chunk_size,n_cores Only used when
-#'   `fit` is CSV file paths; identical in meaning to
-#'   [diagnose_convergence()]'s arguments of the same name (including
-#'   the one-time default-`max_memory_mb` `message()`), applied here to
-#'   `theta` alone rather than all of Tier 3.
+#'   `fit` is CSV file paths; the same as [diagnose_convergence()]'s
+#'   arguments of the same name (including the message when
+#'   `max_memory_mb` is left at its default), applied to `theta` alone.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, the other `dyad_ids` columns (`dyad`, `dyad2`, `actor1`,
 #'   `actor2`, the time column and its labels), the posterior `mean`
@@ -88,11 +78,8 @@ extract_theta <- function(
     if (!identical(probs, c(0.05, 0.5, 0.95))) {
       stop(
         "extract_theta()'s CSV-file-path mode only supports the default ",
-        "`probs` (0.05, 0.5, 0.95): it reuses diagnose_convergence()'s ",
-        "chunked-read helper, which always computes the fixed q5/median/",
-        "q95 summary rather than user-configurable quantiles, to avoid ",
-        "re-reading data already summarised once. Pass an in-memory ",
-        "`fit` object if you need other quantiles.",
+        "`probs` (0.05, 0.5, 0.95). Pass an in-memory `fit` object if you ",
+        "need other quantiles.",
         call. = FALSE
       )
     }
@@ -142,7 +129,7 @@ extract_theta <- function(
 #'   CmdStan CSV file paths.
 #' @param variables Character vector of variable names to read.
 #' @return A `posterior::draws_array`.
-#' @keywords internal
+#' @noRd
 .get_draws <- function(fit, variables) {
   if (is.character(fit)) {
     prepared <- .prepare_fast_csv_read(fit)
@@ -155,23 +142,17 @@ extract_theta <- function(
 #' Extract discrimination parameters (alpha) with action-class labels
 #'
 #' Pulls posterior summaries of the action-type discrimination parameters
-#' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has RMS 1
-#' for `stable`/`ou`; `alpha[1]`, the discrimination of the
-#' `reference_category` class, is always reported non-negative via the
-#' orientation fold (see each `.stan` file's header, "IDENTIFICATION:
-#' ORIENTATION FOLD"). See the package's identification notes in
-#' `vignette("dyad_time_series")`. `alpha`'s sign is already canonical by
-#' construction, so no post-hoc relabeling is needed here.
+#' `alpha` out of a fitted model. `alpha` sums to exactly 0 and has
+#' root-mean-square 1 in every model; `alpha[1]`, the discrimination of
+#' the `reference_category` class, is always reported non-negative (the
+#' models' orientation fold), so no post-hoc relabeling is needed. See
+#' the identification notes in `vignette("dyad_time_series", package =
+#' "bilatr")`.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths
-#' (one per chain), for the case where there is no in-memory fit at all
-#' -- e.g. a post-hoc, cross-chain roll-up script run after several
-#' independently-submitted single-chain SLURM jobs have all completed,
-#' with only their saved CSVs on disk. Unlike [extract_theta()]'s
-#' CSV-path mode, `alpha` is small (Tier 1: a handful of values
-#' regardless of dyad-set size), so there is no chunking machinery
-#' here -- just one plain read (via [.get_draws]) across all
-#' of `fit`, then the same extraction logic either way.
+#' (one per chain), for when there is no fit object in memory, for
+#' example after chains were run as separate jobs. `alpha` has only `A`
+#' values, so the files are read in one pass, without chunking.
 #'
 #' @inheritParams extract_theta
 #' @param event_classes Optional character vector of event-class labels,
@@ -180,14 +161,14 @@ extract_theta <- function(
 #'   an `event_class` column is added alongside the raw action index.
 #'   `NULL` (default) uses the `event_classes` of the Stan data attached to
 #'   `fit` by [fit_panel()]/[fit_dyad_ts()], if any; otherwise the output
-#'   is unlabelled.
+#'   is unlabeled.
 #' @return A tibble with one row per action type: `action_index`
 #'   (and `event_class` if `event_classes` is supplied), the posterior
 #'   `mean` of alpha, and one column per requested quantile.
 #' @examples
 #' # cross-chain roll-up from saved CSVs, no in-memory fit (here, the
 #' # example fit shipped with bilatr). A fit object from fit_panel() is
-#' # labelled from attr(fit, "stan_data"); CSVs need `event_classes`.
+#' # labeled from attr(fit, "stan_data"); CSVs need `event_classes`.
 #' csv_files <- bilatr_example_fit()
 #' stan_data <- readRDS(file.path(dirname(csv_files[1]), "example_stan_data.rds"))
 #' extract_alpha(csv_files, event_classes = attr(stan_data, "event_classes"))
@@ -260,27 +241,21 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #' labels
 #'
 #' Pulls posterior summaries of the country-level category-offset matrix
-#' `gamma` out of a `stable_gamma` fit (0.7.0; see `R/model_registry.R`
-#' -- the only currently-registered model with one). `gamma` is fully
-#' identified by construction (three constraints enforced in
-#' `transformed parameters`; see `inst/stan/bilatr_alphanorm_gamma.stan`'s
-#' header) and orientation-FREE (the alpha/theta reflection symmetry's
-#' fold does not touch it -- see that header, "gamma is NOT multiplied by
-#' orientation_sign"), so no post-hoc relabeling applies to it either.
+#' `gamma` out of a `stable_gamma` fit, the only model with one (see
+#' [compile_bilatr_model()], "Models"). `gamma` is identified by three
+#' constraints built into the model: for each country it sums to zero
+#' over action classes and is orthogonal to `alpha`, and for each action
+#' class it sums to zero over countries. It is unaffected by the models'
+#' orientation fold, so no relabeling applies to it.
 #'
 #' `fit` also accepts a character vector of raw CmdStan CSV file paths,
-#' the same forms [extract_alpha()]/[.get_draws()] accept. `gamma` is
-#' Tier 1 (small: `A x n_countries`, see `.bilatr_tier1_names` in
-#' `R/diagnose_convergence.R`), so -- like `extract_alpha()`/
-#' `extract_mu_intercept()` -- this is one plain, unchunked read, never
-#' the chunked Tier 3 machinery `extract_theta()` needs.
+#' as [extract_alpha()] does. `gamma` has `A x n_countries` values, so
+#' the files are read in one pass, without chunking.
 #'
-#' @param fit A `CmdStanMCMC` fit object from a `stable_gamma` fit (via
-#'   `fit_panel(stan_model = "stable_gamma")`/
-#'   `fit_dyad_ts(stan_model = "stable_gamma")`; `stable_gamma` is
-#'   experimental, so fitting it emits a one-time message -- see
-#'   [.bilatr_warn_if_experimental()]),
-#'   or a character vector of raw CmdStan CSV file paths.
+#' @param fit A `CmdStanMCMC` fit object from
+#'   `fit_panel(stan_model = "stable_gamma")` or
+#'   `fit_dyad_ts(stan_model = "stable_gamma")`, or a character vector of
+#'   raw CmdStan CSV file paths.
 #' @param stan_data The Stan data list used to produce `fit`, from
 #'   [prepare_stan_data()]. `NULL` (default) uses the one [fit_panel()]/
 #'   [fit_dyad_ts()] attached to `fit` (`attr(fit, "stan_data")`), or, when
@@ -292,12 +267,13 @@ extract_mu_intercept <- function(fit, event_classes = NULL, probs = c(0.05, 0.5,
 #' @param event_classes Optional character vector of event-class labels,
 #'   in the same order used to build `stan_data`. `NULL` (default) uses
 #'   `stan_data`'s `"event_classes"` attribute; an explicit value wins.
-#' @param class_labels Optional; see [.resolve_class_labels()]. Ignored
-#'   when `event_classes` is `NULL` (nothing to key labels by). Defaults
-#'   to `NULL`, which uses `event_class_labels(stan_data)` (see
+#' @param class_labels Optional labels for the event classes: a character
+#'   vector named by event class, or an unnamed one in `event_classes`
+#'   order. Ignored when `event_classes` is `NULL` (nothing to key labels
+#'   by). `NULL` (default) uses `event_class_labels(stan_data)` (see
 #'   [event_class_labels()]).
-#' @return A tibble (subclassed `bilatr_gamma`, with an [autoplot()]/
-#'   [plot()] method) with one row per (country, action type):
+#' @return A tibble (subclassed `bilatr_gamma`, with [autoplot()] and
+#'   `plot()` methods) with one row per (country, action type):
 #'   `country_code`, `country_index`, `action_index` (and
 #'   `event_class`/`class_label` if supplied), the posterior `mean` of
 #'   `gamma`, and one column per requested quantile.
@@ -355,8 +331,7 @@ extract_gamma <- function(
 #'
 #' `sqrt(mean(gamma_c^2))` across action categories, for each country --
 #' the natural ranking key for which countries carry the largest
-#' country-level offset (see [extract_gamma()] and
-#' `inst/stan/bilatr_alphanorm_gamma.stan`'s header). Computed from
+#' country-level offset (see [extract_gamma()]). Computed from
 #' `x$mean` (posterior means), not per-draw: a summary of a summary,
 #' adequate for ranking/ordering (e.g. [autoplot.bilatr_gamma()]'s
 #' country axis) but not itself a posterior quantity -- no interval is

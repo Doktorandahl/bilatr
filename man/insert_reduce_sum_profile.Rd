@@ -22,7 +22,7 @@ likelihood statement (with the \code{dyad_seq} line before it) is wrapped in
 reports the time spent in the parallel region through
 \code{CmdStanMCMC$profiles()}, which separates the likelihood from the rest
 of each gradient evaluation. \code{\link[=benchmark_bilatr]{benchmark_bilatr()}} uses it with
-\code{profile = TRUE}; for a cluster sweep, write the result to a \code{.stan}
+\code{profile = TRUE}; for a batch-job sweep, write the result to a \code{.stan}
 file and compile that (see \code{vignette("tuning", package = "bilatr")}).
 }
 \details{

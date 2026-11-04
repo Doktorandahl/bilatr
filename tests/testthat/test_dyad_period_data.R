@@ -1,4 +1,4 @@
-# Tests for the 0.12.0 dyad-period data contract: ?bilatr_dyad_period_data
+# Tests for the dyad-period data contract: ?bilatr_dyad_period_data
 # and validate_bilatr_dyad_period(). No CmdStan needed.
 
 valid_dp <- function() {
@@ -146,7 +146,7 @@ test_that("custom role column names work", {
   expect_error(validate(dp, action_cols = c(coop, conf)), "missing dyad column `dyad`")
 })
 
-test_that("leading/trailing whitespace in dyad/actor1/actor2 is an error (0.12.0b, D18)", {
+test_that("leading/trailing whitespace in dyad/actor1/actor2 is an error", {
   dp <- valid_dp()
   dp$actor1[1] <- " A"
   dp$actor2[3] <- "C "

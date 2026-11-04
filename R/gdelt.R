@@ -42,29 +42,27 @@
 #' `https://` (confirmed via `curl -L`, one redirect). The base URL is
 #' overridable with `getOption("bilatr.gdelt_base_url", <default>)`, which
 #' is what makes [download_gdelt()] testable offline against `file://`
-#' fixtures (see `tests/testthat/helper_gdelt.R`).
+#' fixtures. The user-facing parts of this note are in ?read_gdelt's
+#' "GDELT 1.0 files" section.
 #'
-#' @keywords internal
 #' @name bilatr_gdelt_layout
+#' @noRd
 NULL
 
 .GDELT_YEARLY_START <- as.Date("1979-01-01")
 .GDELT_YEARLY_END <- as.Date("2005-12-31")
-.GDELT_MONTHLY_START <- as.Date("2006-01-01")
 .GDELT_MONTHLY_END <- as.Date("2013-03-31")
-.GDELT_DAILY_START <- as.Date("2013-04-01")
 
 .GDELT_MD5SUMS_FILE <- "md5sums"
-.GDELT_FILESIZES_FILE <- "filesizes"
 
 #' The base URL GDELT downloads/reads are served from
 #'
 #' Overridable with `getOption("bilatr.gdelt_base_url", ...)`, so tests
 #' can point it at a `file://` fixture directory instead of the live
-#' server. See `?bilatr_gdelt_layout`.
+#' server. See the GDELT layout note at the top of this file.
 #'
 #' @return A single string, always ending in `"/"`.
-#' @keywords internal
+#' @noRd
 .gdelt_base_url <- function() {
   base <- getOption("bilatr.gdelt_base_url", "https://data.gdeltproject.org/events/")
   if (!grepl("/$", base)) base <- paste0(base, "/")
@@ -72,13 +70,14 @@ NULL
 }
 
 # ---------------------------------------------------------------------------
-# Part 2: schema
+# Schema
 # ---------------------------------------------------------------------------
 
 #' The full 58-column GDELT 1.0 schema, in file order
 #'
 #' Column types are read off the GDELT 1.0 Data Format Codebook (see
-#' `?bilatr_gdelt_layout`), made explicit rather than guessed per file.
+#' the layout note at the top of this file), made explicit rather than guessed
+#' per file.
 #' `GLOBALEVENTID` and `DATEADDED` are stored as `"double"` rather than the
 #' codebook's `(integer)`, since a 32-bit R integer can overflow for large
 #' identifiers/timestamps and `double` is exact to 2^53. All `*Code`
@@ -89,7 +88,7 @@ NULL
 #' @return A tibble with `name` and `type` (`"character"`, `"integer"`, or
 #'   `"double"`), 58 rows, in file order (the daily-file layout; the
 #'   backfile layout is the first 57).
-#' @keywords internal
+#' @noRd
 .gdelt_schema <- function() {
   actor_fields <- function(prefix) {
     c(
@@ -150,8 +149,8 @@ NULL
 
 #' Named presets of GDELT columns
 #'
-#' Name-vector presets over the full 58-column schema (`?bilatr_gdelt_layout`),
-#' for use as [read_gdelt()]'s `columns` argument.
+#' Name-vector presets over the full 58-column schema (see [read_gdelt()],
+#' "GDELT 1.0 files"), for use as [read_gdelt()]'s `columns` argument.
 #'
 #' `"core"` leaves out GDELT's own `QuadClass` only because
 #' [recode_cameo()] supplies it: `recode_cameo()`'s `QuadClass` is the same
@@ -210,15 +209,16 @@ gdelt_columns <- function(set = c("core", "actors", "geo", "all")) {
 #' the full vocabulary itself. Verified 2026-09-25 against
 #' `http://gdeltproject.org/data/documentation/CAMEO.Manual.1.1b3.pdf`.
 #'
-#' `SET` ("Settler", Table 3.1 secondary role codes) was added 2026-09-25
-#' (0.10.0) after a live check against real GDELT data (0d): it is the only
-#' code observed in `count_gdelt_actor_types()` on the 2020-01-01 daily and
-#' 1979 yearly files (`cross_border = FALSE`) that wasn't already in this
-#' vocabulary -- a genuine CAMEO role code (used e.g. for Israeli
-#' settlers), just missing from the original transcription of Table 3.1.
+#' `SET` ("Settler", a Table 3.1 secondary role code) was confirmed
+#' against real GDELT data: `count_gdelt_actor_types()` on the 2020-01-01
+#' daily and 1979 yearly files (`cross_border = FALSE`) found no other
+#' code outside this list.
+#'
+#' The list is repeated in ?read_gdelt's `actor_types`; keep the two in
+#' step.
 #'
 #' @return A character vector of 3-character codes.
-#' @keywords internal
+#' @noRd
 .gdelt_actor_type_codes <- function() {
   c(
     # Table 3.1, primary role codes
@@ -234,23 +234,24 @@ gdelt_columns <- function(set = c("core", "actors", "geo", "all")) {
 }
 
 # ---------------------------------------------------------------------------
-# Part 3a: gdelt_files()
+# gdelt_files()
 # ---------------------------------------------------------------------------
 
 #' List the GDELT files covering a date range
 #'
 #' A pure function (no network): rolls `[start, end]` up to the distinct
-#' yearly/monthly/daily files that cover it, per the boundaries at
-#' `?bilatr_gdelt_layout`. A range crossing a boundary returns a mix of
-#' types.
+#' yearly/monthly/daily files that cover it (see [read_gdelt()], "GDELT
+#' 1.0 files", for the boundaries). A range crossing a boundary returns a
+#' mix of types.
 #'
-#' @param start,end Anything [.parse_event_date()] accepts (`Date`,
-#'   `POSIXt`, `YYYYMMDD`, or `YYYY-MM-DD`). `end` defaults to `start`
+#' @param start,end Dates (`Date`, `POSIXt`, `YYYYMMDD`, or
+#'   `YYYY-MM-DD`). `end` defaults to `start`
 #'   (a single period). Both must fall within 1979-01-01 and today.
 #' @return A tibble with one row per file: `period` (the file's date
 #'   stamp, `"YYYY"`/`"YYYYMM"`/`"YYYYMMDD"`), `type`
 #'   (`"yearly"`/`"monthly"`/`"daily"`), `file` (the basename), `url`
-#'   (under [.gdelt_base_url()]), and `n_cols` (57 or 58).
+#'   (under <https://data.gdeltproject.org/events/>), and `n_cols` (57
+#'   or 58).
 #' @examples
 #' gdelt_files("2020-01-01", "2020-01-03")
 #' gdelt_files("1990-06-15") # one yearly file
@@ -300,7 +301,7 @@ gdelt_files <- function(start, end = start) {
 # ---------------------------------------------------------------------------
 
 #' Infer a GDELT file's column count from its name
-#' @keywords internal
+#' @noRd
 .gdelt_filename_ncols <- function(path) {
   if (grepl("^[0-9]{8}\\.export\\.CSV\\.zip$", basename(path))) 58L else 57L
 }
@@ -312,7 +313,7 @@ gdelt_files <- function(start, end = start) {
 #' not on more recent R) once `readLines()` tries to read from them.
 #' Constructing the connection lazily (no `open` argument) and letting
 #' `readLines()` open it avoids this across R versions.
-#' @keywords internal
+#' @noRd
 .gdelt_peek_first_line <- function(path) {
   if (isTRUE(file.size(path) == 0)) {
     return(character(0))
@@ -332,7 +333,7 @@ gdelt_files <- function(start, end = start) {
 #' @param path A GDELT `.CSV` or `.zip` path.
 #' @param caller The calling function's name, for the error.
 #' @return The first line.
-#' @keywords internal
+#' @noRd
 .gdelt_first_line <- function(path, caller) {
   first_line <- .gdelt_peek_first_line(path)
   if (length(first_line) == 0 || !nzchar(first_line)) {
@@ -356,13 +357,13 @@ gdelt_files <- function(start, end = start) {
 #' @param first_line A single tab-separated line (e.g. from
 #'   [.gdelt_peek_first_line()]).
 #' @return Integer field count.
-#' @keywords internal
+#' @noRd
 .gdelt_count_fields <- function(first_line) {
   lengths(gregexpr("\t", first_line, fixed = TRUE)) + 1L
 }
 
 #' Resolve and validate a `date_range` argument
-#' @keywords internal
+#' @noRd
 .gdelt_resolve_date_range <- function(date_range) {
   if (is.null(date_range)) {
     return(NULL)
@@ -378,7 +379,7 @@ gdelt_files <- function(start, end = start) {
 }
 
 #' Build an empty tibble with the right column types
-#' @keywords internal
+#' @noRd
 .gdelt_empty_tibble <- function(schema, cols) {
   make_col <- function(type) {
     switch(type, character = character(0), integer = integer(0), double = double(0))
@@ -388,7 +389,7 @@ gdelt_files <- function(start, end = start) {
 }
 
 #' Apply `read_gdelt()`'s row filters to one chunk
-#' @keywords internal
+#' @noRd
 .gdelt_apply_filters <- function(chunk, actor_types, actor_type_match,
                                   countries, country_match,
                                   cross_border, root_events_only,
@@ -438,32 +439,42 @@ gdelt_files <- function(start, end = start) {
 }
 
 # ---------------------------------------------------------------------------
-# Part 3b: read_gdelt()
+# read_gdelt()
 # ---------------------------------------------------------------------------
 
 #' Read and filter one or more raw GDELT export zips
 #'
 #' Reads GDELT 1.0 event files (as listed by [gdelt_files()] or downloaded
-#' by [download_gdelt()]), applying an explicit column spec (`?bilatr_gdelt_layout`)
-#' and row filters. Filters run on the full row **before** `columns` is
-#' applied, so a filter column does not need to be requested in `columns`.
-#' Memory is kept bounded with `readr::read_tsv_chunked()` (filtered chunk
-#' by chunk, so only surviving rows are ever held); this reads each `.zip`
-#' directly (no `unzip()` to a temp directory needed -- confirmed
-#' empirically for this readr version).
+#' by [download_gdelt()]) with an explicit column specification, and
+#' filters their rows. Filters run on the full row **before** `columns` is
+#' applied, so a filter column does not need to be requested in
+#' `columns`. Files are read in chunks with `readr::read_tsv_chunked()`
+#' and filtered chunk by chunk, so only the kept rows are ever held in
+#' memory; `.zip` files are read directly, without unzipping.
 #'
-#' For each file, the column count is inferred from the filename (a
-#' daily-pattern name -- `YYYYMMDD.export.CSV.zip` -- means 58 columns,
-#' anything else 57) and then confirmed by counting the tab-separated
-#' fields on the file's first line; a disagreement is trusted to the file
-#' (not the name) and produces a warning. Reads use `quote = ""` and
-#' `na = ""`: GDELT's free-text fields (`Actor1Name`, `*Geo_FullName`) can
-#' contain literal `"` characters, and readr's default quote handling
-#' mis-splits such rows.
+#' @section GDELT 1.0 files:
+#' GDELT 1.0's event archive (<https://data.gdeltproject.org/events/>) has
+#' three kinds of file, by date:
 #'
-#' GDELT 2.0 (15-minute-interval files, the Mentions/GKG tables) is not
-#' supported by this function or by [gdelt_files()]/[download_gdelt()];
-#' this package reads GDELT 1.0's yearly/monthly/daily event files only.
+#' * yearly `YYYY.zip`, 1979 through 2005;
+#' * monthly `YYYYMM.zip`, January 2006 through March 2013;
+#' * daily `YYYYMMDD.export.CSV.zip`, from 1 April 2013.
+#'
+#' The yearly and monthly backfiles have 57 tab-separated columns; the
+#' daily files have 58, the extra one being `SOURCEURL`. All files are
+#' tab-delimited with no header row, despite the `.CSV` extension. The
+#' column count is inferred from the file name and checked against the
+#' file's first line; if they disagree, the file wins, with a warning.
+#' Reads use `quote = ""` and `na = ""`, because GDELT's free-text fields
+#' (`Actor1Name`, `*Geo_FullName`) can contain literal `"` characters.
+#'
+#' The backfiles are organized by event date (`SQLDATE`), but each daily
+#' file holds the events *added* that day (`DATEADDED`), whose `SQLDATE`
+#' can be much earlier: news published today can report events from the
+#' past. `date_range` filters on `SQLDATE`.
+#'
+#' GDELT 2.0 (15-minute files, the Mentions and GKG tables) is not
+#' supported by this function or by [gdelt_files()]/[download_gdelt()].
 #'
 #' @param files Character vector of paths to GDELT export zips (or, for a
 #'   non-zipped file, a plain tab-separated path). Must be non-empty.
@@ -472,14 +483,25 @@ gdelt_files <- function(start, end = start) {
 #'   valid ones. If a 57-column (backfile) file is read with `"SOURCEURL"`
 #'   requested, that file's rows get `NA` for it, so output from mixed
 #'   eras binds cleanly.
-#' @param actor_types Character vector of CAMEO actor/role type codes
-#'   (`?bilatr_gdelt_layout`'s `.gdelt_actor_type_codes()`); `NULL` turns
-#'   the filter off. Unknown codes error, listing the valid ones.
-#' @param actor_type_match `"both"` (default; matches
-#'   `extract_all_relevant_gdelt()`'s pre-0.9.1 semantics): both actors
-#'   must carry one of `actor_types` in one of their `Type1-3Code`
-#'   fields. `"either"`: one actor is enough (covers state/non-state
-#'   interactions without a second code path).
+#' @param actor_types Character vector of CAMEO actor role codes, matched
+#'   against the actors' `Type1Code`/`Type2Code`/`Type3Code` fields, or
+#'   `NULL` to turn the filter off. The default, `c("GOV", "MIL", "SPY")`,
+#'   keeps government, military and intelligence actors. The CAMEO 1.1b3
+#'   codes are: primary roles `COP` (police), `GOV` (government), `INS`
+#'   (insurgents), `JUD` (judiciary), `MIL` (military), `OPP` (political
+#'   opposition), `REB` (rebels), `SEP` (separatists), `SPY` (state
+#'   intelligence), `UAF` (unaligned armed forces); secondary roles `AGR`
+#'   (agriculture), `BUS` (business), `CRM` (criminal), `CVL`
+#'   (civilian), `DEV` (development), `EDU` (education), `ELI` (elites),
+#'   `ENV` (environmental), `HLH` (health), `HRI` (human rights), `LAB`
+#'   (labor), `LEG` (legislature), `MED` (media), `REF` (refugees), `SET`
+#'   (settlers); tertiary roles `MOD` (moderate), `RAD` (radical); and the
+#'   international codes `IGO`, `IMG`, `INT`, `MNC`, `NGM`, `NGO`, `UIS`.
+#'   A code outside this list gives a warning; the filter still applies.
+#'   [count_gdelt_actor_types()] counts the codes in your files.
+#' @param actor_type_match `"both"` (default): both actors must carry one
+#'   of `actor_types` in one of their `Type1-3Code` fields. `"either"`:
+#'   one actor is enough (for example, for state/non-state interactions).
 #' @param countries Character vector matched against
 #'   `Actor1CountryCode`/`Actor2CountryCode`, or `NULL` (default) for no
 #'   country filter.
@@ -495,20 +517,16 @@ gdelt_files <- function(start, end = start) {
 #'   `NULL` (default). A row is kept if its `EventCode` **starts with**
 #'   any given code -- e.g. `"19"` keeps every code under root `19`, while
 #'   `"0211"` keeps only that exact code.
-#' @param date_range Length-2 vector (anything [.parse_event_date()]
-#'   accepts), or `NULL` (default). Filters on `SQLDATE`. For daily files
-#'   (organised by `DATEADDED`, not `SQLDATE`; see `?bilatr_gdelt_layout`),
-#'   this keeps events *dated* in the range among the files actually read
-#'   -- it does not recover events dated in the range but added (and so
-#'   filed) outside those files.
-#' @param chunk_size Rows per `readr::read_tsv_chunked()` chunk. Each
-#'   chunk's kept rows are appended to a list and row-bound once after the
-#'   read completes, so this does not change memory scaling with `chunk_size`
-#'   the way re-`bind_rows()`-ing into an accumulator on every chunk would
-#'   (quadratic in kept rows -- confirmed 10.1s vs. 1.7s on a synthetic
-#'   400k-row, 58-column file at the default `chunk_size`, a third of rows
-#'   kept). Larger than readr's own default (10,000) since GDELT backfiles
-#'   run to millions of rows.
+#' @param date_range Length-2 vector of dates (`Date`, `POSIXt`,
+#'   `YYYYMMDD` or `YYYY-MM-DD`), or `NULL` (default). Filters on
+#'   `SQLDATE`. Daily files are organized by `DATEADDED` (see "GDELT 1.0
+#'   files"), so this keeps the events *dated* in the range among the
+#'   files actually read; it does not recover events dated in the range
+#'   but added on days outside those files.
+#' @param chunk_size Rows per `readr::read_tsv_chunked()` chunk. The
+#'   default, 100,000, is ten times readr's own, since GDELT backfiles run
+#'   to millions of rows. Memory use depends on the rows kept, not on
+#'   `chunk_size`.
 #' @return A tibble of event-level rows, `columns` plus `source_file` (the
 #'   file's basename), row-bound across `files`.
 #' @examplesIf interactive()
@@ -599,7 +617,7 @@ read_gdelt <- function(
 #' file with a third of rows kept, combined with the larger `chunk_size`
 #' default (readr's own default is 10,000; monthly/yearly backfiles run to
 #' millions of rows, where the quadratic term dominates).
-#' @keywords internal
+#' @noRd
 .read_gdelt_one <- function(file, schema, columns, filter_cols,
                              actor_types, actor_type_match,
                              countries, country_match,
@@ -661,13 +679,13 @@ read_gdelt <- function(
 }
 
 # ---------------------------------------------------------------------------
-# Part 3c: download_gdelt()
+# download_gdelt()
 # ---------------------------------------------------------------------------
 
 #' Fetch and parse GDELT's `md5sums` index
 #' @return A named character vector (name = filename, value = md5), or
 #'   `NULL` if the index could not be fetched.
-#' @keywords internal
+#' @noRd
 .gdelt_fetch_md5sums <- function() {
   url <- paste0(.gdelt_base_url(), .GDELT_MD5SUMS_FILE)
   tryCatch(
@@ -689,13 +707,13 @@ read_gdelt <- function(
 #' Exactly one request: `utils::download.file(mode = "wb")` to
 #' `<destfile>.part`, renamed to `destfile` only on success, so a failed
 #' or interrupted download never leaves a file at the final path. Never
-#' `try()`-and-return-the-path (audit G2): a failed/missing/corrupt result
+#' `try()`-and-return-the-path: a failed/missing/corrupt result
 #' becomes a status, with no warning raised here (the caller raises one
 #' summary warning listing every failure).
 #'
 #' @return A list with `status` (`"downloaded"`, `"missing"`, `"failed"`,
 #'   or `"corrupt"`) and `path` (`destfile` if downloaded, else `NA`).
-#' @keywords internal
+#' @noRd
 .gdelt_download_one <- function(url, destfile, md5_lookup, verify) {
   part <- paste0(destfile, ".part")
   on.exit(if (file.exists(part)) unlink(part), add = TRUE)
@@ -742,7 +760,7 @@ read_gdelt <- function(
 }
 
 #' Raise one summary warning listing every failed/missing/corrupt file
-#' @keywords internal
+#' @noRd
 .gdelt_warn_failures <- function(plan, statuses) {
   bad <- statuses %in% c("failed", "missing", "corrupt")
   if (any(bad)) {
@@ -755,7 +773,7 @@ read_gdelt <- function(
 }
 
 #' Human-readable byte count for progress messages
-#' @keywords internal
+#' @noRd
 .gdelt_format_bytes <- function(bytes) {
   if (is.na(bytes)) {
     return("")
@@ -777,7 +795,7 @@ read_gdelt <- function(
 #' [.gdelt_empty_tibble()] (using `...`'s `columns`, or [read_gdelt()]'s own
 #' default if `columns` wasn't passed) plus an empty `source_file` column,
 #' so downstream code gets the same shape either way.
-#' @keywords internal
+#' @noRd
 .download_gdelt_temp <- function(plan, md5_lookup, verify, ...) {
   statuses <- character(nrow(plan))
   all_events <- vector("list", nrow(plan))
@@ -812,7 +830,7 @@ read_gdelt <- function(
 }
 
 #' `download_gdelt()`, cache mode: download to `dest_dir`, keep the zips
-#' @keywords internal
+#' @noRd
 .download_gdelt_cache <- function(plan, dest_dir, overwrite, md5_lookup, verify) {
   if (!dir.exists(dest_dir)) {
     dir.create(dest_dir, recursive = TRUE)
@@ -855,8 +873,8 @@ read_gdelt <- function(
 #' Download raw GDELT export zips
 #'
 #' Lists the files covering `[start, end]` with [gdelt_files()], then
-#' downloads each (this fixes audit G2/G3: one request per file, under a
-#' locally-raised, generous `timeout`, never a swallowed failure).
+#' downloads each: one request per file, with a generous `timeout`, and
+#' every failure reported.
 #'
 #' **`dest_dir = NULL`** (default): each file is downloaded to a
 #' temporary path, read with `read_gdelt(<tmp>, ...)` (`...` passed
@@ -934,11 +952,11 @@ download_gdelt <- function(
 }
 
 # ---------------------------------------------------------------------------
-# Part 3d: count_gdelt_actor_types()
+# count_gdelt_actor_types()
 # ---------------------------------------------------------------------------
 
 #' Count one chunk's actor-type-code combinations, over all three slots per side
-#' @keywords internal
+#' @noRd
 .gdelt_count_actor_types_chunk <- function(chunk) {
   chunk$.row_id <- seq_len(nrow(chunk))
 
@@ -960,7 +978,7 @@ download_gdelt <- function(
 }
 
 #' Read one file's contribution to `count_gdelt_actor_types()`
-#' @keywords internal
+#' @noRd
 .count_gdelt_actor_types_one <- function(file, schema,
                                           countries, country_match,
                                           cross_border, root_events_only,

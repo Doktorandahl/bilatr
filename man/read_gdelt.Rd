@@ -28,15 +28,26 @@ valid ones. If a 57-column (backfile) file is read with \code{"SOURCEURL"}
 requested, that file's rows get \code{NA} for it, so output from mixed
 eras binds cleanly.}
 
-\item{actor_types}{Character vector of CAMEO actor/role type codes
-(\code{?bilatr_gdelt_layout}'s \code{.gdelt_actor_type_codes()}); \code{NULL} turns
-the filter off. Unknown codes error, listing the valid ones.}
+\item{actor_types}{Character vector of CAMEO actor role codes, matched
+against the actors' \code{Type1Code}/\code{Type2Code}/\code{Type3Code} fields, or
+\code{NULL} to turn the filter off. The default, \code{c("GOV", "MIL", "SPY")},
+keeps government, military and intelligence actors. The CAMEO 1.1b3
+codes are: primary roles \code{COP} (police), \code{GOV} (government), \code{INS}
+(insurgents), \code{JUD} (judiciary), \code{MIL} (military), \code{OPP} (political
+opposition), \code{REB} (rebels), \code{SEP} (separatists), \code{SPY} (state
+intelligence), \code{UAF} (unaligned armed forces); secondary roles \code{AGR}
+(agriculture), \code{BUS} (business), \code{CRM} (criminal), \code{CVL}
+(civilian), \code{DEV} (development), \code{EDU} (education), \code{ELI} (elites),
+\code{ENV} (environmental), \code{HLH} (health), \code{HRI} (human rights), \code{LAB}
+(labor), \code{LEG} (legislature), \code{MED} (media), \code{REF} (refugees), \code{SET}
+(settlers); tertiary roles \code{MOD} (moderate), \code{RAD} (radical); and the
+international codes \code{IGO}, \code{IMG}, \code{INT}, \code{MNC}, \code{NGM}, \code{NGO}, \code{UIS}.
+A code outside this list gives a warning; the filter still applies.
+\code{\link[=count_gdelt_actor_types]{count_gdelt_actor_types()}} counts the codes in your files.}
 
-\item{actor_type_match}{\code{"both"} (default; matches
-\code{extract_all_relevant_gdelt()}'s pre-0.9.1 semantics): both actors
-must carry one of \code{actor_types} in one of their \verb{Type1-3Code}
-fields. \code{"either"}: one actor is enough (covers state/non-state
-interactions without a second code path).}
+\item{actor_type_match}{\code{"both"} (default): both actors must carry one
+of \code{actor_types} in one of their \verb{Type1-3Code} fields. \code{"either"}:
+one actor is enough (for example, for state/non-state interactions).}
 
 \item{countries}{Character vector matched against
 \code{Actor1CountryCode}/\code{Actor2CountryCode}, or \code{NULL} (default) for no
@@ -58,21 +69,17 @@ different. \code{FALSE}: no country-presence filter at all.}
 any given code -- e.g. \code{"19"} keeps every code under root \code{19}, while
 \code{"0211"} keeps only that exact code.}
 
-\item{date_range}{Length-2 vector (anything \code{\link[=.parse_event_date]{.parse_event_date()}}
-accepts), or \code{NULL} (default). Filters on \code{SQLDATE}. For daily files
-(organised by \code{DATEADDED}, not \code{SQLDATE}; see \code{?bilatr_gdelt_layout}),
-this keeps events \emph{dated} in the range among the files actually read
--- it does not recover events dated in the range but added (and so
-filed) outside those files.}
+\item{date_range}{Length-2 vector of dates (\code{Date}, \code{POSIXt},
+\code{YYYYMMDD} or \code{YYYY-MM-DD}), or \code{NULL} (default). Filters on
+\code{SQLDATE}. Daily files are organized by \code{DATEADDED} (see "GDELT 1.0
+files"), so this keeps the events \emph{dated} in the range among the
+files actually read; it does not recover events dated in the range
+but added on days outside those files.}
 
-\item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. Each
-chunk's kept rows are appended to a list and row-bound once after the
-read completes, so this does not change memory scaling with \code{chunk_size}
-the way re-\code{bind_rows()}-ing into an accumulator on every chunk would
-(quadratic in kept rows -- confirmed 10.1s vs. 1.7s on a synthetic
-400k-row, 58-column file at the default \code{chunk_size}, a third of rows
-kept). Larger than readr's own default (10,000) since GDELT backfiles
-run to millions of rows.}
+\item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. The
+default, 100,000, is ten times readr's own, since GDELT backfiles run
+to millions of rows. Memory use depends on the rows kept, not on
+\code{chunk_size}.}
 }
 \value{
 A tibble of event-level rows, \code{columns} plus \code{source_file} (the
@@ -80,28 +87,40 @@ file's basename), row-bound across \code{files}.
 }
 \description{
 Reads GDELT 1.0 event files (as listed by \code{\link[=gdelt_files]{gdelt_files()}} or downloaded
-by \code{\link[=download_gdelt]{download_gdelt()}}), applying an explicit column spec (\code{?bilatr_gdelt_layout})
-and row filters. Filters run on the full row \strong{before} \code{columns} is
-applied, so a filter column does not need to be requested in \code{columns}.
-Memory is kept bounded with \code{readr::read_tsv_chunked()} (filtered chunk
-by chunk, so only surviving rows are ever held); this reads each \code{.zip}
-directly (no \code{unzip()} to a temp directory needed -- confirmed
-empirically for this readr version).
+by \code{\link[=download_gdelt]{download_gdelt()}}) with an explicit column specification, and
+filters their rows. Filters run on the full row \strong{before} \code{columns} is
+applied, so a filter column does not need to be requested in
+\code{columns}. Files are read in chunks with \code{readr::read_tsv_chunked()}
+and filtered chunk by chunk, so only the kept rows are ever held in
+memory; \code{.zip} files are read directly, without unzipping.
 }
-\details{
-For each file, the column count is inferred from the filename (a
-daily-pattern name -- \code{YYYYMMDD.export.CSV.zip} -- means 58 columns,
-anything else 57) and then confirmed by counting the tab-separated
-fields on the file's first line; a disagreement is trusted to the file
-(not the name) and produces a warning. Reads use \code{quote = ""} and
-\code{na = ""}: GDELT's free-text fields (\code{Actor1Name}, \verb{*Geo_FullName}) can
-contain literal \verb{"} characters, and readr's default quote handling
-mis-splits such rows.
+\section{GDELT 1.0 files}{
 
-GDELT 2.0 (15-minute-interval files, the Mentions/GKG tables) is not
-supported by this function or by \code{\link[=gdelt_files]{gdelt_files()}}/\code{\link[=download_gdelt]{download_gdelt()}};
-this package reads GDELT 1.0's yearly/monthly/daily event files only.
+GDELT 1.0's event archive (\url{https://data.gdeltproject.org/events/}) has
+three kinds of file, by date:
+\itemize{
+\item yearly \code{YYYY.zip}, 1979 through 2005;
+\item monthly \code{YYYYMM.zip}, January 2006 through March 2013;
+\item daily \code{YYYYMMDD.export.CSV.zip}, from 1 April 2013.
 }
+
+The yearly and monthly backfiles have 57 tab-separated columns; the
+daily files have 58, the extra one being \code{SOURCEURL}. All files are
+tab-delimited with no header row, despite the \code{.CSV} extension. The
+column count is inferred from the file name and checked against the
+file's first line; if they disagree, the file wins, with a warning.
+Reads use \code{quote = ""} and \code{na = ""}, because GDELT's free-text fields
+(\code{Actor1Name}, \verb{*Geo_FullName}) can contain literal \verb{"} characters.
+
+The backfiles are organized by event date (\code{SQLDATE}), but each daily
+file holds the events \emph{added} that day (\code{DATEADDED}), whose \code{SQLDATE}
+can be much earlier: news published today can report events from the
+past. \code{date_range} filters on \code{SQLDATE}.
+
+GDELT 2.0 (15-minute files, the Mentions and GKG tables) is not
+supported by this function or by \code{\link[=gdelt_files]{gdelt_files()}}/\code{\link[=download_gdelt]{download_gdelt()}}.
+}
+
 \examples{
 \dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
 # downloads one daily file (about 6 MB) into a temporary directory

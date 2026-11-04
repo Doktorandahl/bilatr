@@ -2,27 +2,24 @@
 # every registered model's .stan file, without depending on Stan's own
 # #include mechanism at compile/sample time.
 #
-# cmdstanr (0.9.0, in use here, and every CRAN release as of writing) has a
-# bug where an include_paths entry containing a space breaks at
-# $sample()-time, not compile-time: the model still compiles (that goes
-# through a shell-invoked Makefile), but $sample()'s internal
-# self$variables() check calls stanc directly via processx with no shell,
-# so a shell-quoted include path is passed through literally and stanc
-# can't find the file. See https://github.com/stan-dev/cmdstanr/issues/820
-# (fixed upstream in PR #1226, merged 2026-07-25, not yet in any release).
-# This project's own devtools::load_all() working tree lives under a
-# space-containing path, so this is not a CI-only concern: it would break
-# real fit_panel()/fit_dyad_ts() calls made from source.
+# cmdstanr (up to at least 0.9.0) has a bug where an include_paths entry
+# containing a space breaks at $sample()-time, not compile-time: the
+# model still compiles (that goes through a shell-invoked Makefile), but
+# $sample()'s internal self$variables() check calls stanc directly via
+# processx with no shell, so a shell-quoted include path is passed
+# through literally and stanc can't find the file. See
+# https://github.com/stan-dev/cmdstanr/issues/820. Package libraries and
+# source trees under a path with a space (common on macOS and Windows)
+# would hit it in ordinary fit_panel()/fit_dyad_ts() calls.
 #
 # The shared likelihood's single source of truth is therefore
 # inst/stan/include/partial_log_lik.stanfunctions, a plain text file that
-# is never read by stanc. data-raw/sync_stan_functions.R uses the helpers
-# below to splice it verbatim into a marker-delimited block in each model
-# .stan file. Every registered model ships as an ordinary, fully
-# self-contained .stan program with no runtime #include.
-# tests/testthat/test_stan_includes.R re-derives each file's block from
-# the canonical source and fails if they've drifted (i.e. the sync script
-# wasn't re-run after an edit to the canonical source).
+# is never read by stanc. The helpers below splice it verbatim into a
+# marker-delimited block in each model's .stan file (a maintainer script
+# in the source repository runs them after an edit), so every model ships
+# as an ordinary, self-contained .stan program with no #include. The
+# package tests re-derive each file's block from the canonical source and
+# fail if they have drifted.
 
 .partial_log_lik_begin_marker <- paste(
   "  // <<< BEGIN GENERATED partial_log_lik",
@@ -36,7 +33,7 @@
 #'   `inst/stan/include/partial_log_lik.stanfunctions`.
 #' @return Character vector of lines, indented for nesting one level inside
 #'   a `functions { ... }` block, wrapped in begin/end markers.
-#' @keywords internal
+#' @noRd
 .render_partial_log_lik_block <- function(fragment_lines) {
   indented <- ifelse(
     nzchar(fragment_lines),
@@ -63,7 +60,7 @@
 #'   `inst/stan/include/partial_log_lik.stanfunctions`.
 #' @return Character vector, `stan_lines` with the block between (and
 #'   including) the begin/end markers replaced by a fresh render.
-#' @keywords internal
+#' @noRd
 .splice_partial_log_lik_block <- function(stan_lines, fragment_lines) {
   begin_idx <- which(stan_lines == .partial_log_lik_begin_marker)
   end_idx <- which(stan_lines == .partial_log_lik_end_marker)

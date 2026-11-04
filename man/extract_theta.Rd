@@ -29,10 +29,9 @@ It must carry its \code{dyad_ids} attribute.}
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
 \item{max_memory_mb, chunk_size, n_cores}{Only used when
-\code{fit} is CSV file paths; identical in meaning to
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s arguments of the same name (including
-the one-time default-\code{max_memory_mb} \code{message()}), applied here to
-\code{theta} alone rather than all of Tier 3.}
+\code{fit} is CSV file paths; the same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
+arguments of the same name (including the message when
+\code{max_memory_mb} is left at its default), applied to \code{theta} alone.}
 }
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
@@ -51,33 +50,24 @@ output. Works the same way for
 single-dyad (\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}) and panel (\code{\link[=fit_panel]{fit_panel()}}) fits.
 }
 \details{
-\code{stable}/\code{ou} fold \code{alpha[1]}'s sign into the reported \code{alpha}/\code{theta}
-(see each \code{.stan} file's header, "IDENTIFICATION: ORIENTATION FOLD"),
-so \code{theta} is already oriented, with no post-hoc relabeling needed:
-higher values make \code{reference_category} more likely relative to the
+Every model folds \code{alpha[1]}'s sign into the reported \code{alpha} and
+\code{theta}, so \code{theta} is already oriented, with no post-hoc relabeling
+needed: higher values make \code{reference_category} more likely relative to the
 other action types, and so mean more cooperative relations when the
 reference category is cooperative. See the \code{reference_category}
 argument of \code{\link[=prepare_stan_data]{prepare_stan_data()}}.
 
 \code{fit} also accepts a character vector of raw CmdStan CSV file paths
-(one per chain), matching \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s CSV-path mode --
-reads and summarises \code{theta} directly from the raw CSVs in
-memory-bounded chunks via \link{.chunked_summarise_csv} rather than
-materializing the full draws array, for the same production-scale-panel
-reason \code{diagnose_convergence()} needed it. \strong{This trades memory for
-wall-time, and the exchange rate can be steep}: reading is
-single-threaded, and each chunk's cost is roughly a full parse of the
-largest chain file regardless of how many columns are requested (see
-\code{max_memory_mb} below and in \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s documentation),
-so total sweep time scales with chunk COUNT, not memory saved. Prefer
-the in-memory path when you already have \code{fit} in memory (no benefit
-to re-reading), and the CSV path's default \code{max_memory_mb} as large as
-your job's memory allocation can afford, not as small as "safely"
-possible. This mode only supports the default \code{probs}, since it reuses
-\code{\link[=diagnose_convergence]{diagnose_convergence()}}'s chunked-read helper (which always computes
-a fixed \code{q5}/\code{median}/\code{q95} summary, not user-configurable quantiles)
-rather than re-reading data already summarised once; pass an
-in-memory \code{fit} if you need other quantiles.
+(one per chain), as \code{\link[=diagnose_convergence]{diagnose_convergence()}} does: \code{theta} is then read
+and summarized from the CSV files in memory-bounded chunks, so the full
+set of draws is never in memory at once. \strong{This trades memory for
+time}: each chunk costs about one pass over the largest chain file,
+however few columns it keeps, so the total time grows with the number
+of chunks. Use an in-memory \code{fit} when you have one, and otherwise set
+\code{max_memory_mb} as large as you can afford (see "Large fits from CSV
+files" in \code{\link[=diagnose_convergence]{diagnose_convergence()}}). This mode supports only the
+default \code{probs} (the 5\%, 50\% and 95\% quantiles); pass an in-memory
+\code{fit} for other quantiles.
 }
 \examples{
 # CmdStan CSVs from a completed run, never read into this R session (here,

@@ -1,8 +1,8 @@
 # Tools for tuning `threads_per_chain` and `chunk_size` (the reduce_sum
 # grainsize) by measuring them: a local sweep (benchmark_bilatr()), the
-# grid and profiled model for a cluster sweep (benchmark_grid(),
+# grid and profiled model for a sweep run as batch jobs (benchmark_grid(),
 # insert_reduce_sum_profile()), and the summaries of either
-# (summarise_benchmark(), benchmark_pareto(), plot_benchmark()). See
+# (summarize_benchmark(), benchmark_pareto(), plot_benchmark()). See
 # vignette("tuning").
 
 #' Build a benchmark grid of `threads_per_chain` x `chunk_size`
@@ -10,7 +10,8 @@
 #' Constructs the grid of a `reduce_sum` tuning sweep on a panel of
 #' `n_dyads` dyads: one row per run, crossing `threads_per_chain`,
 #' `chunk_size` and `replicate`. [benchmark_bilatr()] runs such a grid on
-#' this machine; for a cluster, each row can be one job of a job array
+#' this machine; for a sweep run as batch jobs, each row can be one job
+#' of a job array
 #' (see `vignette("tuning", package = "bilatr")`).
 #'
 #' The models slice the dyads inside `reduce_sum`, so `chunk_size` is a
@@ -39,9 +40,9 @@
 #'   ordered by `threads_per_chain`, then `chunk_size`, then `replicate`,
 #'   so the rows of one `threads_per_chain` value are a contiguous block
 #'   (one job array per thread count).
-#' @seealso [benchmark_bilatr()], [summarise_benchmark()]
+#' @seealso [benchmark_bilatr()], [summarize_benchmark()]
 #' @examples
-#' # the grid of a cluster sweep for a 16,750-dyad panel
+#' # the grid of a batch-job sweep for a 16,750-dyad panel
 #' grid <- benchmark_grid(16750, threads_per_chain = c(8, 16, 32), replicates = 2)
 #' grid
 #' unique(grid$chunk_size)
@@ -100,7 +101,7 @@ benchmark_grid <- function(n_dyads,
 #' @param arg Its argument name, for the error.
 #' @param fn The calling function, for the error.
 #' @return `TRUE`, invisibly; errors otherwise.
-#' @keywords internal
+#' @noRd
 .check_whole_vector <- function(x, arg, fn) {
   ok <- is.numeric(x) && length(x) >= 1 && !anyNA(x) && all(is.finite(x)) &&
     all(x >= 1) && all(x == round(x))
@@ -118,7 +119,7 @@ benchmark_grid <- function(n_dyads,
 #' reports the time spent in the parallel region through
 #' `CmdStanMCMC$profiles()`, which separates the likelihood from the rest
 #' of each gradient evaluation. [benchmark_bilatr()] uses it with
-#' `profile = TRUE`; for a cluster sweep, write the result to a `.stan`
+#' `profile = TRUE`; for a batch-job sweep, write the result to a `.stan`
 #' file and compile that (see `vignette("tuning", package = "bilatr")`).
 #'
 #' The statement is found by pattern, and the same pattern matches all
@@ -177,17 +178,17 @@ insert_reduce_sum_profile <- function(stan_code, profile_name = "reduce_sum_like
 #'
 #' Bounds the work per iteration of a short, unadapted run (see
 #' [benchmark_bilatr()], Details).
-#' @keywords internal
+#' @noRd
 .BILATR_BENCHMARK_MAX_TREEDEPTH <- 6L
 
 #' The columns every benchmark result has
-#' @keywords internal
+#' @noRd
 .BILATR_BENCHMARK_COLUMNS <- c(
   "threads_per_chain", "chunk_size", "replicate",
   "sampling_sec", "iter_per_sec", "core_sec_per_1k_iter"
 )
 
-#' Summarise benchmark runs to one row per grid cell
+#' Summarize benchmark runs to one row per grid cell
 #'
 #' Collapses the replicates of a benchmark to one row per
 #' (`threads_per_chain`, `chunk_size`) cell, within any other grouping
@@ -195,8 +196,9 @@ insert_reduce_sum_profile <- function(stan_code, profile_name = "reduce_sum_like
 #'
 #' @section Benchmark results:
 #' A benchmark result is a data frame with one row per run (one chain).
-#' [benchmark_bilatr()] returns one; on a cluster, each job writes one row
-#' and the rows are bound together (see `vignette("tuning", package = "bilatr")`). Every
+#' [benchmark_bilatr()] returns one; in a batch-job sweep, each job writes
+#' one row and the rows are bound together (see
+#' `vignette("tuning", package = "bilatr")`). Every
 #' benchmark function uses these column names:
 #'
 #' * `threads_per_chain`: the `threads_per_chain` of the run;
@@ -232,17 +234,17 @@ insert_reduce_sum_profile <- function(stan_code, profile_name = "reduce_sum_like
 #'   `leapfrog_per_sec` (`NA` when `results` has no such column).
 #' @seealso [benchmark_pareto()], [plot_benchmark()]
 #' @examples
-#' # a benchmark result as a cluster sweep would collect it
+#' # a benchmark result as a batch-job sweep would collect it
 #' runs <- benchmark_grid(1000, threads_per_chain = c(2, 4), chunk_size = c(25, 100),
 #'   replicates = 2)
 #' runs$sampling_sec <- c(40, 41, 38, 39, 24, 25, 26, 26)
 #' runs$iter_per_sec <- 100 / runs$sampling_sec
 #' runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
-#' summarise_benchmark(runs)
+#' summarize_benchmark(runs)
 #' @export
-summarise_benchmark <- function(results,
+summarize_benchmark <- function(results,
                                 group_vars = c("scenario", "threads_per_chain", "chunk_size")) {
-  .check_benchmark_columns(results, "summarise_benchmark()")
+  .check_benchmark_columns(results, "summarize_benchmark()")
   group_vars <- intersect(group_vars, names(results))
   has_profile <- "reduce_sum_wall_sec" %in% names(results)
   has_leapfrog <- "leapfrog_per_sec" %in% names(results)
@@ -275,7 +277,7 @@ summarise_benchmark <- function(results,
 #' @param results The data frame.
 #' @param fn The calling function, for the error.
 #' @return `TRUE`, invisibly; errors otherwise.
-#' @keywords internal
+#' @noRd
 .check_benchmark_columns <- function(results, fn) {
   if (!is.data.frame(results)) {
     stop(fn, ": `results` must be a data frame of benchmark runs.", call. = FALSE)
@@ -285,7 +287,7 @@ summarise_benchmark <- function(results,
     stop(
       fn, ": `results` lacks the benchmark column(s) ",
       paste0("`", absent, "`", collapse = ", "),
-      "; see ?summarise_benchmark, section \"Benchmark results\".",
+      "; see ?summarize_benchmark, section \"Benchmark results\".",
       call. = FALSE
     )
   }
@@ -303,8 +305,8 @@ summarise_benchmark <- function(results,
 #' The front lists the settings worth choosing between; which one to use
 #' depends on whether wall time or core time is scarcer.
 #'
-#' @param df A benchmark summary from [summarise_benchmark()], or a
-#'   benchmark result itself (see `?summarise_benchmark`, "Benchmark
+#' @param df A benchmark summary from [summarize_benchmark()], or a
+#'   benchmark result itself (see `?summarize_benchmark`, "Benchmark
 #'   results"), such as the output of [benchmark_bilatr()].
 #' @param throughput Name of the throughput column (higher is better).
 #'   `NULL` (default) uses `"iter_per_sec_median"` if `df` has it, else
@@ -315,14 +317,14 @@ summarise_benchmark <- function(results,
 #' @param by Optional character vector of grouping columns.
 #' @return `df` with an added logical `pareto` column (`NA` for rows whose
 #'   throughput or cost is missing).
-#' @seealso [summarise_benchmark()], [plot_benchmark()]
+#' @seealso [summarize_benchmark()], [plot_benchmark()]
 #' @examples
 #' runs <- benchmark_grid(1000, threads_per_chain = c(2, 4), chunk_size = c(25, 100),
 #'   replicates = 1)
 #' runs$sampling_sec <- c(40, 38, 25, 26)
 #' runs$iter_per_sec <- 100 / runs$sampling_sec
 #' runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
-#' benchmark_pareto(summarise_benchmark(runs))
+#' benchmark_pareto(summarize_benchmark(runs))
 #' @export
 benchmark_pareto <- function(df, throughput = NULL, cost = NULL, by = NULL) {
   fn <- "benchmark_pareto()"
@@ -369,16 +371,16 @@ benchmark_pareto <- function(df, throughput = NULL, cost = NULL, by = NULL) {
 #' `metric`. Cells on the Pareto front (a `pareto` column, from
 #' [benchmark_pareto()]) are outlined.
 #'
-#' @param summary_df A benchmark summary from [summarise_benchmark()],
+#' @param summary_df A benchmark summary from [summarize_benchmark()],
 #'   optionally passed through [benchmark_pareto()]. A
-#'   `bilatr_benchmark` result from [benchmark_bilatr()] is summarised
+#'   `bilatr_benchmark` result from [benchmark_bilatr()] is summarized
 #'   (and its Pareto front marked) first.
 #' @param metric Column to map to the fill. Default
 #'   `"iter_per_sec_median"`.
 #' @param facet Column to facet by, or `NULL`. The default facets by
 #'   `scenario` when there is such a column.
 #' @return A `ggplot` object.
-#' @seealso [summarise_benchmark()], [benchmark_pareto()]
+#' @seealso [summarize_benchmark()], [benchmark_pareto()]
 #' @examples
 #' if (requireNamespace("ggplot2", quietly = TRUE)) {
 #'   runs <- benchmark_grid(1000, threads_per_chain = c(2, 4), chunk_size = c(25, 100),
@@ -386,7 +388,7 @@ benchmark_pareto <- function(df, throughput = NULL, cost = NULL, by = NULL) {
 #'   runs$sampling_sec <- c(40, 38, 25, 26)
 #'   runs$iter_per_sec <- 100 / runs$sampling_sec
 #'   runs$core_sec_per_1k_iter <- runs$threads_per_chain * runs$sampling_sec * 1000 / 100
-#'   plot_benchmark(benchmark_pareto(summarise_benchmark(runs)))
+#'   plot_benchmark(benchmark_pareto(summarize_benchmark(runs)))
 #' }
 #' @export
 plot_benchmark <- function(summary_df,
@@ -394,7 +396,7 @@ plot_benchmark <- function(summary_df,
                            facet = "scenario") {
   rlang::check_installed("ggplot2", "for plot_benchmark()")
   if (inherits(summary_df, "bilatr_benchmark")) {
-    summary_df <- benchmark_pareto(summarise_benchmark(summary_df))
+    summary_df <- benchmark_pareto(summarize_benchmark(summary_df))
   }
   absent <- setdiff(c("threads_per_chain", "chunk_size", metric), names(summary_df))
   if (length(absent) > 0) {
@@ -434,10 +436,10 @@ plot_benchmark <- function(summary_df,
 #' Number of cores this process may use
 #'
 #' `parallelly::availableCores()` when parallelly is installed (it
-#' respects cluster schedulers' allocations, such as
-#' `SLURM_CPUS_PER_TASK`), else `parallel::detectCores()`.
+#' respects the cores a job scheduler or container allocates), else
+#' `parallel::detectCores()`.
 #' @return An integer, or `NA` if it cannot be determined.
-#' @keywords internal
+#' @noRd
 .bilatr_available_cores <- function() {
   n <- if (rlang::is_installed("parallelly")) {
     parallelly::availableCores()
@@ -453,7 +455,7 @@ plot_benchmark <- function(summary_df,
 #' data and machine, so you can choose the settings of [fit_panel()] by
 #' measurement. Each run is one chain of the model, with the given
 #' `threads_per_chain` and `chunk_size`; the result goes straight into
-#' [summarise_benchmark()], [benchmark_pareto()] and [plot_benchmark()].
+#' [summarize_benchmark()], [benchmark_pareto()] and [plot_benchmark()].
 #' See `vignette("tuning", package = "bilatr")` for how to read it.
 #'
 #' Before compiling anything, `benchmark_bilatr()` checks that no
@@ -505,7 +507,7 @@ plot_benchmark <- function(summary_df,
 #'   prepared Stan data list.
 #' @param seed Base seed of the runs; see Details.
 #' @return A tibble of class `bilatr_benchmark`, one row per run, with the
-#'   columns described in `?summarise_benchmark` ("Benchmark results"):
+#'   columns described in `?summarize_benchmark` ("Benchmark results"):
 #'   `job_id`, `threads_per_chain`, `chunk_size`, `replicate`, `n_chunks`,
 #'   `chunks_per_thread`, `warmup_sec`, `sampling_sec`, `total_sec`,
 #'   `iter_per_sec`, `core_sec_per_1k_iter`, `n_leapfrog` (leapfrog steps
@@ -513,8 +515,8 @@ plot_benchmark <- function(summary_df,
 #'   `profile = TRUE`, `reduce_sum_wall_sec`. `attr(x, "settings")` records the model, the
 #'   data dimensions, the iterations, the seed and the cores available.
 #'   It has `print()` and [autoplot()] methods.
-#' @seealso [summarise_benchmark()], [benchmark_pareto()],
-#'   [plot_benchmark()], [benchmark_grid()] for a cluster sweep.
+#' @seealso [summarize_benchmark()], [benchmark_pareto()],
+#'   [plot_benchmark()], [benchmark_grid()] for a batch-job sweep.
 #' @examplesIf bilatr_cmdstan_available()
 #' # 30 simulated dyads over 10 years, aggregated by PentaClass
 #' set.seed(1)
@@ -539,7 +541,7 @@ plot_benchmark <- function(summary_df,
 #'   reference_category = "1"
 #' )
 #' bench
-#' benchmark_pareto(summarise_benchmark(bench))
+#' benchmark_pareto(summarize_benchmark(bench))
 #' }
 #' @export
 benchmark_bilatr <- function(data,
@@ -716,7 +718,7 @@ benchmark_bilatr <- function(data,
 #' @param fit A `CmdStanMCMC` fit of a profiled model.
 #' @param name The profile's name.
 #' @return Seconds, or `NA` if the profile is absent.
-#' @keywords internal
+#' @noRd
 .bilatr_profile_wall_sec <- function(fit, name) {
   pr <- tryCatch(fit$profiles(), error = function(e) NULL)
   if (is.null(pr)) {
@@ -733,7 +735,7 @@ benchmark_bilatr <- function(data,
 #' Format a duration in seconds for a message
 #' @param sec Seconds.
 #' @return A string such as `"40 seconds"` or `"12 minutes"`.
-#' @keywords internal
+#' @noRd
 .format_duration <- function(sec) {
   if (!is.finite(sec)) {
     return("an unknown time")
@@ -782,7 +784,7 @@ print.bilatr_benchmark <- function(x, ...) {
 
 #' Plot a `bilatr_benchmark` object
 #'
-#' Summarises the runs with [summarise_benchmark()], marks the Pareto
+#' Summarizes the runs with [summarize_benchmark()], marks the Pareto
 #' front with [benchmark_pareto()], and draws the heatmap of
 #' [plot_benchmark()].
 #'

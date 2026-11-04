@@ -22,7 +22,7 @@
 #' `save_warmup_spelling`: `"numeric"` (default) writes `save_warmup = 0`/
 #' `1`, matching older CmdStan; `"logical"` writes `save_warmup = false`/
 #' `true`, matching CmdStan >= 2.33 (both spellings confirmed against real
-#' CmdStan output; see [.scan_stan_csv_header_and_skip()]'s docs, 0.10.0).
+#' CmdStan output; see [.scan_stan_csv_header_and_skip()]'s docs).
 #' `thin`: the config's `num_samples`/`num_warmup` are written as
 #' `n_draws * thin`/`n_warmup * thin`, so the physically-written row
 #' counts (`n_draws` post-warmup, `n_warmup` warmup) are exactly
@@ -135,11 +135,10 @@ make_fake_events <- function(n = 400, seed = 42, years = 2015:2019) {
   events[events$Actor1CountryCode != events$Actor2CountryCode, ]
 }
 
-# Event data -> Stan data through the 0.12.0 path: aggregate_events() then
-# prepare_stan_data() (`...`). Replaces the assemble_stan_data(events,
-# years = a:b, ...) calls these tests used before 0.12.0: pass
-# start = "a-01-01", end = "b-12-31". Messages are suppressed; tests about
-# messages call the two functions directly.
+# Event data -> Stan data: aggregate_events() then prepare_stan_data()
+# (`...`). For a range of years a:b, pass start = "a-01-01",
+# end = "b-12-31". Messages are suppressed; tests about messages call the
+# two functions directly.
 events_to_stan_data <- function(events, grouping_var, start = NULL, end = NULL,
                                 resolution = "yearly", directed = TRUE, ...,
                                 actor1 = "Actor1CountryCode", actor2 = "Actor2CountryCode",
@@ -162,9 +161,9 @@ events_to_stan_data <- function(events, grouping_var, start = NULL, end = NULL,
 # max_memory_mb, not by the fixture's own size.
 #
 # stan_model defaults to "stable"; every registered model (stable/ou/
-# stable_gamma) identifies alpha[1]'s sign by construction (see NEWS.md
-# and inst/stan/bilatr_alphanorm.stan's header, "IDENTIFICATION:
-# ORIENTATION FOLD"), so there is no basin to land in regardless of which
+# stable_gamma) identifies alpha[1]'s sign by construction (see
+# inst/stan/bilatr_alphanorm.stan's header, "Sign: the ORIENTATION
+# FOLD"), so there is no basin to land in regardless of which
 # one is fit. `compute_log_lik`/`rho_prior_a`/`rho_prior_b` (needed by one
 # or more registered models) default to the same values
 # [prepare_stan_data()] does; pass `extra_data` to override them.
@@ -223,9 +222,8 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
 # posterior is a POINT MASS at the known true alpha/mu_intercept/theta/
 # phi (n_pseudo_draws identical pseudo-draws). This isolates the
 # compositional-residual PPC's own frequentist calibration/power from
-# posterior parameter uncertainty, matching how the prompt's own
-# validation ("I simulated it before writing this and it is calibrated")
-# reads -- check_compositional_residuals() only ever needs `fit$draws()`
+# posterior parameter uncertainty -- check_compositional_residuals()
+# only ever needs `fit$draws()`
 # (see .get_draws()), so a hand-built list with a `draws` closure over a
 # posterior::draws_array satisfies its full contract without a real fit.
 #

@@ -33,24 +33,42 @@ quantity into one of three tiers before applying Rhat/ESS thresholds:
   experimental `stable_gamma` variant). These affect the whole model, so
   any issue here is always reported in full, never summarized away.
 * **Tier 2 -- per-dyad hierarchical parameters** (`phi`, `process_noise`,
-  `theta0`, and their non-centered/raw counterparts). These are screened
-  against how much data (`n_dt`) each dyad has, flagging dyads whose
-  diagnostics are worse than a smooth degradation-with-sparsity trend
-  would predict -- i.e. genuine outliers, not just the sparsest dyads.
-* **Tier 3 -- per-dyad-period latent states** (`theta`, `theta_raw`).
-  These are the noisiest by design, so they're reported only as
-  per-dyad aggregate statistics (e.g. minimum ESS along a dyad's path),
-  never flooding the console with one row per dyad-period.
+  `theta0`, and the non-centered `log_process_noise_raw`). These are
+  screened against how much data (`n_dt`) each dyad has, flagging dyads
+  whose diagnostics are worse than a smooth degradation-with-sparsity
+  trend would predict -- i.e. genuine outliers, not just the sparsest
+  dyads.
+* **Tier 3 -- per-dyad-period latent states** (`theta`). These are the
+  noisiest by design, so they're reported only as per-dyad aggregate
+  statistics (e.g. minimum ESS along a dyad's path), never flooding the
+  console with one row per dyad-period. Other per-dyad-period
+  quantities (`theta_filtered`, `log_lik`) get one summary row each.
+
+The raw parameters that the model's orientation fold is built from
+(`alpha_raw`, `z_theta0`, `theta_raw`) are left out of every tier: their
+sign is arbitrary, so their R-hat says nothing about convergence.
 
 ## A panel with very uneven sparsity
 
 We simulate a small panel where dyad activity spans two orders of
-magnitude, to make the tiering concrete:
+magnitude, to make the tiering concrete. Each dyad has a latent level
+that follows a random walk over the years, and each event's CAMEO code
+is drawn with probability proportional to `exp(level * Goldstein / 4)`,
+so more cooperative dyad-years produce more cooperative codes and the
+model has a signal to recover:
 
 
 ``` r
 library(bilatr)
 library(dplyr)
+#> 
+#> Attaching package: 'dplyr'
+#> The following objects are masked from 'package:stats':
+#> 
+#>     filter, lag
+#> The following objects are masked from 'package:base':
+#> 
+#>     intersect, setdiff, setequal, union
 
 set.seed(42)
 countries <- c("USA", "CHN", "RUS", "IRN", "PRK", "ISR")
@@ -61,20 +79,25 @@ dyad_pairs <- expand.grid(a1 = countries, a2 = countries, stringsAsFactors = FAL
 # very uneven event counts per dyad: some dyads get a handful of events,
 # others hundreds.
 n_events_per_dyad <- c(400, 350, 300, 250, 15, 10, 8, 5)
+years <- 2015:2019
 events <- purrr::map2_dfr(seq_len(nrow(dyad_pairs)), n_events_per_dyad, function(i, n) {
-  dates <- format(
-    sample(seq(as.Date("2015-01-01"), as.Date("2019-12-31"), by = "day"), n, replace = TRUE),
-    "%Y%m%d"
-  )
+  level <- cumsum(c(rnorm(1, 0, 1), rnorm(length(years) - 1, 0, 0.4)))
+  year <- sample(years, n, replace = TRUE)
+  code <- vapply(year, function(y) {
+    sample(cameo_lookup$CAMEOEVENTCODE, 1,
+      prob = exp(level[y - 2014] * cameo_lookup$GoldsteinScore / 4)
+    )
+  }, character(1))
+  day <- sample(0:364, n, replace = TRUE)
   tibble::tibble(
     Actor1CountryCode = dyad_pairs$a1[i],
     Actor2CountryCode = dyad_pairs$a2[i],
-    SQLDATE = as.integer(dates),
-    EventCode = sample(cameo_lookup$CAMEOEVENTCODE, n, replace = TRUE)
+    SQLDATE = as.integer(format(as.Date(paste0(year, "-01-01")) + day, "%Y%m%d")),
+    EventCode = code
   )
 })
 events <- recode_cameo(events, code_col = "EventCode")
-#> recode_cameo(): 13 row(s) matched a bare top-level CAMEO root code with no ModifiedRootCode (its sub-codes span several classes).
+#> recode_cameo(): 6 row(s) matched a bare top-level CAMEO root code with no ModifiedRootCode (its sub-codes span several classes).
 
 agg <- aggregate_events(
   events,
@@ -91,25 +114,36 @@ fit <- fit_panel(
   agg,
   reference_category = "1", # verbal cooperation
   min_n_events = 1,
-  chunk_size = 4,
-  chains = 2,
-  parallel_chains = 2,
-  threads_per_chain = 2,
-  iter_warmup = 300,
-  iter_sampling = 300,
+  chains = 4,
+  parallel_chains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 2000,
+  adapt_delta = 0.99,
   seed = 1,
   refresh = 0
 )
 ```
 
-As in the other vignettes, this run is deliberately short (and the event
-data purely random, with no real signal for the model to recover); the
-vignette was computed ahead of time, with CmdStan, and is kept quick to
-re-run. That means it's a poor fit in an absolute
-sense -- don't be surprised to see Tier 1 flags below that a longer,
-real run wouldn't show. That's still a useful illustration: on a real
-fit, any Tier 1 flag is exactly the kind of thing this tool is meant to
-surface loudly rather than let it get lost among per-dyad noise.
+The run is long enough for the global parameters to converge. With only
+eight dyads, the hierarchy on the dispersion `phi` is weakly identified,
+which is why `adapt_delta` is raised from its default of 0.8 (at 0.8,
+about 1% of transitions diverge). `diagnose_convergence()` looks at
+R-hat and ESS only, so check the sampler's own diagnostics too:
+
+
+``` r
+fit$diagnostic_summary()
+#> Warning: 2 of 8000 (0.0%) transitions ended with a divergence.
+#> See https://mc-stan.org/misc/warnings for details.
+#> $num_divergent
+#> [1] 0 2 0 0
+#> 
+#> $num_max_treedepth
+#> [1] 0 0 0 0
+#> 
+#> $ebfmi
+#> [1] 0.6705113 0.7267392 0.7574933 0.7265765
+```
 
 ## Running the triage
 
@@ -124,39 +158,21 @@ diag <- diagnose_convergence(fit)
 diag
 #> <bilatr_diagnostics>
 #> 
-#> == Tier 1: global/shared parameters (16/16 flagged) ==
-#> # A tibble: 16 × 5
-#>    variable         rhat ess_bulk ess_tail flagged
-#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
-#>  1 lp__             1.97     2.81    NA    TRUE   
-#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
-#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
-#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
-#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
-#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
-#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
-#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
-#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
-#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
-#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
-#> 12 alpha[1]         1.66    13.4    146.   TRUE   
-#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
-#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
-#> 15 alpha[4]         1.94     4.19   147.   TRUE   
-#> 16 alpha[5]         1.88     5.71   137.   TRUE   
+#> == Tier 1: global/shared parameters (0/16 flagged) ==
+#> No Tier 1 issues: all global/shared parameters (and lp__) meet threshold.
 #> 
 #> == Tier 2: per-dyad hierarchical parameters (8 dyads, 0 worse than expected for their n_dt) ==
 #> # A tibble: 8 × 15
 #>   dyad_id  n_dt log_process_noise_raw_…¹ phi_rhat theta0_rhat process_noise_rhat
 #>     <int> <dbl>                    <dbl>    <dbl>       <dbl>              <dbl>
-#> 1       1   400                     1.63     1.78        1.95               2.17
-#> 2       2     5                     1.67     1.61        1.92               1.74
-#> 3       3   300                     1.74     1.82        1.52               1.79
-#> 4       4    15                     1.77     1.92        1.92               2.14
-#> 5       5   250                     1.55     1.90        1.90               1.59
-#> 6       6     8                     1.79     1.91        1.98               1.73
-#> 7       7   350                     1.77     1.79        1.06               2.07
-#> 8       8    10                     1.92     2.09        1.99               1.65
+#> 1       1   400                    1.00      1.00        1.00               1.00
+#> 2       2     5                    1.00      1.00        1.00               1.00
+#> 3       3   300                    1.00      1.00        1.00               1.00
+#> 4       4    15                    1.00      1.00        1.00               1.00
+#> 5       5   250                    1.00      1.00        1.00               1.00
+#> 6       6     8                    1.00      1.00        1.00               1.00
+#> 7       7   350                    1.00      1.00        1.00               1.00
+#> 8       8    10                    1.000     1.00        1.00               1.00
 #> # ℹ abbreviated name: ¹​log_process_noise_raw_rhat
 #> # ℹ 9 more variables: log_process_noise_raw_ess_bulk <dbl>, phi_ess_bulk <dbl>,
 #> #   theta0_ess_bulk <dbl>, process_noise_ess_bulk <dbl>,
@@ -165,7 +181,7 @@ diag
 #> #   worse_than_expected <lgl>
 #> 
 #> == Tier 3: per-dyad-period latent states (theta, aggregated; 8 dyads) ==
-#> 100% of dyads have min theta ESS below threshold (400), median n_dt among them: 132.
+#> 0% of dyads have min theta ESS below threshold (400).
 ```
 
 You can also pass your own `n_dt`, keyed by `dyad_id` (the dyad index
@@ -188,6 +204,40 @@ are always shown in full; Tier 2 shows a compact per-dyad table sorted
 so any dyad flagged as "worse than expected for its `n_dt`" appears
 first; Tier 3 collapses to one-line aggregate statistics.
 
+## Sparse is not the same as unconverged
+
+What sparsity changes here is how much the data say, not how well the
+sampler explores. The four sparse dyads' trajectories are much less
+certain -- their 90% intervals are wider -- but their effective sample
+sizes are no worse, because their posteriors stay close to the
+hierarchical prior, which is easy to sample:
+
+
+``` r
+extract_theta(fit) %>%
+  group_by(dyad_id, dyad) %>%
+  summarise(interval_width = mean(`95%` - `5%`), .groups = "drop") %>%
+  left_join(select(diag$tier3, dyad_id, n_dt, min_ess_bulk), by = "dyad_id") %>%
+  arrange(n_dt)
+#> # A tibble: 8 × 5
+#>   dyad_id dyad    interval_width  n_dt min_ess_bulk
+#>     <int> <chr>            <dbl> <dbl>        <dbl>
+#> 1       2 IRN_CHN           3.76     5        4797.
+#> 2       6 RUS_CHN           4.06     8        4505.
+#> 3       8 USA_CHN           1.98    10        3096.
+#> 4       4 ISR_USA           1.66    15        2765.
+#> 5       5 PRK_USA           1.28   250        1870.
+#> 6       3 IRN_USA           1.55   300        2188.
+#> 7       7 RUS_USA           1.28   350        1931.
+#> 8       1 CHN_USA           1.43   400        2188.
+```
+
+In a large panel, sparse dyads' diagnostics can degrade, and
+thousands of them would bury a Tier 1 problem in a flat summary. The
+tiers keep the two apart: Tier 1 is always shown in full, and a dyad is
+flagged only when its diagnostics are worse than those of dyads with
+similar `n_dt`.
+
 ## Working with the pieces directly
 
 `diag` is a plain list (class `bilatr_diagnostics`) with `tier1`,
@@ -198,25 +248,9 @@ a `stable_gamma` fit), so you can filter or join further as needed:
 ``` r
 # any global/shared parameter that failed to converge:
 dplyr::filter(diag$tier1, flagged)
-#> # A tibble: 16 × 5
-#>    variable         rhat ess_bulk ess_tail flagged
-#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
-#>  1 lp__             1.97     2.81    NA    TRUE   
-#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
-#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
-#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
-#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
-#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
-#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
-#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
-#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
-#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
-#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
-#> 12 alpha[1]         1.66    13.4    146.   TRUE   
-#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
-#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
-#> 15 alpha[4]         1.94     4.19   147.   TRUE   
-#> 16 alpha[5]         1.88     5.71   137.   TRUE
+#> # A tibble: 0 × 5
+#> # ℹ 5 variables: variable <chr>, rhat <dbl>, ess_bulk <dbl>, ess_tail <dbl>,
+#> #   flagged <lgl>
 
 # dyads whose per-dyad parameters look worse than their n_dt would predict:
 dplyr::filter(diag$tier2, worse_than_expected)
@@ -235,7 +269,7 @@ diag$summary
 #> [1] 1 2 3
 #> 
 #> $n_tier1_flagged
-#> [1] 16
+#> [1] 0
 #> 
 #> $n_tier1_total
 #> [1] 16
@@ -262,7 +296,7 @@ diag$summary
 #> [1] 8
 #> 
 #> $n_dyads_tier3_min_ess_below_threshold
-#> [1] 8
+#> [1] 0
 #> 
 #> $n_tier3_other_groups
 #> [1] 0
@@ -294,26 +328,8 @@ not use `n_dt`, looks like:
 diagnose_convergence(fit, tiers = 1)
 #> <bilatr_diagnostics>
 #> 
-#> == Tier 1: global/shared parameters (16/16 flagged) ==
-#> # A tibble: 16 × 5
-#>    variable         rhat ess_bulk ess_tail flagged
-#>    <chr>           <dbl>    <dbl>    <dbl> <lgl>  
-#>  1 lp__             1.97     2.81    NA    TRUE   
-#>  2 mu_intercept[1]  2.01     3.74   162.   TRUE   
-#>  3 mu_intercept[2]  1.64    28.7    111.   TRUE   
-#>  4 mu_intercept[3]  2.01     3.02     4.36 TRUE   
-#>  5 mu_intercept[4]  2.03     5.47   151.   TRUE   
-#>  6 mu_intercept[5]  1.68   142.      92.4  TRUE   
-#>  7 sigma_theta0     2.18     2.65    NA    TRUE   
-#>  8 mu_log_noise     1.78    23.2    274.   TRUE   
-#>  9 sigma_log_noise  1.77    33.7     85.5  TRUE   
-#> 10 mu_log_phi       1.98     2.80    NA    TRUE   
-#> 11 sigma_log_phi    1.92     2.90     4.20 TRUE   
-#> 12 alpha[1]         1.66    13.4    146.   TRUE   
-#> 13 alpha[2]         1.80     5.21     7.64 TRUE   
-#> 14 alpha[3]         2.01    10.4     57.6  TRUE   
-#> 15 alpha[4]         1.94     4.19   147.   TRUE   
-#> 16 alpha[5]         1.88     5.71   137.   TRUE
+#> == Tier 1: global/shared parameters (0/16 flagged) ==
+#> No Tier 1 issues: all global/shared parameters (and lp__) meet threshold.
 ```
 
 `diag$tier2`/`diag$tier3` are `NULL` (not empty tibbles) for any tier
@@ -333,8 +349,9 @@ diagnose_convergence(fit, rhat_threshold = 1.05, ess_threshold = 100)
 
 ## From CmdStan CSV files
 
-On a cluster, or for any large fit, you will usually diagnose the
-CmdStan CSV files rather than a fit object held in memory. Pass the file
+For a large fit, or one run in another session or as batch jobs, you
+will usually diagnose the CmdStan CSV files rather than a fit object
+held in memory. Pass the file
 paths: `diagnose_convergence()` finds the `*_stan_data.rds` file that
 [fit_panel()] wrote next to them (with `output_dir`), which gives it
 `n_dt` and the model, and reads Tier 3 in chunks whose size it derives
@@ -346,7 +363,7 @@ from `max_memory_mb`. The two levers for a large fit are:
   each chunk. More cores are faster but use more memory, out of the same
   budget, so a large `n_cores` on a tight budget can mean more chunks.
 
-The pre-flight message says how many chunks were chosen and the
+A message before reading says how many chunks were chosen and the
 estimated peak memory; [`vignette("tuning")`](tuning.html) has more on these settings.
 
 This section runs when the vignette is built, without CmdStan, on the

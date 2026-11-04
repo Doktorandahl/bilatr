@@ -1,6 +1,6 @@
 # --- synthetic CmdStan-shaped CSV, no cmdstanr/CmdStan needed -------------
-# --- (0.10.0: .prepare_fast_csv_read() parses config/header itself via ---
-# --- .scan_stan_csv_header_and_skip(), replacing cmdstanr:::            ---
+# --- (.prepare_fast_csv_read() parses config/header itself via ---------
+# --- .scan_stan_csv_header_and_skip(), without cmdstanr:::            ---
 # --- read_csv_metadata() -- these tests never touch cmdstanr at all) -----
 # --- .make_synthetic_stan_csv() itself lives in helper_fixtures.R, -------
 # --- shared with test_diagnose_convergence.R's peak-RSS regression guard -
@@ -110,8 +110,8 @@ test_that(".prepare_fast_csv_read() handles thin > 1 (num_post_warmup_draws = ce
   expect_equal(as.numeric(draws), seq_len(n_draws) * 1e6 + 1)
 })
 
-# --- parity check against cmdstanr:::read_csv_metadata() (0.10.0) --------
-# --- allowed to use `:::` here specifically to verify the replacement ----
+# --- parity check against cmdstanr:::read_csv_metadata() -----------------
+# --- allowed to use `:::` here specifically to verify the equivalence -----
 
 test_that(".scan_stan_csv_header_and_skip()/.prepare_fast_csv_read() match cmdstanr:::read_csv_metadata() on a real CmdStan fixture", {
   skip_if_no_cmdstan()
@@ -135,7 +135,7 @@ test_that(".scan_stan_csv_header_and_skip()/.prepare_fast_csv_read() match cmdst
   expect_setequal(prepared$variables, old_bracket)
 })
 
-test_that(".scan_stan_csv_header_and_skip() matches cmdstanr:::read_csv_metadata() on real production CSVs", {
+test_that(".scan_stan_csv_header_and_skip() matches cmdstanr:::read_csv_metadata() on large real CSVs, when present", {
   skip_if_not_installed("cmdstanr")
 
   prod_files <- c(
@@ -209,7 +209,7 @@ test_that(".prepare_fast_csv_read()/.fast_read_post_warmup_draws() never create 
   expect_equal(sort(before), sort(after))
 })
 
-test_that(".prepare_fast_csv_read() errors clearly on a chain with too few post-warmup rows (B7)", {
+test_that(".prepare_fast_csv_read() errors clearly on a chain with too few post-warmup rows", {
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()

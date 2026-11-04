@@ -9,42 +9,23 @@
 #' caught by that check, earlier in [.classify_bilatr_tier()]'s
 #' `case_when()`, before this list is ever consulted.
 #'
-#' `mu_intercept_raw`/`mu_theta0` (0.5.0 tidy-up, see NEWS.md) were
-#' dropped from this list: neither exists in any currently registered
-#' model (`mu_intercept` is a plain `sum_to_zero_vector`, not a
-#' non-centered `_raw` parameter, and `mu_theta0` was removed when
-#' `theta0` became `sigma_theta0 * z_theta0` with no separate location
-#' parameter) -- listing them here was dead code that could only ever
-#' silently match nothing.
+#' `theta_filtered`/`theta_filtered_sd` need no entry here: Tier 3 is
+#' matched structurally, by bracket-index count (`n_index >= 2`, see
+#' [.classify_bilatr_tier()]), so they land there automatically, as
+#' `log_lik[d, t]` does. Their first index is the position within
+#' `filter_dyads`, not the `D`-space `dyad_id`, so [.compute_tier3()]
+#' gives every Tier 3 base name other than `theta` one row in a separate
+#' `tier3_other` table, with no per-dyad breakdown.
 #'
-#' `theta_filtered`/`theta_filtered_sd` (0.5.0) need no entry here or
-#' anywhere else in [.classify_bilatr_tier()]: Tier 3 is matched
-#' structurally, by bracket-index count (`n_index >= 2`, see that
-#' function), not by name, so a `theta_filtered[d, t]`/
-#' `theta_filtered_sd[d, t]` variable lands there automatically, the same
-#' way `log_lik[d, t]` already does. Through 0.10.1, [.compute_tier3()]
-#' grouped every Tier 3 base name by its first index as `dyad_id`, which
-#' was wrong for these two: that index is the *position within*
-#' `filter_dyads`, not the true `D`-space `dyad_id`, so their rows were
-#' mis-joined into other dyads' `min_ess`/`max_rhat` whenever
-#' `filter_dyads` narrowed the dyad set. 0.10.2 (B4) fixes this by giving
-#' every Tier 3 base name other than `theta` its own row in a separate
-#' `tier3_other` table (one row per base name, no per-dyad breakdown, so
-#' no index translation is needed) -- see [.compute_tier3()] and
-#' [diagnose_convergence()]'s `@return`.
-#' `gamma` (0.7.0, `stable_gamma` only: `A x n_countries`) is listed here
-#' too, for the same by-name reason as `alpha`: it has two `[...]`
-#' indices (action, country), which the structural
-#' `n_index >= 2 -> Tier 3` rule below would otherwise misclassify as a
-#' dyad-indexed quantity, reading the country index as a `dyad_id` and
-#' sweeping it into the expensive Tier 3 per-dyad-period pass (see
-#' inst/stan/bilatr_alphanorm_gamma.stan's header and
-#' dev/claude_code_prompt_0.7.0_country_offsets.md, "Part 4"). `gamma` is
-#' fully identified (unlike `gamma_z`, which is prior-only pinned in its
-#' projected-out directions -- see [.bilatr_sign_tied_names()] in
-#' `R/sign_ambiguity.R` for where THAT is excluded instead, via the
-#' `tier = NA` path below, for a different reason than sign ambiguity).
-#' @keywords internal
+#' `gamma` (`stable_gamma` only: `A x n_countries`) is listed here for the
+#' same by-name reason as `alpha`: it has two `[...]` indices (action,
+#' country), which the structural `n_index >= 2 -> Tier 3` rule would
+#' otherwise read as a dyad-indexed quantity, taking the country index for
+#' a `dyad_id`. `gamma` is fully identified, unlike `gamma_z`, which is
+#' informed only by its prior in its projected-out directions and is
+#' excluded instead, via [.bilatr_sign_tied_names()] and the `tier = NA`
+#' path.
+#' @noRd
 .bilatr_tier1_names <- c(
   "alpha", "mu_intercept", "sigma_theta0",
   "mu_log_phi", "sigma_log_phi", "mu_log_noise", "sigma_log_noise",
@@ -55,8 +36,8 @@
 #' Names of raw, sampled parameters that are sign-ambiguous under the
 #' alpha/theta reflection symmetry, across every registered model
 #'
-#' `stable`/`ou`'s orientation fold (see each `.stan` file's header,
-#' "IDENTIFICATION: ORIENTATION FOLD") corrects the reported
+#' Every model's orientation fold (see each `.stan` file's header,
+#' "Sign: the ORIENTATION FOLD") corrects the reported
 #' `alpha`/`theta`/etc., but the RAW parameters it's built from
 #' (`alpha_raw` itself, plus whichever of `z_theta0`/`mu_dyad_raw` and
 #' `theta_raw` a given model has) remain genuinely sign-ambiguous: if two
@@ -66,14 +47,14 @@
 #' tiered diagnostics tables entirely (`tier = NA`), rather than let a
 #' meaningless Rhat surface as a false Tier 1 alarm.
 #'
-#' Derived from [.bilatr_sign_tied_names()] (`R/sign_ambiguity.R`), the
-#' single source of truth for which raw names are sign-tied per model --
-#' unioning its `raw` component across every currently-registered model.
-#' Computed inside the function body, not as a top-level constant, so it
-#' doesn't depend on `R/model_registry.R` having been sourced first.
+#' Derived from [.bilatr_sign_tied_names()], the single source of truth
+#' for which raw names are sign-tied per model, by taking the union of its
+#' `raw` component across every registered model. Computed inside the
+#' function body, not as a top-level constant, so it does not depend on
+#' the order in which the package's files are collated.
 #'
 #' @return Character vector of variable base names.
-#' @keywords internal
+#' @noRd
 .bilatr_sign_ambiguous_raw_names <- function() {
   unique(unlist(lapply(
     names(.bilatr_stan_models),
@@ -91,7 +72,7 @@
 #' @param variable Character vector of `summarise_draws()` variable names.
 #' @return A tibble with columns `variable`, `base_name`, `n_index`, `index_1`,
 #'   `index_2` (the latter two `NA_integer_` when not applicable).
-#' @keywords internal
+#' @noRd
 .parse_variable_indices <- function(variable) {
   base_name <- stringr::str_remove(variable, "\\[.*\\]$")
   index_str <- stringr::str_match(variable, "\\[(.*)\\]$")[, 2]
@@ -131,13 +112,13 @@
 #' sparsity profile is unknown and it should never be silently hidden.
 #'
 #' @param variable Character vector of `summarise_draws()` variable names.
-#' @return A tibble with columns `variable`, `base_name` (0.10.2: kept so
-#'   downstream Tier 3 code -- [.compute_tier3()] -- can split by base
-#'   name without re-deriving it), `tier` (`1L`, `2L`, `3L`, or `NA` for
+#' @return A tibble with columns `variable`, `base_name` (kept so
+#'   [.compute_tier3()] can split by base name without re-deriving it),
+#'   `tier` (`1L`, `2L`, `3L`, or `NA` for
 #'   excluded sign-ambiguous raw parameters), `dyad_id` (the first index,
 #'   `NA` outside Tier 2/3), and `time_index` (the second index, `NA`
 #'   outside Tier 3).
-#' @keywords internal
+#' @noRd
 .classify_bilatr_tier <- function(variable) {
   parsed <- .parse_variable_indices(variable)
   sign_ambiguous <- .bilatr_sign_ambiguous_raw_names()
@@ -173,7 +154,7 @@
 #' @param stan_data The Stan data list, or `NULL`. Needed only for
 #'   name-keyed input.
 #' @return A tibble with columns `dyad_id` (integer) and `n_dt` (numeric).
-#' @keywords internal
+#' @noRd
 .normalize_n_dt <- function(n_dt, stan_data = NULL) {
   if (is.data.frame(n_dt)) {
     nm <- names(n_dt)
@@ -218,7 +199,7 @@
 #' @param dyads Character vector of dyad names.
 #' @param stan_data The Stan data list, or `NULL`.
 #' @return An integer vector of `dyad_id`s, aligned with `dyads`.
-#' @keywords internal
+#' @noRd
 .dyad_names_to_ids <- function(dyads, stan_data) {
   ids <- attr(stan_data, "dyad_ids", exact = TRUE)
   if (is.null(ids)) {
@@ -252,7 +233,7 @@
 #'
 #' @param stan_data A Stan data list with `D` and `Y`.
 #' @return A tibble with columns `dyad_id` and `n_dt`.
-#' @keywords internal
+#' @noRd
 .n_dt_from_stan_data <- function(stan_data) {
   tibble::tibble(
     dyad_id = seq_len(stan_data$D),
@@ -268,7 +249,7 @@
 #' @param caller The calling function's name, for the error.
 #' @return A tibble from [.normalize_n_dt()], or `NULL` when neither tier
 #'   2 nor 3 is requested.
-#' @keywords internal
+#' @noRd
 .resolve_n_dt <- function(n_dt, stan_data, tiers, caller) {
   if (!any(c(2L, 3L) %in% tiers)) {
     return(NULL)
@@ -309,7 +290,7 @@
 #' @return Logical vector, same length as `n_dt`/`value`: `TRUE` where the
 #'   value is worse than its bracket's expectation. `NA` where `value` is
 #'   `NA`.
-#' @keywords internal
+#' @noRd
 .flag_worse_than_expected <- function(n_dt, value, n_bins = 6L) {
   n <- length(n_dt)
   bins <- dplyr::ntile(n_dt, min(n_bins, max(1L, n)))
@@ -338,7 +319,7 @@
 #'   flagged.
 #' @return Logical vector: `TRUE` where any of the three diagnostics
 #'   breaches its threshold.
-#' @keywords internal
+#' @noRd
 .flag_diagnostic <- function(rhat, ess_bulk, ess_tail, rhat_threshold, ess_threshold) {
   (rhat > rhat_threshold) | (ess_bulk < ess_threshold) | (ess_tail < ess_threshold)
 }
@@ -348,7 +329,7 @@
 #' @param tiers Value passed as `diagnose_convergence()`'s `tiers`
 #'   argument.
 #' @return Sorted, deduplicated integer vector, a subset of `1:3`.
-#' @keywords internal
+#' @noRd
 .validate_tiers <- function(tiers) {
   tiers_int <- suppressWarnings(as.integer(tiers))
   if (length(tiers_int) == 0 || anyNA(tiers_int) || !all(tiers_int %in% 1:3)) {
@@ -365,16 +346,16 @@
 #' Compute the Tier 1 (global/shared) diagnostics tibble
 #'
 #' @param exclude_pattern Optional regex; `variable`s matching it are
-#'   excluded before `flagged` is computed. Used (0.7.1) to pull `gamma`
+#'   excluded before `flagged` is computed. Used to pull `gamma`
 #'   out of this table and into its own (see [.compute_gamma_tier()] and
 #'   [.assemble_bilatr_diagnostics()]) -- `gamma` is correctly Tier 1 for
-#'   *classification* (see `.bilatr_tier1_names`), but at production
-#'   scale it is `A x n_countries` (~thousands of parameters), and Tier 1
+#'   *classification* (see `.bilatr_tier1_names`), but in a large panel
+#'   it is `A x n_countries` (thousands of parameters), and Tier 1
 #'   is also a *reporting* category designed around a handful of global
 #'   scalars: `sigma_gamma[...]` (a per-category scalar, not
 #'   country-indexed) is NOT excluded by the `stable_gamma` caller's
 #'   pattern and stays in this table.
-#' @keywords internal
+#' @noRd
 .compute_tier1 <- function(summ, rhat_threshold, ess_threshold, exclude_pattern = NULL) {
   t1 <- dplyr::filter(summ, tier == 1L)
   if (!is.null(exclude_pattern)) {
@@ -390,8 +371,8 @@
 
 #' Compute the `gamma` (country-level offset) diagnostics tibble
 #'
-#' Split out of Tier 1 (0.7.1) so that a routine number of flagged
-#' `gamma` elements -- dozens to hundreds at production scale, just from
+#' Split out of Tier 1 so that a routine number of flagged `gamma`
+#' elements -- dozens to hundreds in a large panel, just from
 #' `ess_threshold` against ~4,000 draws -- doesn't flood
 #' [print.bilatr_diagnostics()]'s Tier 1 block or dominate
 #' `n_tier1_flagged`. `country_code`/`action_index` are parsed directly
@@ -402,13 +383,13 @@
 #' @param summ A tibble as produced by [posterior::summarise_draws()],
 #'   left-joined with [.classify_bilatr_tier]'s `tier` column.
 #' @param country_codes Optional character vector (in `country_index`
-#'   order, e.g. `stan_data`'s `"country_codes"` attribute) for labelling
+#'   order, e.g. `stan_data`'s `"country_codes"` attribute) for labeling
 #'   `country_index`. `NULL` (e.g. plain [diagnose_convergence()], which
 #'   has no `stan_data`) leaves the table with `country_index` only.
 #' @return A tibble: `variable`, `action_index`, `country_index` (and
 #'   `country_code` if `country_codes` is supplied), `rhat`, `ess_bulk`,
 #'   `ess_tail`, `flagged`.
-#' @keywords internal
+#' @noRd
 .compute_gamma_tier <- function(summ, rhat_threshold, ess_threshold, country_codes = NULL) {
   g <- summ %>%
     dplyr::filter(tier == 1L, startsWith(variable, "gamma[")) %>%
@@ -432,7 +413,7 @@
 }
 
 #' Compute the Tier 2 (per-dyad hierarchical parameter) diagnostics tibble
-#' @keywords internal
+#' @noRd
 .compute_tier2 <- function(summ, n_dt_tbl) {
   tier2_raw <- summ %>%
     dplyr::filter(tier == 2L) %>%
@@ -473,20 +454,19 @@
 #'
 #' Tier 3 is matched structurally by index count (see
 #' [.classify_bilatr_tier()]), so it can hold more than `theta[d, t]`:
-#' `theta_filtered[k, t]`/`theta_filtered_sd[k, t]` (0.5.0+, `k` is the
+#' `theta_filtered[k, t]`/`theta_filtered_sd[k, t]` (`k` is the
 #' *position within* `filter_dyads`, not `dyad_id`) and `log_lik[d, t]`
 #' (`compute_log_lik = 1`) also land here. Grouping every Tier 3 base
-#' name by its first index as `dyad_id`, as this function did through
-#' 0.10.1, mis-joins `theta_filtered*` onto the wrong dyads whenever
-#' `filter_dyads` narrows the dyad set, folds `log_lik` into `theta`'s own
-#' `min_ess`/`max_rhat`, and inflates `n_theta` to count all of them
-#' despite its name (0.10.2, B4). This now splits Tier 3 in two: `tier3`
+#' name by its first index as `dyad_id` would mis-join `theta_filtered*`
+#' onto the wrong dyads whenever `filter_dyads` narrows the dyad set,
+#' fold `log_lik` into `theta`'s own `min_ess`/`max_rhat`, and inflate
+#' `n_theta` to count all of them. So Tier 3 is split in two: `tier3`
 #' aggregates `base_name == "theta"` only (matching its name and the
 #' per-dyad `dyad_id`/`time_index` semantics the rest of the package
 #' assumes), and every other Tier 3 base name gets one row in
 #' `tier3_other` -- no per-dyad breakdown, so no `filter_dyads`
 #' index-translation is needed there either.
-#' @keywords internal
+#' @noRd
 .compute_tier3 <- function(summ, n_dt_tbl, rhat_threshold, ess_threshold) {
   tier3_raw <- summ %>%
     dplyr::filter(tier == 3L) %>%
@@ -536,13 +516,12 @@
 #'
 #' @param x A numeric vector.
 #' @return A single number, or `NA_real_`.
-#' @keywords internal
+#' @noRd
 .max_or_na <- function(x) {
   if (all(is.na(x))) NA_real_ else max(x, na.rm = TRUE)
 }
 
-#' @rdname dot-max_or_na
-#' @keywords internal
+#' @noRd
 .min_or_na <- function(x) {
   if (all(is.na(x))) NA_real_ else min(x, na.rm = TRUE)
 }
@@ -563,7 +542,7 @@
 #'   excludes both 2 and 3.
 #' @param tiers Validated (via [.validate_tiers]) tiers to compute.
 #' @param rhat_threshold,ess_threshold See [diagnose_convergence()].
-#' @param has_gamma (0.7.1) Whether the model being diagnosed has a
+#' @param has_gamma Whether the model being diagnosed has a
 #'   `gamma` (country-level offset) parameter -- from
 #'   [.bilatr_model_has_gamma()], never inferred by checking `summ` for a
 #'   `gamma` name. When `TRUE` and Tier 1 was requested, `gamma` is
@@ -571,12 +550,12 @@
 #'   [.compute_gamma_tier()]); when `FALSE`, `gamma` is `NULL` and
 #'   `n_gamma_*` are `NA_integer_`, so a model without `gamma` gets no
 #'   trace of the section at all.
-#' @param country_codes (0.7.1) Optional character vector for labelling
+#' @param country_codes Optional character vector for labeling
 #'   `gamma`'s `country_index`; see [.compute_gamma_tier()].
 #' @return A list of class `bilatr_diagnostics`; see
 #'   [diagnose_convergence()]'s `@return` for the element-by-element
 #'   description.
-#' @keywords internal
+#' @noRd
 .assemble_bilatr_diagnostics <- function(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
                                           has_gamma = FALSE, country_codes = NULL) {
   tier1 <- if (1L %in% tiers) {
@@ -636,7 +615,7 @@
 #'
 #' @param name A single CmdStan raw CSV column name.
 #' @return The equivalent posterior/bracket-style name.
-#' @keywords internal
+#' @noRd
 .dot_name_to_bracket <- function(name) {
   parts <- strsplit(name, ".", fixed = TRUE)[[1]]
   if (length(parts) == 1) {
@@ -645,27 +624,24 @@
   paste0(parts[1], "[", paste(parts[-1], collapse = ","), "]")
 }
 
-#' Memory-model constant: a documented FLOOR for R and its loaded packages,
-#' used only where the runtime measurement in
+#' Memory-model constant: a FLOOR for R and its loaded packages, used
+#' only where the runtime measurement in
 #' [.bilatr_estimate_chunk_baseline_mb()] is unavailable
 #'
 #' Unlike every other `.BILATR_CHUNK_*` constant, this is not a
 #' multiplier of `raw_mb` -- it is a fixed number of MB, added once
 #' alongside `file_mb` in [.compute_chunk_size()]/
 #' [.estimate_diagnostics_memory_mb()], because it does not shrink with
-#' chunk size any more than `file_mb` does: it is the cost of `library(
-#' bilatr)` and its dependencies (`cmdstanr`, `data.table`, `posterior`,
-#' `dplyr`, etc.) simply being loaded, before a single byte of any CSV
-#' is read. 200 was measured via `dev/bench_memory.R` on exactly ONE
-#' machine (2026-09; `devtools::load_all()` alone, R 4.5.2, macOS: ~160
-#' MB peak RSS, rounded up for margin) -- an artefact of that machine's R
-#' build and loaded namespaces, not a universal constant, and the reason
-#' [.bilatr_estimate_chunk_baseline_mb()] measures the CALLER's own process
-#' instead of assuming this number applies. This value is retained only
-#' as the floor that measurement falls back to when it fails (a platform
-#' without `/proc`, or `gc()` itself erroring), so the model never
-#' silently under-counts to zero.
-#' @keywords internal
+#' chunk size any more than `file_mb` does: it is the cost of bilatr and
+#' its dependencies (`data.table`, `posterior`, `dplyr`, etc.) being
+#' loaded, before a single byte of any CSV is read. A session with only
+#' bilatr loaded measured about 160 MB peak RSS (R 4.5, macOS); 200
+#' rounds that up for margin. It depends on the R build and the loaded
+#' namespaces, which is why [.bilatr_estimate_chunk_baseline_mb()]
+#' measures the caller's own process and uses this value only as the
+#' floor it falls back to (a platform without `/proc`, or `gc()` itself
+#' erroring), so the model never silently under-counts to zero.
+#' @noRd
 .BILATR_CHUNK_BASELINE_MB <- 200
 
 #' Measure the caller's own process memory footprint, for use as the
@@ -686,7 +662,7 @@
 #' entirely rather than propagating `NA` into the memory model.
 #'
 #' @return Estimated baseline memory in MB.
-#' @keywords internal
+#' @noRd
 .bilatr_estimate_chunk_baseline_mb <- function() {
   measured <- tryCatch(
     {
@@ -717,29 +693,24 @@
   }
 }
 
-#' Memory-model constant: the preallocated result array, the fread parse
-#' buffer, and the one chain matrix in flight, combined
+#' Memory-model constant: the preallocated result array plus
+#' `summarise_draws()`'s working set
 #'
 #' See [.bilatr_chunk_overhead_multiplier()] for how this and the other
 #' `.BILATR_CHUNK_*_FACTOR` constants combine into the `k` multiplier
 #' [.compute_chunk_size()]/[.estimate_diagnostics_memory_mb()] apply to a
 #' chunk's raw byte count (`raw_mb = n_draws * n_chains * chunk_size * 8
-#' / 1e6`). Re-derived (2026-09, `dev/bench_memory.R`, R 4.5.2, macOS)
-#' against the array-native flip (no more `as_draws_df()` round-trip --
-#' see `NEWS.md`), from two measurements at `n_cores = 1`, no flip: a
-#' single-chain, 60,000-Tier-3-column, 300-draw synthetic CSV
-#' (`raw_mb = 144`, `file_mb` ~= 202) measured 1002 MB peak RSS, and the
-#' same shape at 2 chains (`raw_mb = 288`) measured 1409 MB. Subtracting
-#' [.BILATR_CHUNK_BASELINE_MB] (measured separately) and `file_mb` from
-#' each and solving the two-chain-count system for `ARRAY +
-#' PER_CHAIN / n_chains` gives `ARRAY ~= 2.8`, `PER_CHAIN ~= 1.6`;
-#' rounded up here for margin. Read alone (before Step 1's flip fix)
-#' measured close to the old estimate (the read chain itself is
-#' unchanged by that fix), so this jump from the old `ARRAY = 1` is
-#' `summarise_draws()`'s own working set (rank-normalisation, split-Rhat,
-#' bulk/tail ESS all build same-shaped intermediate arrays), which the
-#' pre-refactor model never isolated from the read.
-#' @keywords internal
+#' / 1e6`). Derived from two measurements at `n_cores = 1` (R 4.5,
+#' macOS): a single-chain, 60,000-Tier-3-column, 300-draw synthetic CSV
+#' (`raw_mb = 144`, `file_mb` ~= 202) peaked at 1002 MB RSS, and the
+#' same shape with 2 chains (`raw_mb = 288`) at 1409 MB. Subtracting
+#' [.BILATR_CHUNK_BASELINE_MB] and `file_mb` from each and solving the
+#' two-chain-count system for `ARRAY + PER_CHAIN / n_chains` gives
+#' `ARRAY ~= 2.8`, `PER_CHAIN ~= 1.6`, rounded up here for margin. Most
+#' of `ARRAY` is `summarise_draws()`'s own working set
+#' (rank-normalization, split-Rhat, bulk/tail ESS all build same-shaped
+#' intermediate arrays), not the read.
+#' @noRd
 .BILATR_CHUNK_ARRAY_FACTOR <- 3
 
 #' Memory-model constant: `fread()`'s parse buffer and the one chain
@@ -749,7 +720,7 @@
 #' `n_draws * chunk_size * 8`, i.e. `raw_mb / n_chains`, not `raw_mb`
 #' itself) -- see [.bilatr_chunk_overhead_multiplier()] and
 #' [.BILATR_CHUNK_ARRAY_FACTOR]'s docs for the joint derivation.
-#' @keywords internal
+#' @noRd
 .BILATR_CHUNK_PER_CHAIN_FACTOR <- 2
 
 #' Memory-model constant: the one-time cost of `posterior::
@@ -757,69 +728,39 @@
 #'
 #' Applied once, whenever `n_cores > 1`, together with
 #' [.BILATR_CHUNK_CORES_PER_CORE_FACTOR] -- see
-#' [.bilatr_chunk_overhead_multiplier()]. Measured, not assumed: see
-#' that constant's docs for why this and the per-core term replace the
-#' old single flat `CORES_FACTOR` (which this package's own pinned
-#' tests, before this measurement, asserted was identical from
-#' `n_cores = 2` through `24` -- that assumption was never measured
-#' against a real fork and was wrong).
+#' [.bilatr_chunk_overhead_multiplier()] and that constant's docs for the
+#' measurement.
 #'
-#' **Conservative by design, pending a Linux re-fit (0.10.2):** the
-#' measurement below sums RSS across the fork tree on macOS, which
-#' double-counts copy-on-write shared pages a SLURM cgroup only charges
-#' once -- `dev/bench_memory.R` was corrected (0.4.2) to poll summed Pss
-#' and the cgroup's own peak-usage counter instead (see that file's
-#' header), and a small Linux measurement using the corrected poller
-#' found roughly 3.8x `raw_mb` at the first extra worker and ~2.6x
-#' `raw_mb` per worker after that -- both lower than the 4.5/2.5 below,
-#' consistent with this constant being ~1.5-2x conservative in the
-#' `n_cores > 1` range. The value here is left as that conservative
-#' macOS-sourced figure rather than the smaller Linux one: the jobs it
-#' sizes run on Linux/SLURM, and a job-sizing floor is more useful too
-#' large than too small. A full Linux-sourced re-fit is planned together
-#' with the chunk-size/cores vignette (see the package audit's future-
-#' work notes); until then, treat 4.5 as deliberately conservative, not
-#' as the tightest possible estimate.
-#' @keywords internal
+#' **Conservative by design:** the measurement sums RSS across the fork
+#' tree on macOS, which double-counts copy-on-write pages that a Linux
+#' cgroup charges only once. A smaller Linux measurement (summed Pss and
+#' the cgroup's peak-usage counter) found about 3.8x `raw_mb` at the
+#' first extra worker and 2.6x per worker after that, so 4.5 is roughly
+#' 1.5-2x conservative for `n_cores > 1`. The larger value is kept: an
+#' estimate used to size jobs is more useful too large than too small.
+#' @noRd
 .BILATR_CHUNK_CORES_STEP_FACTOR <- 4.5
 
 #' Memory-model constant: the additional cost of each forked worker
 #' beyond the first, when `.cores > 1`
 #'
 #' `posterior::summarise_draws(.cores = k)` forks `k` worker processes
-#' via `parallel::mclapply()`, each computing rank-normalised Rhat/bulk
+#' via `parallel::mclapply()`, each computing rank-normalized Rhat/bulk
 #' ESS/tail ESS (each of which builds several same-shaped intermediate
-#' arrays) over its own slice of variables. This is NOT a flat cost
-#' regardless of `n_cores`, as the pre-measurement model assumed:
-#' measured (2026-09, `dev/bench_memory.R`, single chain, 60,000
-#' Tier-3 columns, 300 draws, no flip, peak RSS summed across the whole
-#' process tree via the `ps` package -- `/usr/bin/time`'s own child-RSS
-#' accounting does not see a further-forked grandchild's memory, and
-#' was confirmed empirically to under-count this exact case) at
-#' `n_cores` = 1/2/4/8: 1002 / 1822 / 2378 / 3571 MB. Fitting `extra
-#' beyond n_cores = 1 baseline = STEP + PER_CORE * (n_cores - 1)` in
-#' units of `raw_mb` (144 MB here) across the 2->4 and 4->8 intervals
-#' gives `PER_CORE ~= 1.9-2.1`, consistently; `STEP ~= 3.0-3.3`. Both
-#' rounded up here for margin. Summing RSS across a fork tree likely
-#' over-counts pages the OS still shares copy-on-write between workers
-#' (a SLURM cgroup would charge shared pages once, not once per
-#' process), so this constant is a conservative upper bound, not a
-#' precise physical-memory figure -- an acceptable direction of error
-#' for a job-sizing floor, given the alternative is under-counting and
-#' risking exactly the OOM this package's memory model exists to
-#' prevent. **Only measured up to `n_cores = 8`**: a caller sizing a job
-#' with `n_cores` well beyond that (the audit's own per-chain example
-#' used 24) is extrapolating this linear term 3x past its measured
-#' range -- validate with `dev/bench_memory.R` at your actual `n_cores`
-#' before trusting the estimate for a real SLURM allocation that large.
-#'
-#' **Conservative by design, pending a Linux re-fit (0.10.2):** see
-#' [.BILATR_CHUNK_CORES_STEP_FACTOR]'s docs -- the corrected (Pss/cgroup)
-#' Linux benchmark suggests ~2.6 here, consistent with this constant's
-#' 2.5 within measurement noise (unlike the step term, which moved
-#' more). The same Linux re-fit planned for the step term (alongside the
-#' chunk-size/cores vignette) will settle this one too.
-#' @keywords internal
+#' arrays) over its own slice of variables, so the cost grows with
+#' `n_cores`. Measured on a single chain, 60,000 Tier-3 columns and 300
+#' draws, with peak RSS summed across the whole process tree (R 4.5,
+#' macOS), at `n_cores` = 1/2/4/8: 1002 / 1822 / 2378 / 3571 MB. Fitting
+#' `extra beyond n_cores = 1 = STEP + PER_CORE * (n_cores - 1)` in units
+#' of `raw_mb` (144 MB here) over the 2->4 and 4->8 intervals gives
+#' `PER_CORE ~= 1.9-2.1` and `STEP ~= 3.0-3.3`; both are rounded up here
+#' for margin. Summing RSS across a fork tree over-counts shared pages
+#' (see [.BILATR_CHUNK_CORES_STEP_FACTOR]), so this is a conservative
+#' upper bound; the Linux measurement gave about 2.6, consistent within
+#' noise. **Only measured up to `n_cores = 8`**: well beyond that the
+#' linear term is extrapolated, so check actual memory use before
+#' relying on the estimate for a much larger `n_cores`.
+#' @noRd
 .BILATR_CHUNK_CORES_PER_CORE_FACTOR <- 2.5
 
 #' The `k` memory-model multiplier [.compute_chunk_size()]/
@@ -834,21 +775,12 @@
 #' `.BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains`); and, only when `n_cores >
 #' 1`, `posterior::summarise_draws()`'s forked-worker cost -- a one-time
 #' step (`.BILATR_CHUNK_CORES_STEP_FACTOR`) plus a per-additional-worker
-#' term (`.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)`), NOT a
-#' flat penalty regardless of the exact core count (see that constant's
-#' docs -- this replaced an assumption that was never measured and was
-#' wrong).
-#'
-#' 0.10.0 dropped the `.BILATR_CHUNK_FLIP_FACTOR` term that used to sit
-#' here: the post-hoc sign-flip machinery it budgeted for
-#' (`bilatr_orient()` and its array-native equivalents) was retired along
-#' with the soft-anchor stack that needed it (see NEWS.md), so `k` is
-#' exactly 1 lower than before for every `(n_chains, n_cores)` pair.
+#' term (`.BILATR_CHUNK_CORES_PER_CORE_FACTOR * (n_cores - 1)`).
 #'
 #' @param n_chains From [.prepare_fast_csv_read].
 #' @param n_cores See [diagnose_convergence()]'s `n_cores`.
 #' @return The multiplier `k`, in units of `raw_mb`.
-#' @keywords internal
+#' @noRd
 .bilatr_chunk_overhead_multiplier <- function(n_chains, n_cores) {
   .BILATR_CHUNK_ARRAY_FACTOR +
     .BILATR_CHUNK_PER_CHAIN_FACTOR / n_chains +
@@ -881,7 +813,7 @@
 #' @param max_memory_mb See [diagnose_convergence()].
 #' @param n_cores See [diagnose_convergence()]'s `n_cores`.
 #' @return Integer chunk size, at least `1`.
-#' @keywords internal
+#' @noRd
 .compute_chunk_size <- function(n_draws, n_chains, file_mb, max_memory_mb, n_cores) {
   k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
   per_var_mb <- n_draws * n_chains * 8 * k / 1e6
@@ -914,14 +846,14 @@
 #' @inheritParams .compute_chunk_size
 #' @param chunk_size Variables per chunk.
 #' @return Estimated peak memory in MB.
-#' @keywords internal
+#' @noRd
 .estimate_diagnostics_memory_mb <- function(n_draws, n_chains, chunk_size, n_cores, file_mb) {
   k <- .bilatr_chunk_overhead_multiplier(n_chains, n_cores)
   raw_mb <- n_draws * n_chains * chunk_size * 8 / 1e6
   .bilatr_estimate_chunk_baseline_mb() + file_mb + raw_mb * k
 }
 
-#' Summarise draws with the fixed measure set the CSV-path functions use
+#' Summarize draws with the fixed measure set the CSV-path functions use
 #'
 #' `mean`, [posterior::quantile2()] (default `q5`/`q95`), `median`,
 #' `rhat`, `ess_bulk`, `ess_tail` -- every column `.compute_tier1()`/
@@ -933,17 +865,17 @@
 #' compute `sd` and `mad`, silently discarded by every caller today --
 #' dropping them isn't free at the scale this package targets
 #' (~1.9M Tier 3 variables per chain), so this is used everywhere a CSV
-#' chunk gets summarised instead of relying on the defaults.
+#' chunk gets summarized instead of relying on the defaults.
 #'
-#' @param draws A `posterior::draws_array`/`draws_df` to summarise.
+#' @param draws A `posterior::draws_array`/`draws_df` to summarize.
 #' @param n_cores Passed through to `summarise_draws()`'s `.cores`:
 #'   `posterior::summarise_draws.draws()` splits `draws`' variables into
 #'   `n_cores` slices and forks one process per slice
-#'   (`parallel::mclapply()`, copy-on-write on Unix), so this parallelises
+#'   (`parallel::mclapply()`, copy-on-write on Unix), so this parallelizes
 #'   the CPU-bound Rhat/ESS computation, not the (sequential, disk-bound)
 #'   read that produced `draws`.
 #' @return A tibble, one row per variable in `draws`.
-#' @keywords internal
+#' @noRd
 .summarise_bilatr_draws <- function(draws, n_cores = 1L) {
   posterior::summarise_draws(
     draws, "mean", posterior::quantile2, "median", "rhat", "ess_bulk", "ess_tail",
@@ -951,33 +883,33 @@
   )
 }
 
-#' Read and summarise CSV variables in memory-bounded chunks
+#' Read and summarize CSV variables in memory-bounded chunks
 #'
 #' Shared by [diagnose_convergence()]'s CSV-path branch and
-#' [extract_theta()]'s: reads and summarises `variables` in groups of
+#' [extract_theta()]'s: reads and summarizes `variables` in groups of
 #' `chunk_size`, discarding each chunk's draws before moving to the next
 #' -- this is what keeps peak memory bounded regardless of how many
 #' variables there are in total. Chunks are always read strictly
 #' sequentially (reading is disk-bound and single-threaded regardless --
 #' see [.fast_read_post_warmup_draws] -- so there is nothing to gain, and
 #' several chunks' worth of memory to lose, by reading more than one at a
-#' time); `n_cores` instead parallelises the CPU-bound part, each chunk's
+#' time); `n_cores` instead parallelizes the CPU-bound part, each chunk's
 #' own [.summarise_bilatr_draws()] call, via `posterior::summarise_draws()`'s
 #' `.cores` argument.
 #'
 #' Reads each chunk via [.fast_read_post_warmup_draws] (see its docs for
 #' what that read costs per call), discarding the chunk's draws once
-#' summarised so peak memory reflects one chunk at a time, per
+#' summarized so peak memory reflects one chunk at a time, per
 #' [.compute_chunk_size()]'s accounting.
 #'
 #' @param prepared Output of [.prepare_fast_csv_read].
-#' @param variables Character vector of variable names to summarise.
+#' @param variables Character vector of variable names to summarize.
 #' @param chunk_size Variables per chunk.
 #' @param n_cores Cores for [.summarise_bilatr_draws()]'s `.cores`; `1L`
 #'   for a fully sequential run. See [diagnose_convergence()]'s `n_cores`.
 #' @return A tibble, the row-bound [.summarise_bilatr_draws()] output
 #'   across all chunks.
-#' @keywords internal
+#' @noRd
 .chunked_summarise_csv <- function(prepared, variables, chunk_size, n_cores = 1L) {
   chunks <- split(variables, ceiling(seq_along(variables) / chunk_size))
 
@@ -1031,16 +963,16 @@
 #'   the same files reports its own read time), not a guess.
 #' @param summarise_seconds_per_variable Wall-time (seconds) for the
 #'   CPU-bound summary step ([posterior::summarise_draws()]'s
-#'   rank-normalised Rhat/bulk-tail-ESS), per Tier 3 variable, on ONE
-#'   core. Defaults to `0.0026` (~2.6 ms/variable), measured against this
-#'   package's own Tier 3 sweep (`dev/bench_memory.R`, 2026-09); scales
+#'   rank-normalized Rhat/bulk-tail-ESS), per Tier 3 variable, on ONE
+#'   core. Defaults to `0.0026` (~2.6 ms/variable), measured on a
+#'   60,000-variable, 300-draw Tier 3 sweep (R 4.5, macOS); scales
 #'   with however expensive computing those statistics is for your
 #'   posterior (number of draws, mostly), so treat the default as a
 #'   starting point, not a calibration for your own data.
 #' @return A tibble, one row per `worker_levels` entry: `n_workers`,
 #'   `chunk_size`, `n_chunks`, `peak_mb`, `wall_seconds`, `core_seconds`
 #'   (the last four `NA` where infeasible).
-#' @keywords internal
+#' @noRd
 .bilatr_worker_tradeoff <- function(
   n_vars, n_draws, n_chains, file_mb, max_memory_mb,
   worker_levels = c(1, 2, 4, 8, 16, 24),
@@ -1082,8 +1014,8 @@
 #' Resolve a chunk size for a CSV-file-path chunked read, and report it
 #'
 #' Shared by [diagnose_convergence()]'s and [extract_theta()]'s CSV-path
-#' branches. If `max_memory_mb` was left at its default, emits a one-time
-#' `message()` explaining the new cost model: reading is single-threaded
+#' branches. If `max_memory_mb` was left at its default, emits a
+#' `message()` summarizing the cost model: reading is single-threaded
 #' and each chunk's cost is roughly a full parse of the largest chain
 #' file regardless of how many variables are kept (see
 #' [.fast_read_post_warmup_draws]), so fewer, larger chunks are cheaper
@@ -1092,7 +1024,7 @@
 #' always emitted, reports the resolved chunk count/size and the
 #' estimated peak broken into its file-sized and per-chunk terms
 #' separately (see [.compute_chunk_size()]), so a caller can see the
-#' actual budget being spent before a long run commits to it. For the
+#' actual budget being spent before a long run starts. For the
 #' wall-time/core-hour trade-off across candidate `n_cores` values, see
 #' [.bilatr_worker_tradeoff()], which takes a wall-time reading from your
 #' own job's logs (there is no way to estimate it without one, so this
@@ -1108,7 +1040,7 @@
 #' @param max_memory_mb_missing Whether the caller left `max_memory_mb`
 #'   at its default (via `missing()` in the calling function).
 #' @return The resolved integer chunk size.
-#' @keywords internal
+#' @noRd
 .resolve_chunk_size_and_report <- function(
   n_vars, prepared, max_memory_mb, chunk_size, n_cores,
   max_memory_mb_missing
@@ -1120,18 +1052,10 @@
   if (max_memory_mb_missing) {
     message(
       "Using the default max_memory_mb = ", max_memory_mb, " (",
-      round(max_memory_mb / 1024, 1), " GB). Reading is single-threaded: ",
-      "each chunk's cost is roughly a full parse of the largest chain ",
-      "file regardless of how many variables are kept (see ",
-      "?.fast_read_post_warmup_draws), so fewer, larger chunks are ",
-      "cheaper in wall-time -- prefer the LARGEST max_memory_mb your ",
-      "job's memory allocation can afford. `n_cores` trades ",
-      "wall-time in the summary step (Rhat/rank-normalised ESS) against ",
-      "memory, NOT independent of chunk_size: forking n_cores costs ",
-      "memory roughly proportional to n_cores (see ",
-      "?.bilatr_chunk_overhead_multiplier), which comes out of this same ",
-      "budget and can force smaller/more chunks -- check the resolved ",
-      "chunk count below before committing a large n_cores to a long run."
+      round(max_memory_mb / 1024, 1), " GB); each chunk re-reads the largest ",
+      "chain file, so set the largest budget you can afford. More n_cores ",
+      "speeds up the summaries but takes memory from the same budget, so ",
+      "check the chunk count below."
     )
   }
 
@@ -1155,7 +1079,7 @@
     " MB (", round(baseline_mb), " MB R/package baseline (measured) + ",
     round(file_mb), " MB file-sized term + ", round(raw_mb),
     " MB raw chunk x ", signif(k, 3), " multiplier)",
-    if (n_cores > 1) paste0(" [", n_cores, " core(s) for summarising]") else "",
+    if (n_cores > 1) paste0(" [", n_cores, " core(s) for summarizing]") else "",
     "."
   )
 
@@ -1183,7 +1107,7 @@
 #'   in-memory branch produces: [posterior::summarise_draws()] columns
 #'   left-joined with [.classify_bilatr_tier]'s `tier`/`dyad_id`/
 #'   `time_index`.
-#' @keywords internal
+#' @noRd
 .read_diagnostics_summary_from_csv <- function(
   csv_files, tiers, max_memory_mb, chunk_size, n_cores,
   max_memory_mb_missing
@@ -1232,66 +1156,73 @@
 
 #' Triage MCMC convergence diagnostics by parameter tier
 #'
-#' Runs [posterior::summarise_draws()] over a fitted `bilatr` model and
-#' splits the result into three diagnostic tiers before applying Rhat/ESS
-#' thresholds, so that pathologies in global/shared parameters are never
-#' masked by the wide, poorly-identified posteriors expected for
-#' sparsely-observed dyads. See `vignette("diagnostics")` for a worked
-#' example and the rationale behind the tiering.
+#' Computes R-hat and effective sample sizes for a fitted bilatr model
+#' and splits them into three tiers before applying thresholds, so that
+#' problems in the global parameters are never masked by the wide,
+#' weakly identified posteriors expected for sparsely observed dyads. See
+#' `vignette("diagnostics", package = "bilatr")` for a worked example and
+#' the rationale.
 #'
-#' Tier 1 (global/shared parameters plus `lp__`) is always reported in
-#' full and never summarized away. Tier 2 (per-dyad hierarchical
-#' parameters, e.g. `phi`, `process_noise`, `theta0`) and Tier 3
-#' (per-dyad-period latent states, e.g. `theta`, `theta_raw`) are joined
-#' against `n_dt` and screened for dyads whose diagnostics are worse than
-#' a smooth degradation-with-sparsity trend predicts (see
-#' [.flag_worse_than_expected]), so sparse-but-unremarkable dyads don't
-#' flood the report. See [.classify_bilatr_tier] for how parameter names
-#' are assigned to tiers.
+#' * **Tier 1**, global parameters (`alpha`, `mu_intercept`, the
+#'   hierarchical scales and `lp__`), is always reported in full.
+#' * **Tier 2**, per-dyad parameters (e.g. `phi`, `process_noise`,
+#'   `theta0`), and **Tier 3**, the per-dyad-period latent states
+#'   (`theta`), are joined to each dyad's event count `n_dt`. A dyad is
+#'   flagged only when its diagnostics are worse than the trend of
+#'   diagnostics against sparsity predicts, so sparse but unremarkable
+#'   dyads do not flood the report.
 #'
-#' `tiers` limits *which* of these are computed at all: quantities not
-#' assigned to a requested tier are never read into memory in the first
-#' place (see `fit` below), rather than being read and then hidden. This
-#' matters in practice because Tier 3 (`theta`/`theta_raw`) typically
-#' has, by far, the most monitored quantities of the three tiers (one per
-#' dyad-period); requesting only `tiers = 1` or `tiers = 1:2` skips
-#' reading/computing Rhat/ESS for all of them.
+#' Quantities are assigned to tiers by name and by their number of
+#' indices: Tier 1 names are listed explicitly, a single index means a
+#' per-dyad parameter (Tier 2), and two indices a per-dyad-period
+#' quantity (Tier 3). The raw parameters the models' orientation fold is
+#' built from (`alpha_raw`, `z_theta0` or `mu_dyad_raw`, `theta_raw`, and
+#' `gamma_z` in `stable_gamma`) are sign-ambiguous or informed only by
+#' their prior, so their R-hat is meaningless; they are left out of every
+#' tier.
 #'
-#' Every `fit` case (a)-(c) below summarises via the same fixed measure
-#' set ([.summarise_bilatr_draws()]: `mean`, `quantile2`, `median`,
-#' `rhat`, `ess_bulk`, `ess_tail`), not `posterior::summarise_draws()`'s
-#' own defaults (which also compute `sd`/`mad`, unused by every consumer
-#' here) -- so the tibble you get back has the same columns regardless
-#' of which kind of `fit` produced it.
+#' `tiers` limits which tiers are computed: quantities outside the
+#' requested tiers are not read at all, rather than read and hidden. Tier
+#' 3 usually has by far the most quantities (one per dyad-period), so
+#' `tiers = 1` or `tiers = 1:2` is much faster on a large fit.
 #'
-#' @param fit One of three things. (a) A `posterior::draws_array`/
-#'   `draws_df` -- already fully materialized in memory, so `tiers`
-#'   controls what gets summarised but not what gets read (there is
-#'   nothing left to avoid reading), and `max_memory_mb`/`chunk_size`/
-#'   `n_cores` are unused. (b) A `CmdStanMCMC`/`CmdStanFit`-
-#'   like fit object (anything with `$metadata()` and
-#'   `$draws(variables = ...)` methods) -- variable names are read via
-#'   `$metadata()$variables` without touching a single draw, classified
-#'   into tiers, and only the tiers actually requested are read via
-#'   `$draws(variables = keep_vars)`; a quantity outside `tiers` is
-#'   therefore never read into memory at all, same as case (c) below.
-#'   `max_memory_mb`/`chunk_size`/`n_cores` are still unused
-#'   here -- chunking only applies to the raw-CSV path, since `$draws()`
-#'   already holds whatever it returns as one in-memory array. (c) A
-#'   character vector of raw CmdStan CSV file paths (one per chain, e.g.
-#'   from a completed SLURM run never loaded into this R session) -- in
-#'   this case Tier 1/2 variables are read in one small call, and Tier 3
-#'   variables (typically the overwhelming majority for production-sized
-#'   panels) are read and summarised directly from the raw CSVs in
-#'   memory-bounded chunks (see [.fast_read_post_warmup_draws]),
-#'   discarding each chunk's draws before moving to the next, so the
-#'   full draws array is never materialized at once. Total file touches
-#'   per chain file: one metadata scan plus one validation probe (both in
-#'   [.prepare_fast_csv_read]), one Tier 1/2 read, and one per Tier 3
-#'   chunk -- or, when Tier 3 fits in a single chunk, Tier 1/2 is folded
-#'   into that one read instead of being separate. This is the path that
-#'   matters for production Stan output too large to read normally
-#'   (tested against panels with millions of Tier 3 columns).
+#' Every kind of `fit` is summarized with the same measures (`mean`, the
+#' 5% and 95% quantiles, `median`, `rhat`, `ess_bulk`, `ess_tail`), so the
+#' returned tables have the same columns whichever kind was given.
+#'
+#' @section Large fits from CSV files:
+#' With CmdStan CSV files, Tier 1 and 2 are read in one call and Tier 3 is
+#' read and summarized in chunks, discarding each chunk before reading the
+#' next, so the full set of draws is never in memory at once. Reading is
+#' single-threaded and each chunk costs about one pass over the largest
+#' chain file, however few columns it keeps, so fewer, larger chunks are
+#' faster.
+#'
+#' * `max_memory_mb` sets the chunk size. Use the largest budget your
+#'   machine or job allows. The default, 8 GB, is a guess, and the
+#'   function says so when you rely on it. Peak memory is estimated as
+#'   the size of the largest chain file, plus about 200 MB for R and the
+#'   loaded packages, plus a multiple of the chunk's raw size (draws x
+#'   chains x variables x 8 bytes): 3.5 times it for four chains on one
+#'   core.
+#' * `n_cores` > 1 computes each chunk's R-hat and ESS in that many forked
+#'   processes, which is faster but costs memory from the same budget:
+#'   roughly 4.5x the chunk's raw size for the first extra process and
+#'   2.5x for each one after that (estimates that are conservative and
+#'   were measured up to 8 cores). At a fixed `max_memory_mb`, more cores
+#'   therefore mean smaller chunks and more passes over the files, and a
+#'   large `n_cores` can be slower overall. A message before reading
+#'   reports the chunk size, the number of chunks and the estimated peak
+#'   memory; check it before a long run.
+#'
+#' @param fit One of: a `posterior` draws object (`draws_array` or
+#'   `draws_df`), already in memory; a `CmdStanMCMC` fit (or any object
+#'   with `$metadata()` and `$draws(variables = )` methods), whose
+#'   requested tiers are read with `$draws()`; or a character vector of
+#'   CmdStan CSV files, one per chain, for example from a run in another
+#'   session, which are read in memory-bounded chunks (see "Large fits
+#'   from CSV files"). `max_memory_mb`, `chunk_size` and `n_cores` apply
+#'   only to CSV files.
 #' @param n_dt Each dyad's total number of events, which tiers 2 and 3
 #'   screen diagnostics against. `NULL` (default) computes it from the
 #'   fit's Stan data (`apply(stan_data$Y, 1, sum)`), found as for
@@ -1312,70 +1243,25 @@
 #'   A tier not requested is left as `NULL` in the returned object rather
 #'   than an empty tibble, so `is.null(diag$tier3)` distinguishes "not
 #'   computed" from "computed, nothing to report".
-#' @param max_memory_mb Only used when `fit` is CSV file paths and `tiers`
-#'   includes `3`. Target ceiling, in MB, for Tier 3's peak memory per
-#'   chunk; drives the automatically-derived `chunk_size` (see
-#'   `chunk_size` below) so you don't have to guess a variable count
-#'   yourself. Defaults to `8192` (8 GB) -- a guess, not a calibration
-#'   against your hardware, and this function says so via `message()`
-#'   the first time you rely on that default rather than setting it
-#'   explicitly. This is a sanity-check number, not a guarantee: actual
-#'   peak memory depends on `data.table::fread()`/`summarise_draws()`
-#'   internals this function doesn't control (see
-#'   [.compute_chunk_size()] for the model and its derivation). Reading
-#'   is single-threaded, and each chunk's cost is roughly a full parse
-#'   of the largest chain file regardless of how many variables are
-#'   kept -- `max_memory_mb` must be large enough to cover that file
-#'   size, plus a fixed R/package-loading floor, at minimum (this
-#'   `stop()`s with a clear message naming the shortfall if it isn't).
-#'   Beyond that, fewer/larger chunks are cheaper in read wall-time, but
-#'   -- see `n_cores` below -- a larger `n_cores` shrinks the
-#'   largest chunk size the SAME `max_memory_mb` budget can afford, so
-#'   the two are not independent: prefer the LARGEST `max_memory_mb`
-#'   your job's allocation can afford, and check the resolved chunk
-#'   count in the pre-flight `message()` before committing to a large
-#'   `n_cores` on a tight budget.
-#' @param chunk_size Only used when `fit` is CSV file paths and `tiers`
-#'   includes `3`. Explicit override: number of Tier 3 variables read per
-#'   chunk. `NULL` (the default) derives this from `max_memory_mb`
-#'   instead; set this directly only if you want to bypass that
-#'   calculation (e.g. you've measured actual memory use and want to
-#'   tune it by hand).
-#' @param n_cores Only used when `fit` is CSV file paths and `tiers`
-#'   includes `3`. Chunks are always read strictly sequentially regardless
-#'   of this argument -- reading is disk-bound and single-threaded no
-#'   matter how many cores are available (see
-#'   [.fast_read_post_warmup_draws]), so there is nothing to gain, and
-#'   `n_cores` chunks' worth of memory to lose, by reading more than one
-#'   chunk at a time. `n_cores` instead controls whether the CPU-bound
-#'   part -- each chunk's Rhat/rank-normalised-ESS computation -- uses
-#'   that many cores (via `posterior::summarise_draws()`'s `.cores`
-#'   argument, which forks `n_cores` worker processes) or just one.
-#'   Measured (`dev/bench_memory.R`, see [.BILATR_CHUNK_CORES_PER_CORE_FACTOR]):
-#'   this genuinely costs memory roughly proportional to `n_cores`, not
-#'   a fixed amount regardless of it, and that cost comes out of the SAME
-#'   `max_memory_mb` budget the read uses -- so a larger `n_cores`
-#'   indirectly means MORE, not fewer, passes over each chain file at a
-#'   fixed `max_memory_mb`, trading read wall-time for summary wall-time
-#'   rather than being free on top of it. Worth checking the resolved
-#'   chunk count (in the pre-flight `message()`) at your intended
-#'   `n_cores` before committing a long run to it -- a very large
-#'   `n_cores` on a large `n_vars` sweep can end up costing MORE total
-#'   wall-time than a smaller one, if it forces enough extra chunks. More
-#'   cores is NOT monotonically better on either axis --
-#'   [.bilatr_worker_tradeoff()] can estimate the actual trade-off for
-#'   your job, given a wall-time reading from your own logs, rather than
-#'   guessing at it from this description alone. Defaults to `1L`
-#'   (today's default behaviour). Inside a SLURM allocation,
-#'   `parallelly::availableCores()` is the right way to fill this in --
-#'   unlike `parallel::detectCores()`, it respects
-#'   `SLURM_CPUS_PER_TASK` (among other cluster/container schedulers)
-#'   rather than reporting the whole node's core count -- but this is a
-#'   genuine memory/wall-time trade-off, not a free choice, so consider
-#'   an explicit, moderate value for a memory-constrained job rather
-#'   than the largest available. On Unix-alikes, a session that fits a
-#'   model between two `n_cores > 1` calls can print "Error while
-#'   shutting down parallel" when R exits; this is harmless.
+#' @param max_memory_mb CSV files with Tier 3 only. The memory budget, in
+#'   MB, that sets how many Tier 3 variables are read per chunk. Defaults
+#'   to `8192` (8 GB). It must cover at least the largest chain file plus
+#'   about 200 MB; otherwise the function stops and says how much is
+#'   needed. The estimate is a guide, not a guarantee. See "Large fits
+#'   from CSV files".
+#' @param chunk_size CSV files with Tier 3 only. The number of Tier 3
+#'   variables per chunk, to override the one derived from
+#'   `max_memory_mb`. `NULL` (default) derives it.
+#' @param n_cores CSV files with Tier 3 only. The number of processes that
+#'   compute R-hat and ESS for each chunk (chunks are always read one at a
+#'   time). Defaults to `1`. More cores speed up the summaries but use
+#'   memory from the same `max_memory_mb` budget; see "Large fits from CSV
+#'   files". Under a job scheduler or in a container,
+#'   `parallelly::availableCores()` gives the cores actually allocated,
+#'   unlike `parallel::detectCores()`.
+#'   On Unix-alikes, a session that fits a model between two `n_cores > 1`
+#'   calls can print "Error while shutting down parallel" when R exits;
+#'   this is harmless.
 #' @param stan_model The model that was fit: `"stable"`, `"ou"` or
 #'   `"stable_gamma"`. `NULL` (default) uses the model recorded on the fit
 #'   (by [fit_panel()]/[fit_dyad_ts()]), on its Stan data, or in the
@@ -1388,40 +1274,40 @@
 #'   \describe{
 #'     \item{tier1}{Tibble of global/shared diagnostics, one row per
 #'       monitored quantity, with a `flagged` column; `NULL` if `1` was
-#'       not in `tiers`. Excludes `gamma` when `stan_model` has one (see
-#'       `gamma` below) -- `n_tier1_flagged`/`n_tier1_total` in `summary`
-#'       count only this table, same meaning as pre-0.7.1.}
-#'     \item{gamma}{(0.7.1) Tibble of `stable_gamma`'s country-level
-#'       offset diagnostics -- `variable`, `action_index`,
-#'       `country_index`, `rhat`, `ess_bulk`, `ess_tail`, `flagged`; one
-#'       row per `gamma[k,c]` element. `NULL` whenever `1` was not in
-#'       `tiers` or `stan_model` has no `gamma` (silently absent, not an
-#'       empty tibble) -- see `.bilatr_model_has_gamma()`. `summary`'s
-#'       `n_gamma_flagged`/`n_gamma_total` count this table.}
+#'       not in `tiers`. Excludes `gamma` when the model has one (see
+#'       `gamma` below); `n_tier1_flagged`/`n_tier1_total` in `summary`
+#'       count only this table.}
+#'     \item{gamma}{Tibble of `stable_gamma`'s country-level offset
+#'       diagnostics -- `variable`, `action_index`, `country_index` (and
+#'       `country_code` when the Stan data is available), `rhat`,
+#'       `ess_bulk`, `ess_tail`, `flagged`; one row per `gamma[k,c]`
+#'       element. `NULL` when `1` was not in `tiers` or the model has no
+#'       `gamma`. `summary`'s `n_gamma_flagged`/`n_gamma_total` count this
+#'       table.}
 #'     \item{tier2}{Tibble with one row per dyad found in `n_dt` (or in
 #'       the draws, if unmatched), per-dyad-parameter Rhat/ESS columns,
 #'       and a `worse_than_expected` column; `NULL` if `2` was not in
 #'       `tiers`.}
 #'     \item{tier3}{Tibble with one row per dyad summarizing `theta`'s
-#'       per-dyad-period latent-state diagnostics (min ESS, share of
-#'       entries breaching thresholds); `NULL` if `3` was not in `tiers`.
-#'       Holds `theta` only (0.10.2, B4) -- `theta_filtered`/
-#'       `theta_filtered_sd`/`log_lik` moved to `tier3_other` below, since
-#'       grouping them here by their first index as `dyad_id` mis-joined
-#'       `theta_filtered*` whenever `filter_dyads` narrowed the dyad set
-#'       (see [.compute_tier3()]).}
-#'     \item{tier3_other}{(0.10.2) Tibble with one row per Tier 3 base
-#'       name other than `theta` (e.g. `theta_filtered`,
-#'       `theta_filtered_sd`, `log_lik`, whichever are present): `n`,
-#'       `n_rhat_above`, `n_ess_below`, `max_rhat`, `min_ess_bulk`,
-#'       `min_ess_tail`. No per-dyad breakdown, so no `filter_dyads`
-#'       index-translation is needed. `NULL` if `3` was not in `tiers`;
-#'       zero rows (not `NULL`) if `3` was computed but the fit has no
-#'       Tier 3 quantity besides `theta`.}
+#'       per-dyad-period diagnostics (minimum ESS, maximum R-hat, share of
+#'       entries breaching the thresholds); `NULL` if `3` was not in
+#'       `tiers`. Holds `theta` only; other per-dyad-period quantities are
+#'       in `tier3_other`.}
+#'     \item{tier3_other}{Tibble with one row per Tier 3 quantity other
+#'       than `theta` (`theta_filtered`, `theta_filtered_sd`, `log_lik`,
+#'       whichever are present): `n`, `n_rhat_above`, `n_ess_below`,
+#'       `max_rhat`, `min_ess_bulk`, `min_ess_tail`, with no per-dyad
+#'       breakdown (`theta_filtered`'s first index is the position in
+#'       `filter_dyads`, not a dyad id). `NULL` if `3` was not in `tiers`;
+#'       zero rows if the fit has no Tier 3 quantity besides `theta`.}
 #'     \item{summary}{A short named list of headline counts (see
-#'       [print.bilatr_diagnostics]), including `n_tier3_other_groups`,
-#'       `n_tier3_other_rhat_above`, `n_tier3_other_ess_below` (0.10.2).}
+#'       [print.bilatr_diagnostics()]), including `n_tier3_other_groups`,
+#'       `n_tier3_other_rhat_above` and `n_tier3_other_ess_below`.}
 #'   }
+#' @references Vehtari, A., Gelman, A., Simpson, D., Carpenter, B. and
+#'   Burkner, P.-C. (2021). Rank-normalization, folding, and localization:
+#'   an improved R-hat for assessing convergence of MCMC. *Bayesian
+#'   Analysis* 16(2), 667-718. \doi{10.1214/20-BA1221}
 #' @examples
 #' # CmdStan CSV files from an earlier run, with the *_stan_data.rds file
 #' # that fit_panel(output_dir = ) wrote next to them (here, the example
@@ -1497,9 +1383,8 @@ diagnose_convergence <- function(
 #'
 #' Tier 1 (global/shared parameters) is always printed in full, since it
 #' should never be silently summarized away. `stable_gamma`'s `gamma`
-#' (0.7.1) gets its own section instead of being part of that full-print
-#' promise -- at production scale it is thousands of parameters, and a
-#' routine number will flag as a matter of course, so only the worst few
+#' gets its own section instead: in a large panel it has thousands of
+#' elements, and a routine number will be flagged, so only the worst few
 #' by Rhat and by ESS are shown (silently absent for a model without
 #' `gamma`; see [diagnose_convergence()]'s `stan_model` argument). Tier 2
 #' (per-dyad hierarchical parameters) is printed as a compact table
@@ -1511,7 +1396,7 @@ diagnose_convergence <- function(
 #' @param x A `bilatr_diagnostics` object, as returned by
 #'   [diagnose_convergence()].
 #' @param n_tier2 Maximum number of Tier 2 rows to print.
-#' @param n_gamma (0.7.1) Maximum number of `gamma` rows to print, PER
+#' @param n_gamma Maximum number of `gamma` rows to print, PER
 #'   ranking (worst by `rhat`, worst by `ess_bulk` -- so up to `2 *
 #'   n_gamma` rows total, fewer if the two rankings overlap or there are
 #'   fewer flagged elements than that).

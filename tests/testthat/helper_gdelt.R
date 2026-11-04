@@ -4,7 +4,7 @@
 # download_gdelt()/read_gdelt() can be exercised offline via
 # options(bilatr.gdelt_base_url = "file://<dir>/").
 
-#' Twenty hand-built GDELT event rows covering every case Part 4 asks for
+#' Twenty hand-built GDELT event rows covering every filter case
 #'
 #' Base row: a cross-border, root, GOV/GOV USA->CHN event. Rows 2-10
 #' override specific fields to hit each required case (see inline

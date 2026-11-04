@@ -7,21 +7,22 @@
 gdelt_files(start, end = start)
 }
 \arguments{
-\item{start, end}{Anything \code{\link[=.parse_event_date]{.parse_event_date()}} accepts (\code{Date},
-\code{POSIXt}, \code{YYYYMMDD}, or \code{YYYY-MM-DD}). \code{end} defaults to \code{start}
+\item{start, end}{Dates (\code{Date}, \code{POSIXt}, \code{YYYYMMDD}, or
+\code{YYYY-MM-DD}). \code{end} defaults to \code{start}
 (a single period). Both must fall within 1979-01-01 and today.}
 }
 \value{
 A tibble with one row per file: \code{period} (the file's date
 stamp, \code{"YYYY"}/\code{"YYYYMM"}/\code{"YYYYMMDD"}), \code{type}
 (\code{"yearly"}/\code{"monthly"}/\code{"daily"}), \code{file} (the basename), \code{url}
-(under \code{\link[=.gdelt_base_url]{.gdelt_base_url()}}), and \code{n_cols} (57 or 58).
+(under \url{https://data.gdeltproject.org/events/}), and \code{n_cols} (57
+or 58).
 }
 \description{
 A pure function (no network): rolls \verb{[start, end]} up to the distinct
-yearly/monthly/daily files that cover it, per the boundaries at
-\code{?bilatr_gdelt_layout}. A range crossing a boundary returns a mix of
-types.
+yearly/monthly/daily files that cover it (see \code{\link[=read_gdelt]{read_gdelt()}}, "GDELT
+1.0 files", for the boundaries). A range crossing a boundary returns a
+mix of types.
 }
 \examples{
 gdelt_files("2020-01-01", "2020-01-03")

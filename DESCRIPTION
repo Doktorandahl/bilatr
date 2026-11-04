@@ -1,59 +1,67 @@
 Package: bilatr
 Title: Hierarchical Dynamic IRT Models for Latent Bilateral Relations
-Version: 0.12.0.9000
+Version: 1.0.0
 Authors@R: c(
-    person("David", "Randahl", , "david.randahl@fhs.se", role = c("aut", "cre")),
-    person("Magnus", "Lundgren", role = "aut"),
-    person("Carl", "Vikberg", role = "aut")
+    person("David", "Randahl", , "david.randahl@fhs.se",
+           role = c("aut", "cre", "cph"),
+           comment = c(ORCID = "0000-0003-1069-6067")),
+    person("Magnus", "Lundgren", role = "aut",
+           comment = c(ORCID = "0000-0002-9961-3645")),
+    person("Carl", "Vikberg", role = "aut",
+           comment = c(ORCID = "0000-0001-7523-9196"))
   )
-Description: Estimates latent bilateral relations between pairs of
-    actors over time with a hierarchical Bayesian dynamic
+Description: Estimates latent bilateral relations between pairs of actors
+    over time with a hierarchical Bayesian dynamic
     item-response-theory-style model for dyadic event data. The latent
     scale runs from conflict to cooperation: it is oriented by a reference
     action type, so that with a cooperative reference higher values mean
-    more cooperative relations. Users supply CAMEO-coded (or any
-    categorically coded) dyadic event data in a documented, validated
-    format; action types discriminate between more and less cooperative
-    states through a Dirichlet-multinomial likelihood, and dyad-specific
-    latent states follow a random-walk process, with support for both
-    single-dyad time-series and multi-dyad panel estimation. Includes
-    GDELT download/ingest helpers and a CAMEO recoding table,
-    'cmdstanr'-based fitting wrappers, and tidy posterior extraction
-    utilities.
+    more cooperative relations. Users supply CAMEO-coded (Conflict and
+    Mediation Event Observations) or any other categorically coded dyadic
+    event data in a documented, validated format; action types
+    discriminate between more and less cooperative states through a
+    Dirichlet-multinomial likelihood, and dyad-specific latent states
+    follow a random-walk process, with support for both single-dyad
+    time-series and multi-dyad panel estimation. The models are fitted in
+    'Stan' through 'cmdstanr' and 'CmdStan'. Users can also download and
+    read GDELT (Global Database of Events, Language, and Tone) event data,
+    diagnose convergence by parameter tier, check model fit, and tune
+    parallel performance.
 License: MIT + file LICENSE
-Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
+URL: https://github.com/doktorandahl/bilatr
+BugReports: https://github.com/doktorandahl/bilatr/issues
 Depends:
     R (>= 4.1.0)
 Imports:
-    posterior (>= 1.0.0),
+    data.table,
     dplyr,
-    tidyr,
+    parallel,
+    posterior (>= 1.0.0),
     purrr,
+    readr,
+    rlang,
+    stats,
     stringr,
     tibble,
-    rlang,
-    readr,
-    data.table,
+    tidyr,
     tidyselect,
-    stats,
     tools,
-    utils,
-    parallel
+    utils
 Suggests:
     cmdstanr (>= 0.8.0),
-    testthat (>= 3.0.0),
-    knitr,
-    rmarkdown,
     ggplot2,
-    withr,
-    parallelly
+    knitr,
+    parallelly,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+VignetteBuilder:
+    knitr
 Additional_repositories: https://stan-dev.r-universe.dev
-SystemRequirements: CmdStan (https://mc-stan.org/users/interfaces/cmdstan)
-VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/doktorandahl/bilatr
-BugReports: https://github.com/doktorandahl/bilatr/issues
+Encoding: UTF-8
+Language: en-US
 LazyData: true
 LazyDataCompression: xz
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+SystemRequirements: CmdStan (https://mc-stan.org/users/interfaces/cmdstan)

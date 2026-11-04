@@ -19,8 +19,8 @@ plus every other \verb{Actor1*}/\verb{Actor2*} field: \verb{*Name},
 A character vector of column names, in file order.
 }
 \description{
-Name-vector presets over the full 58-column schema (\code{?bilatr_gdelt_layout}),
-for use as \code{\link[=read_gdelt]{read_gdelt()}}'s \code{columns} argument.
+Name-vector presets over the full 58-column schema (see \code{\link[=read_gdelt]{read_gdelt()}},
+"GDELT 1.0 files"), for use as \code{\link[=read_gdelt]{read_gdelt()}}'s \code{columns} argument.
 }
 \details{
 \code{"core"} leaves out GDELT's own \code{QuadClass} only because

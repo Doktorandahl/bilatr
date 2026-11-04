@@ -141,7 +141,7 @@ aggregate_events <- function(
   start <- start %||% data_range[1]
   end <- end %||% data_range[2]
 
-  # Window first, as bilatr <= 0.11.0 did: the class set is built
+  # Window first: the class set is built
   # from in-window rows only, but the dropped-class message compares
   # against every class in `data`.
   all_classes <- unique(slim$.class)
@@ -192,8 +192,7 @@ aggregate_events <- function(
   }
   slim$dyad <- paste(slim$actor1, slim$actor2, sep = "_")
 
-  # Per-dyad actors and sender share, computed exactly as
-  # bilatr <= 0.11.0 computed them (1 by construction when directed).
+  # Per-dyad actors and sender share (1 by construction when directed).
   dyad_info <- slim %>%
     dplyr::mutate(is_side_a_sender = .data$.actor1 == .data$actor1) %>%
     dplyr::group_by(.data$dyad) %>%
@@ -229,7 +228,7 @@ aggregate_events <- function(
 #' @param x `NULL`, a `Date`, or a string `as.Date()` parses.
 #' @param arg Argument name, for the error message.
 #' @return `NULL` or a length-one `Date`.
-#' @keywords internal
+#' @noRd
 .as_window_date <- function(x, arg) {
   if (is.null(x)) {
     return(NULL)
@@ -258,7 +257,7 @@ aggregate_events <- function(
 #' @param class_order `NULL`, or a permutation of the in-window classes.
 #' @param classes The in-window class values (character).
 #' @return The class order, as character.
-#' @keywords internal
+#' @noRd
 .resolve_class_order <- function(class_order, classes) {
   observed <- unique(classes)
   if (is.null(class_order)) {
@@ -289,7 +288,7 @@ aggregate_events <- function(
 #' @param resolution The matched resolution.
 #' @param earliest The earliest date in the window (a `Date`).
 #' @return A `Date` (possibly `NA`).
-#' @keywords internal
+#' @noRd
 .time_origin <- function(resolution, earliest) {
   if (resolution %in% c("yearly", "monthly")) {
     return(as.Date(NA))
@@ -316,7 +315,7 @@ aggregate_events <- function(
 #' @param year,month Optional precomputed integer year/month of `date`,
 #'   to avoid formatting a long date vector again.
 #' @return An integer vector of period IDs; see [aggregate_events()].
-#' @keywords internal
+#' @noRd
 .time_id <- function(date, resolution, origin, year = NULL, month = NULL) {
   switch(resolution,
     yearly = year %||% as.integer(format(date, "%Y")),
@@ -336,7 +335,7 @@ aggregate_events <- function(
 #' @param resolution The matched resolution.
 #' @param origin The origin `Date` (weekly/daily only).
 #' @return A tibble keyed by the time column; see [aggregate_events()].
-#' @keywords internal
+#' @noRd
 .time_labels <- function(time_range, resolution, origin) {
   switch(resolution,
     yearly = tibble::tibble(year = time_range),

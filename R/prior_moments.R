@@ -2,45 +2,45 @@
 
 #' Number of batches [alpha_prior_moments()] splits its simulation into
 #'
-#' Not a user-facing argument (0.10.2): `alpha_prior_moments()`'s cache
-#' key is `(A, n_sim, fold, seed)`, so a batch count that *could* vary
+#' Not a user-facing argument: `alpha_prior_moments()`'s cache key is
+#' `(A, n_sim, fold, seed)`, so a batch count that *could* vary
 #' independently of that key would let a later call with the same key
 #' but a different batch count silently return a stale cached result
-#' computed under the other one -- since the moments are unchanged in
+#' computed under the other one -- the moments are unchanged in
 #' expectation but not bit-for-bit (different batching consumes the same
-#' seeded RNG stream in a different shape), that mismatch would be
-#' invisible. Fixed at 10, matching the audit's "a tenth of the memory"
-#' figure at the default `n_sim`.
-#' @keywords internal
+#' seeded RNG stream in a different shape), so that mismatch would be
+#' invisible. Fixed at 10, a tenth of the memory of an unbatched
+#' simulation.
+#' @noRd
 .BILATR_ALPHA_PRIOR_N_BATCHES <- 10L
 
 #' Simulate draws from `alpha`'s implied prior
 #'
-#' Mirrors `inst/stan/bilatr_alphanorm.stan`'s `transformed parameters`
+#' Mirrors the Stan programs' `transformed parameters`
 #' construction of `alpha` exactly, so the two cannot silently drift apart:
 #' `alpha_raw ~ std_normal()` on a `sum_to_zero_vector[A]` is equivalent in
 #' distribution to an iid-normal draw with its row mean subtracted (both are
 #' the unique zero-mean isotropic Gaussian confined to the sum-zero
 #' hyperplane); `alpha` is then `alpha_raw` scaled to RMS 1
 #' (`sqrt(A / dot_self(alpha_raw))`, see `orientation_sign()` and the
-#' `alpha` assignment in that file's `transformed parameters` block), and
+#' `alpha` assignment in the `transformed parameters` block), and
 #' folded by the sign of the first element if `fold = TRUE` (matching
 #' `orientation_sign(alpha_raw)`). If that Stan construction ever changes,
 #' this function must change with it.
 #'
 #' @param A Number of action classes.
 #' @param n_sim Number of Monte Carlo draws.
-#' @param fold If `TRUE` (default), apply the same sign fold `stable`/`ou`
+#' @param fold If `TRUE` (default), apply the same sign fold the models
 #'   apply to `alpha` (see `orientation_sign()`); if `FALSE`, return the
 #'   unfolded (exchangeable) prior.
 #' @param seed Optional seed for reproducibility. When supplied, uses
-#'   [.with_seed()] (0.10.2, B2), so this never disturbs the caller's own
+#'   [.with_seed()], so this never disturbs the caller's own
 #'   global RNG stream; when `NULL`, draws are taken from whatever stream
 #'   is already running (used internally by [alpha_prior_moments()]'s own
 #'   batched simulation, which seeds once around the whole batch loop
 #'   rather than once per batch).
 #' @return An `n_sim x A` numeric matrix of simulated `alpha` draws.
-#' @keywords internal
+#' @noRd
 .simulate_alpha_prior <- function(A, n_sim = 2e6, fold = TRUE, seed = NULL) {
   sim <- function() {
     raw <- matrix(stats::rnorm(n_sim * A), nrow = n_sim, ncol = A)
@@ -62,7 +62,7 @@
 #' @param n_batches Target number of batches.
 #' @return Integer vector of batch sizes (length `<= n_batches`; any
 #'   remainder from an uneven split is folded into the last batch).
-#' @keywords internal
+#' @noRd
 .alpha_prior_batch_sizes <- function(n_sim, n_batches) {
   base <- n_sim %/% n_batches
   remainder <- n_sim %% n_batches
@@ -74,9 +74,9 @@
 #' Sum and sum-of-squares of `.simulate_alpha_prior()`'s columns, batched
 #'
 #' Accumulates `colSums()`/`colSums(.^2)` across batches instead of
-#' materialising the full `n_sim x A` matrix at once (0.10.2, B10: at
-#' `A = 18` and the default `n_sim = 2e6`, the full matrix plus its
-#' row-mean/RMS/fold copies is over 1 GB of transient memory). Peak
+#' materializing the full `n_sim x A` matrix at once (at `A = 18` and
+#' the default `n_sim = 2e6`, the full matrix plus its row-mean/RMS/fold
+#' copies is over 1 GB of transient memory). Peak
 #' memory is one batch's matrix. The batch loop draws from whatever RNG
 #' stream is already running (`seed = NULL` on each
 #' [.simulate_alpha_prior()] call) -- the caller seeds once, via
@@ -86,7 +86,7 @@
 #' @param n_batches Number of batches to split `n_sim` into.
 #' @return A list with `n` (total draws), `sum` and `sumsq` (length-`A`
 #'   numeric vectors).
-#' @keywords internal
+#' @noRd
 .batched_alpha_prior_sums <- function(A, n_sim, fold, n_batches) {
   batch_sizes <- .alpha_prior_batch_sizes(n_sim, n_batches)
   sum_vec <- numeric(A)
@@ -116,24 +116,24 @@
 #' this function's output instead wherever a per-class prior sd/mean is
 #' needed (see [diagnose_category_merges()]).
 #'
-#' Computed by Monte Carlo (see [.simulate_alpha_prior()], via the batched
-#' [.batched_alpha_prior_sums()], 0.10.2) rather than a closed form, so it
-#' stays correct if the underlying Stan construction ever changes.
+#' Computed by Monte Carlo, with the same construction of `alpha` as the
+#' Stan programs (a sum-to-zero standard normal vector, scaled to
+#' root-mean-square 1 and, with `fold = TRUE`, multiplied by the sign of
+#' its first element), simulated in batches to bound memory.
 #'
-#' `seed` defaults to `1L` (0.10.2, B10): earlier versions defaulted to
-#' `NULL` and memoised under a cache key that included the seed, so the
-#' *first* unseeded call in a session -- effectively seeded by whatever
-#' state the RNG happened to be in -- got cached and silently reused for
-#' every later unseeded call, making `contraction`/`z_score`/
-#' `precision_gain` (via [diagnose_category_merges()]) differ between
-#' sessions at Monte Carlo precision. Pass `seed = NULL` explicitly to
-#' opt back into that unseeded behaviour; it is never cached, so repeat
-#' unseeded calls draw fresh Monte Carlo noise each time. Any non-`NULL`
-#' seed (including the `1L` default) is memoised per `(A, n_sim, fold,
-#' seed)`, via [.with_seed()], so it never disturbs the caller's own
-#' global RNG stream (0.10.2, B2).
+#' Results are reproducible: with a seed (the default is `1L`), the
+#' simulation runs under that seed without changing the caller's random
+#' number stream, and the result is cached for the session per `(A, n_sim,
+#' fold, seed)`. `seed = NULL` draws from the current random number stream
+#' and is never cached, so repeated calls give different Monte Carlo
+#' noise.
 #'
-#' @inheritParams .simulate_alpha_prior
+#' @param A Number of action classes.
+#' @param n_sim Number of Monte Carlo draws. The default, `2e6`, gives
+#'   moments accurate to about three decimal places.
+#' @param fold If `TRUE` (default), apply the models' orientation fold
+#'   (the sign of `alpha[1]`, the reference class, is made non-negative);
+#'   if `FALSE`, return the unfolded, exchangeable prior.
 #' @param seed Seed for reproducibility, or `NULL` for an unseeded,
 #'   uncached draw. Defaults to `1L`.
 #' @return A tibble with columns `action_index`, `prior_mean`, `prior_sd`.

@@ -24,7 +24,7 @@ icc_curves(
 }
 \arguments{
 \item{fit}{A \code{CmdStanMCMC} fit object, or a character vector of raw
-CmdStan CSV file paths -- the same forms \code{\link[=.get_draws]{.get_draws()}} accepts.}
+CmdStan CSV file paths (one per chain).}
 
 \item{stan_data}{The Stan data list used to produce \code{fit}, from
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. Used for the last-resort \code{theta_range}
@@ -55,10 +55,11 @@ category.}
 in \code{stan_data}'s action-dimension order. Defaults to \code{stan_data}'s
 \code{"event_classes"} attribute if \code{stan_data} is supplied.}
 
-\item{class_labels}{Optional; see \code{\link[=.resolve_class_labels]{.resolve_class_labels()}}. Defaults
-to \code{NULL}, which uses \code{event_class_labels(stan_data)} (see
-\code{\link[=event_class_labels]{event_class_labels()}}) when \code{stan_data}
-is supplied, else the raw event classes.}
+\item{class_labels}{Optional labels for the event classes: a character
+vector named by event class, or an unnamed one in \code{event_classes}
+order. \code{NULL} (default) uses \code{event_class_labels(stan_data)} (see
+\code{\link[=event_class_labels]{event_class_labels()}}) when \code{stan_data} is available, else the raw
+event classes.}
 
 \item{n_grid}{Number of theta grid points. Default \code{201}.}
 
@@ -74,19 +75,14 @@ model recorded on the fit, on its Stan data, or in the CmdStan CSV
 header, else assumes \code{"stable"} with a message; see
 \code{\link[=diagnose_convergence]{diagnose_convergence()}}.}
 
-\item{country}{Only meaningful for \code{stan_model = "stable_gamma"} --
-ignored, with a warning if supplied, for any other \code{stan_model}. \code{NULL} (default)
-evaluates the curves at the \code{gamma = 0} GLOBAL baseline, i.e. what
-every non-\code{gamma} model already computes -- this is the right
-default (a country-specific curve is the exception, not the norm,
-and every existing caller/test comparing curves across models stays
-valid). A single country code (character, matched against
+\item{country}{Only meaningful for \code{stan_model = "stable_gamma"};
+ignored, with a warning if supplied, for any other model. \code{NULL}
+(default) evaluates the curves at the \code{gamma = 0} global baseline,
+which is what the other models compute, so curves stay comparable
+across models. A single country code (character, matched against
 \code{stan_data}'s \code{"country_codes"} attribute) or an integer country
-index (in \code{1:n_countries}) gives that country's curves instead, subtracting its \code{gamma_c}
-from \code{eta} (\code{gamma}, read once, Tier 1/cheap, alongside \code{alpha}/
-\code{mu_intercept} above -- \code{gamma} is orientation-free by construction,
-so no relabeling applies to it; see
-\code{inst/stan/bilatr_alphanorm_gamma.stan}'s header).}
+index (in \code{1:n_countries}) gives that country's curves instead,
+subtracting its offset \code{gamma_c} from \code{eta}.}
 
 \item{n_dyads_fallback}{Number of dyads to subsample for the
 last-resort \code{theta_range} fallback (see Details). Default \code{300}.}
@@ -95,7 +91,7 @@ last-resort \code{theta_range} fallback (see Details). Default \code{300}.}
 }
 \value{
 A tibble (subclassed \code{bilatr_icc_curves}, with an
-\code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}/\code{\link[=plot]{plot()}} method and usable directly by
+\code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} and \code{plot()} methods, and usable directly by
 \code{\link[=icc_crossings]{icc_crossings()}}) of \code{theta}, \code{action_index}, \code{event_class},
 \code{class_label}, \code{median}, \code{lower}, \code{upper}.
 }
@@ -111,8 +107,8 @@ Dirichlet-multinomial overdispersion are layered on top.
 themselves needs only \code{alpha} and \code{mu_intercept}, both length-\code{A}
 vectors, read once in full (never all of \code{theta}). Resolving a
 \emph{default} \code{theta_range}, however, would naively need \code{theta}'s
-observed spread -- see \code{\link[=.resolve_icc_theta_range]{.resolve_icc_theta_range()}} for the
-cheapest-first resolution: an explicit \code{theta_range}, then quantiles
+observed spread, so it is resolved cheapest first: an explicit
+\code{theta_range}, then quantiles
 of a \code{theta_summary} tibble's \code{mean} column (e.g. \code{\link[=extract_theta]{extract_theta()}}'s
 output -- already in memory or on disk in most workflows), and only as
 a last resort a small draw-and-dyad subsample read directly off \code{fit}
@@ -124,18 +120,17 @@ full range, so one extreme dyad does not flatten the plot.
 contribution at \code{theta}, \code{p_k(theta) * (alpha_k - alpha_bar(theta))^2}
 with \verb{alpha_bar(theta) = sum_j p_j(theta) alpha_j} -- exactly the
 quantity \code{\link[=diagnose_category_merges]{diagnose_category_merges()}} computes at a single reference
-share vector (\code{R/category_merges.R}'s \code{\link[=.var_pi_alpha]{.var_pi_alpha()}}, reused here
-rather than reimplemented), evaluated across a whole range of \code{theta}
+share vector, evaluated across a whole range of \code{theta}
 instead of one point. This directly addresses that function's own
 documented caveat that its measure is local in \code{theta}: seeing where
 each category is informative across the scale is the natural
 companion to the merge ladder. The total \code{Var_p(theta)(alpha)} --
 the scale's test information function -- is attached as
 \code{attr(x, "total_information")} (a \code{theta}/\code{median}/\code{lower}/\code{upper}
-tibble), and shown as a reference curve by \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}}/\code{\link[=plot]{plot()}}.
+tibble), and shown as a reference curve by \code{\link[ggplot2:autoplot]{ggplot2::autoplot()}} and \code{plot()}.
 
 \strong{Bands are pointwise, not simultaneous}: at each \code{theta} grid point,
-the curve is computed per posterior draw and summarised by
+the curve is computed per posterior draw and summarized by
 \code{stats::quantile(probs)} independently of every other grid point.
 
 \strong{These are \emph{mean} share curves.} The Dirichlet-multinomial adds
@@ -143,7 +138,7 @@ dispersion around them, so observed shares scatter more widely than
 the bands suggest -- the bands are posterior uncertainty in the curve
 itself, not a predictive interval for an observation.
 
-\strong{\code{stan_model = "stable_gamma"} (0.7.0):} \code{eta} includes \code{- gamma_c}
+\strong{\code{stan_model = "stable_gamma"}:} \code{eta} includes \code{- gamma_c}
 for whichever country \code{country} selects. The default, \code{country = NULL},
 evaluates at \code{gamma = 0} -- the GLOBAL curve, ignoring every country's
 idiosyncratic repertoire, not any particular country's actual curve.
@@ -151,8 +146,7 @@ This is the right default (it is what every other registered model
 already computes, and what makes curves comparable across
 \code{stan_model}s), but it is worth being explicit that it is a baseline,
 not an average or a "typical country". \code{type = "information"} is
-unaffected beyond this: it is computed downstream of the (now
-possibly offset) \code{p_mat}, so no separate change was needed there.
+computed from the same (possibly offset) probabilities.
 }
 \examples{
 csv_files <- bilatr_example_fit()

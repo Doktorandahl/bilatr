@@ -1,13 +1,11 @@
-# Tests for the 0.7.0 country-level gamma offset (stable_gamma). See
-# dev/claude_code_prompt_0.7.0_country_offsets.md for the full design
-# this file implements against, and inst/stan/bilatr_alphanorm_gamma.stan's
-# header for the model itself.
+# Tests for the country-level gamma offset (stable_gamma). See
+# inst/stan/bilatr_alphanorm_gamma.stan's header for the model.
 
 #' Pure-R replication of bilatr_alphanorm_gamma.stan's transformed-parameters
 #' construction of `gamma` from `gamma_z`/`sigma_gamma`/`alpha`
 #'
-#' Mirrors the four Stan steps exactly (diag_pre_multiply, row-centre
-#' across countries, column-centre across categories, project out alpha
+#' Mirrors the four Stan steps exactly (diag_pre_multiply, row-center
+#' across countries, column-center across categories, project out alpha
 #' via dot_self(alpha)) so the constraint algebra and orientation
 #' invariance can be tested without a CmdStan fit.
 #'
@@ -47,7 +45,7 @@ test_that("the four-step gamma construction satisfies all three identification c
 
     gamma <- .gamma_construction_r(gamma_z, sigma_gamma, alpha)
 
-    # constraint 3: centred across countries, per category
+    # constraint 3: centered across countries, per category
     expect_equal(rowSums(gamma), rep(0, A), tolerance = 1e-10)
     # constraint 2: orthogonal to 1, per country
     expect_equal(colSums(gamma), rep(0, n_countries), tolerance = 1e-10)
@@ -141,7 +139,7 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   }
   gamma_ref <- list(gamma_z = matrix(0, A, 1), sigma_gamma = rep(0.4, A))
 
-  # 0.7.1: lp_gamma - lp_stable equals EXACTLY the gamma_z/sigma_gamma
+  # lp_gamma - lp_stable equals EXACTLY the gamma_z/sigma_gamma
   # prior + Jacobian contribution, evaluated Stan's own way -- `~`
   # distribution statements call the possibly-unnormalized _lupdf/
   # _lupmf variant, dropping additive terms that don't depend on the
@@ -151,17 +149,12 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   # dropping it is legitimate; contrast the <lower=0> Jacobian below,
   # which genuinely depends on sigma_gamma and is NOT dropped, since it
   # isn't part of the `~` statement at all -- it's compiler-generated for
-  # the constrained-parameter transform). An earlier version of this
-  # test used the fully-normalized dnorm(..., log = TRUE) here and found
-  # an exactly reproducible, value-independent ~2.5 nat residual,
-  # speculatively attributed (in the 0.7.0 summary) to cmdstanr's
-  # sum_to_zero_vector Jacobian bookkeeping. That speculation was WRONG:
-  # the dropped-constants total at this fixture's A = 4,
-  # n_countries = 1 is 4*0.5*log(2*pi) + 4*(0.5*log(2*pi) + log(0.3)) =
-  # 2.535616, matching the observed residual (2.535617) to 6 significant
-  # figures -- confirmed by testing the hypothesis, not assuming it (see
-  # dev/summary_0.7.0_country_offsets_2026-09-23.md, "Found along the
-  # way", and dev/claude_code_prompt_0.7.1_gamma_fixes.md Part 4).
+  # the constrained-parameter transform). Using the fully-normalized
+  # dnorm(..., log = TRUE) here instead leaves an exactly reproducible,
+  # value-independent residual: the dropped constants, which at this
+  # fixture's A = 4, n_countries = 1 total
+  # 4*0.5*log(2*pi) + 4*(0.5*log(2*pi) + log(0.3)) = 2.535616 nats, not a
+  # sum_to_zero_vector Jacobian term.
   gamma_prior_contrib_lupdf <- function(gamma_z, sigma_gamma) {
     gamma_z_kernel <- sum(-0.5 * as.vector(gamma_z)^2)
     sigma_gamma_kernel <- sum(-0.5 * (sigma_gamma / 0.3)^2)
@@ -472,7 +465,7 @@ test_that("check_compositional_residuals()'s implied_beta_rms is materially smal
   expect_gte(without_structure$gamma, without_structure$stable * 0.7)
 })
 
-test_that("w_send is pooled over the start/end window, not every year in `data` (0.7.1)", {
+test_that("w_send is pooled over the start/end window, not every year in `data`", {
   # RUS_USA's mix differs between the out-of-window years (1985-1986,
   # entirely RUS-as-sender) and the in-window year (2018, entirely
   # USA-as-sender): the unrestricted call must pool both eras, the
@@ -521,7 +514,7 @@ test_that("the windowed w_send reaches stan_data unchanged", {
   expect_false(identical(sd_full$w_send, sd_window$w_send))
 })
 
-test_that("a row with NA Actor1CountryCode is a validate_bilatr_events() error (0.9.0; was a warning + drop)", {
+test_that("a row with NA Actor1CountryCode is a validate_bilatr_events() error", {
   events <- tibble::tibble(
     Actor1CountryCode = c("USA", NA, "USA"),
     Actor2CountryCode = c("RUS", "RUS", "RUS"),
@@ -559,7 +552,7 @@ test_that(".compute_gamma_tier()/has_gamma keeps gamma out of Tier 1 (and sigma_
   expect_null(res_no_gamma$gamma)
   expect_true(is.na(res_no_gamma$summary$n_gamma_total))
   # has_gamma = FALSE leaves gamma[...]/sigma_gamma[...] all in tier1,
-  # matching pre-0.7.1 (undifferentiated) behaviour
+  # (no separate gamma table)
   expect_true(all(c("gamma[1,1]", "gamma[2,3]") %in% res_no_gamma$tier1$variable))
 })
 
@@ -635,7 +628,7 @@ test_that("diagnose_and_extract_bilatr()'s gamma table has country_code for stab
   expect_null(res_stable$diagnostics$gamma)
 })
 
-test_that("order_event_classes() is unaffected by the system locale (0.7.1, locale = \"C\")", {
+test_that("order_event_classes() is unaffected by the system locale (locale = \"C\")", {
   classes <- c("10", "2", "1", "18", "5")
   baseline <- order_event_classes(classes)
 

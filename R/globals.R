@@ -1,10 +1,7 @@
 # Column/variable names used as bare symbols inside dplyr/tidyr NSE calls
-# throughout the package (data-mask lookups R CMD check's static analysis
-# cannot resolve). Listed here, rather than converted to `.data$`/`.env$`
-# everywhere, because most of these sit in functions untouched by 0.10.2
-# (see dev/claude_code_prompt_0.10.2_bugfixes.md Part 7); code touched
-# this release already uses `.data$` instead. Exactly the names `R CMD
-# check` reports, sorted.
+# (data-mask lookups that R CMD check's static analysis cannot resolve).
+# Newer code uses `.data$` instead; these are exactly the names R CMD
+# check reports for the rest, sorted.
 utils::globalVariables(c(
   ".flag",
   ".threshold",

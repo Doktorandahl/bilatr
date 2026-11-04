@@ -1,0 +1,98 @@
+# The site is not built yet. Set this to the site's address (and add it to
+# DESCRIPTION's URL) when it is published.
+url: https://github.com/doktorandahl/bilatr
+template:
+  bootstrap: 5
+
+reference:
+  - title: Data input
+    desc: Read GDELT 1.0 event data, recode CAMEO event codes, and check an event table.
+    contents:
+      - download_gdelt
+      - read_gdelt
+      - gdelt_files
+      - gdelt_columns
+      - count_gdelt_actor_types
+      - recode_cameo
+      - cameo_lookup
+      - validate_bilatr_events
+      - bilatr_event_data
+
+  - title: Preparation and fitting
+    desc: Count events per dyad and period, and fit the models with CmdStan.
+    contents:
+      - aggregate_events
+      - validate_bilatr_dyad_period
+      - bilatr_dyad_period_data
+      - prepare_stan_data
+      - fit_panel
+      - fit_dyad_ts
+      - compile_bilatr_model
+      - bilatr_clear_model_cache
+      - bilatr_cmdstan_available
+
+  - title: Extraction
+    desc: Posterior summaries from a fit or from CmdStan CSV files.
+    contents:
+      - extract_theta
+      - extract_alpha
+      - extract_mu_intercept
+      - extract_gamma
+      - gamma_norm
+      - event_class_labels
+      - read_bilatr_draws
+      - diagnose_and_extract_bilatr
+
+  - title: Diagnostics and checks
+    desc: Convergence by parameter tier, and checks of model fit.
+    contents:
+      - diagnose_convergence
+      - print.bilatr_diagnostics
+      - check_compositional_residuals
+      - print.bilatr_residual_check
+      - autoplot.bilatr_residual_check
+      - write_residual_check
+      - icc_curves
+      - print.bilatr_icc_curves
+      - autoplot.bilatr_icc_curves
+      - icc_crossings
+      - diagnose_category_merges
+      - print.bilatr_category_merges
+      - merge_cost
+      - alpha_prior_moments
+      - autoplot.bilatr_gamma
+
+  - title: Tuning
+    desc: Measure threads per chain and chunk size for your data and hardware.
+    contents:
+      - benchmark_bilatr
+      - benchmark_grid
+      - insert_reduce_sum_profile
+      - summarize_benchmark
+      - benchmark_pareto
+      - plot_benchmark
+      - print.bilatr_benchmark
+      - autoplot.bilatr_benchmark
+
+  - title: Data
+    desc: The estimated theta trajectories and the example fit.
+    contents:
+      - theta_trajectories
+      - bilatr_theta
+      - bilatr_theta_versions
+      - bilatr_clear_data_cache
+      - theta_sample
+      - bilatr_example_fit
+
+  - title: Package
+    contents:
+      - bilatr-package
+
+articles:
+  - title: Articles
+    navbar: ~
+    contents:
+      - dyad_time_series
+      - panel_model
+      - diagnostics
+      - tuning

@@ -6,8 +6,104 @@
 \alias{bilatr-package}
 \title{bilatr: Hierarchical Dynamic IRT Models for Latent Bilateral Relations}
 \description{
-Estimates latent bilateral relations between pairs of actors over time with a hierarchical Bayesian dynamic item-response-theory-style model for dyadic event data. The latent scale runs from conflict to cooperation: it is oriented by a reference action type, so that with a cooperative reference higher values mean more cooperative relations. Users supply CAMEO-coded (or any categorically coded) dyadic event data in a documented, validated format; action types discriminate between more and less cooperative states through a Dirichlet-multinomial likelihood, and dyad-specific latent states follow a random-walk process, with support for both single-dyad time-series and multi-dyad panel estimation. Includes GDELT download/ingest helpers and a CAMEO recoding table, 'cmdstanr'-based fitting wrappers, and tidy posterior extraction utilities.
+bilatr estimates the latent state of bilateral relations between pairs
+of actors (dyads) over time from event data. Each dyad's latent state
+\eqn{\theta} follows a random walk, and the counts of its events in a
+set of action classes (for example CAMEO-coded GDELT events grouped by
+\code{\link[=recode_cameo]{recode_cameo()}}) follow a Dirichlet-multinomial distribution whose
+class probabilities depend on \eqn{\theta} through a discrimination
+parameter per class, as in an item-response model. The model is
+hierarchical across dyads and is fitted in 'Stan' through 'cmdstanr'.
+The latent scale runs from conflict to cooperation: it is oriented by a
+reference action class, so that higher \eqn{\theta} makes that class
+more likely; with a cooperative reference class, higher values mean
+more cooperative relations (see \code{reference_category} in
+\code{\link[=prepare_stan_data]{prepare_stan_data()}}).
 }
+\section{Workflow}{
+
+\enumerate{
+\item Get dyadic event data: \code{\link[=download_gdelt]{download_gdelt()}} and \code{\link[=read_gdelt]{read_gdelt()}} for
+GDELT 1.0, or your own events in the format described in
+\link{bilatr_event_data}.
+\item Group the events into action classes: \code{\link[=recode_cameo]{recode_cameo()}} for CAMEO
+codes.
+\item Count events per dyad and period: \code{\link[=aggregate_events]{aggregate_events()}} (the
+resulting table is described in \link{bilatr_dyad_period_data}).
+\item Fit the model: \code{\link[=fit_panel]{fit_panel()}} for many dyads, \code{\link[=fit_dyad_ts]{fit_dyad_ts()}} for one
+(both call \code{\link[=prepare_stan_data]{prepare_stan_data()}} and \code{\link[=compile_bilatr_model]{compile_bilatr_model()}}).
+\item Extract the estimates: \code{\link[=extract_theta]{extract_theta()}}, \code{\link[=extract_alpha]{extract_alpha()}},
+\code{\link[=extract_mu_intercept]{extract_mu_intercept()}} and, for the \code{stable_gamma} model,
+\code{\link[=extract_gamma]{extract_gamma()}}.
+\item Check the fit: \code{\link[=diagnose_convergence]{diagnose_convergence()}} for convergence by
+parameter tier, then \code{\link[=check_compositional_residuals]{check_compositional_residuals()}},
+\code{\link[=icc_curves]{icc_curves()}} and \code{\link[=diagnose_category_merges]{diagnose_category_merges()}}.
+}
+
+Fitting needs the 'cmdstanr' package and a CmdStan installation; check
+with \code{\link[=bilatr_cmdstan_available]{bilatr_cmdstan_available()}}. \code{\link[=bilatr_example_fit]{bilatr_example_fit()}} returns a
+small precomputed fit, so every post-fit function can be tried without
+them.
+}
+
+\section{Data input}{
+
+\code{\link[=download_gdelt]{download_gdelt()}}, \code{\link[=read_gdelt]{read_gdelt()}}, \code{\link[=gdelt_files]{gdelt_files()}}, \code{\link[=gdelt_columns]{gdelt_columns()}},
+\code{\link[=count_gdelt_actor_types]{count_gdelt_actor_types()}}, \code{\link[=recode_cameo]{recode_cameo()}}, \link{cameo_lookup},
+\code{\link[=validate_bilatr_events]{validate_bilatr_events()}} (\link{bilatr_event_data}).
+}
+
+\section{Preparation and fitting}{
+
+\code{\link[=aggregate_events]{aggregate_events()}}, \code{\link[=validate_bilatr_dyad_period]{validate_bilatr_dyad_period()}}
+(\link{bilatr_dyad_period_data}), \code{\link[=prepare_stan_data]{prepare_stan_data()}}, \code{\link[=fit_panel]{fit_panel()}},
+\code{\link[=fit_dyad_ts]{fit_dyad_ts()}}, \code{\link[=compile_bilatr_model]{compile_bilatr_model()}},
+\code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}}, \code{\link[=bilatr_cmdstan_available]{bilatr_cmdstan_available()}}.
+}
+
+\section{Extraction}{
+
+\code{\link[=extract_theta]{extract_theta()}}, \code{\link[=extract_alpha]{extract_alpha()}}, \code{\link[=extract_mu_intercept]{extract_mu_intercept()}},
+\code{\link[=extract_gamma]{extract_gamma()}}, \code{\link[=gamma_norm]{gamma_norm()}}, \code{\link[=event_class_labels]{event_class_labels()}},
+\code{\link[=read_bilatr_draws]{read_bilatr_draws()}}, \code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}} (diagnostics and
+extraction from CmdStan CSV files in one read).
+}
+
+\section{Diagnostics and checks}{
+
+\code{\link[=diagnose_convergence]{diagnose_convergence()}}, \code{\link[=check_compositional_residuals]{check_compositional_residuals()}},
+\code{\link[=write_residual_check]{write_residual_check()}}, \code{\link[=icc_curves]{icc_curves()}}, \code{\link[=icc_crossings]{icc_crossings()}},
+\code{\link[=diagnose_category_merges]{diagnose_category_merges()}}, \code{\link[=merge_cost]{merge_cost()}}, \code{\link[=alpha_prior_moments]{alpha_prior_moments()}}.
+}
+
+\section{Tuning}{
+
+\code{\link[=benchmark_bilatr]{benchmark_bilatr()}}, \code{\link[=benchmark_grid]{benchmark_grid()}}, \code{\link[=insert_reduce_sum_profile]{insert_reduce_sum_profile()}},
+\code{\link[=summarize_benchmark]{summarize_benchmark()}}, \code{\link[=benchmark_pareto]{benchmark_pareto()}}, \code{\link[=plot_benchmark]{plot_benchmark()}}.
+}
+
+\section{Data}{
+
+\link{theta_trajectories} (estimated bilateral relations for every country
+pair, 1991-2025, downloaded with \code{\link[=bilatr_theta]{bilatr_theta()}}; see also
+\code{\link[=bilatr_theta_versions]{bilatr_theta_versions()}} and \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}),
+\link{theta_sample} (a shipped extract), \link{cameo_lookup} (the CAMEO
+recoding table), and \code{\link[=bilatr_example_fit]{bilatr_example_fit()}}.
+}
+
+\section{Vignettes}{
+
+\itemize{
+\item \code{vignette("dyad_time_series", package = "bilatr")}: one dyad, from
+events to a fitted trajectory;
+\item \code{vignette("panel_model", package = "bilatr")}: a panel of dyads;
+\item \code{vignette("diagnostics", package = "bilatr")}: tiered convergence
+diagnostics;
+\item \code{vignette("tuning", package = "bilatr")}: threads, chunk size and
+chains.
+}
+}
+
 \seealso{
 Useful links:
 \itemize{
@@ -17,12 +113,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: David Randahl \email{david.randahl@fhs.se}
+\strong{Maintainer}: David Randahl \email{david.randahl@fhs.se} (\href{https://orcid.org/0000-0003-1069-6067}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Magnus Lundgren
-  \item Carl Vikberg
+  \item Magnus Lundgren (\href{https://orcid.org/0000-0002-9961-3645}{ORCID})
+  \item Carl Vikberg (\href{https://orcid.org/0000-0001-7523-9196}{ORCID})
 }
 
 }
