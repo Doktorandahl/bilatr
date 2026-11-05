@@ -28,6 +28,16 @@
 #' default `probs` (the 5%, 50% and 95% quantiles); pass an in-memory
 #' `fit` for other quantiles.
 #'
+#' @section Inactive periods:
+#' A dyad-period in which one of the actors does not exist (a country
+#' before it enters the state system or after it leaves; see
+#' [aggregate_events()], "Actor periods") has no events, so its
+#' \eqn{\theta} is a random-walk extrapolation with no data, not an
+#' estimate. With `active_only = TRUE`, the default, such periods (those
+#' with `active = FALSE` in the `dyad_ids` attribute) are left out. Stan
+#' data from before `active` existed has no such column; every period
+#' then counts as active.
+#'
 #' @param fit A `CmdStanMCMC` fit object from [fit_dyad_ts()] or
 #'   [fit_panel()], or a character vector of raw CmdStan CSV file paths
 #'   (see Details).
@@ -39,13 +49,15 @@
 #'   It must carry its `dyad_ids` attribute.
 #' @param probs Posterior quantiles to report alongside the mean. Only
 #'   the default is supported when `fit` is CSV file paths (see Details).
+#' @param active_only `TRUE` (default) drops inactive dyad-periods; `FALSE`
+#'   keeps every period. See "Inactive periods".
 #' @param max_memory_mb,chunk_size,n_cores Only used when
 #'   `fit` is CSV file paths; the same as [diagnose_convergence()]'s
 #'   arguments of the same name (including the message when
 #'   `max_memory_mb` is left at its default), applied to `theta` alone.
 #' @return A tibble with one row per dyad-period: `dyad_id`,
 #'   `time_index`, the other `dyad_ids` columns (`dyad`, `dyad2`, `actor1`,
-#'   `actor2`, the time column and its labels), the posterior `mean`
+#'   `actor2`, the time column, `active` and the time labels), the posterior `mean`
 #'   of theta, and one column per requested quantile.
 #' @examples
 #' # CmdStan CSVs from a completed run, never read into this R session (here,
@@ -59,10 +71,13 @@
 #' theta[theta$dyad == "USA_CHN", c("year", "mean", "5%", "95%")]
 #' @export
 extract_theta <- function(
-  fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95),
+  fit, stan_data = NULL, probs = c(0.05, 0.5, 0.95), active_only = TRUE,
   max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
   max_memory_mb_missing <- missing(max_memory_mb)
+  if (!rlang::is_bool(active_only)) {
+    stop("extract_theta(): `active_only` must be TRUE or FALSE.", call. = FALSE)
+  }
   stan_data <- .stan_data_from_fit(fit, stan_data, "extract_theta()")
 
   dyad_ids <- attr(stan_data, "dyad_ids")
@@ -73,6 +88,7 @@ extract_theta <- function(
       call. = FALSE
     )
   }
+  dyad_ids <- .dyad_ids_with_active(dyad_ids)
 
   if (is.character(fit)) {
     if (!identical(probs, c(0.05, 0.5, 0.95))) {
@@ -108,7 +124,36 @@ extract_theta <- function(
   theta_summ %>%
     dplyr::mutate(variable = stringr::str_remove_all(variable, "theta\\[|\\]")) %>%
     tidyr::separate(variable, into = c("dyad_id", "time_index"), sep = ",", convert = TRUE) %>%
-    dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
+    dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index")) %>%
+    .keep_active(active_only)
+}
+
+#' Add `active = TRUE` to a `dyad_ids` table that predates the column
+#'
+#' Stan data prepared before `active` existed (e.g. saved
+#' `*_stan_data.rds` files) has none; every period then counts as active.
+#'
+#' @param dyad_ids The `dyad_ids` attribute.
+#' @return `dyad_ids`, with a logical `active` column.
+#' @noRd
+.dyad_ids_with_active <- function(dyad_ids) {
+  if (!"active" %in% names(dyad_ids)) {
+    dyad_ids$active <- rep(TRUE, nrow(dyad_ids))
+  }
+  dyad_ids
+}
+
+#' Drop inactive dyad-periods from a table joined to `dyad_ids`
+#'
+#' @param x A table with an `active` column.
+#' @param active_only Whether to drop rows with `active = FALSE`.
+#' @return `x`, filtered when `active_only`.
+#' @noRd
+.keep_active <- function(x, active_only) {
+  if (!active_only) {
+    return(x)
+  }
+  x[x$active %in% TRUE, , drop = FALSE]
 }
 
 #' Read named variables from either an in-memory fit or raw CmdStan CSVs

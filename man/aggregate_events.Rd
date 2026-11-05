@@ -14,7 +14,8 @@ aggregate_events(
   class_order = NULL,
   actor1 = "Actor1CountryCode",
   actor2 = "Actor2CountryCode",
-  date = "SQLDATE"
+  date = "SQLDATE",
+  actor_periods = NULL
 )
 }
 \arguments{
@@ -48,10 +49,16 @@ moving its \code{reference_category} to the front.}
 \code{?bilatr_event_data}.}
 
 \item{date}{Name of the event-date column; see \code{?bilatr_event_data}.}
+
+\item{actor_periods}{\code{NULL} (default), or a data frame of the periods in
+which each actor is active, one row per spell, with columns \code{actor},
+\code{start} and \code{end}: \code{Date}s, or strings \code{as.Date()} parses; \code{end = NA}
+means open (still active). See "Actor periods".}
 }
 \value{
 A tibble with exactly the columns \code{dyad}, \code{actor1}, \code{actor2},
-the time column (see Time IDs), \code{w_send}, and one integer count
+the time column (see Time IDs), \code{w_send}, \code{active} (only with
+\code{actor_periods}; see "Actor periods"), and one integer count
 column per event class, named by the raw class value. Sorted by
 \code{dyad} (C-locale) then time. \code{w_send} is per dyad, repeated on every
 row: exactly \code{1} when \code{directed = TRUE}; when undirected, the share of
@@ -80,6 +87,39 @@ Every dyad with at least one in-window event gets a row for every
 period from the period containing \code{start} to the period containing
 \code{end}, with zero counts where it had no events. So \verb{start = "1991-01-01", end = "2025-12-31"} covers every year (or month) of 1991-2025.
 }
+\section{Actor periods}{
+
+A country that enters or leaves the state system inside the window
+(Slovakia from 1993, Czechoslovakia until 1992) still gets a row for
+every period, because the table is rectangular. Those rows have zero
+counts, so they never enter the likelihood, but a fitted model still
+gives them \eqn{\theta} values, which are random-walk extrapolations
+with no data. \code{actor_periods} marks them: with it, the output gets a
+logical \code{active} column, \code{TRUE} when \strong{both} actors are active at some
+point in the period (the same at-any-point rule \code{\link[=gdelt_is_state]{gdelt_is_state()}} uses
+for years), and \code{\link[=prepare_stan_data]{prepare_stan_data()}}, \code{\link[=extract_theta]{extract_theta()}} and
+\code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}} carry it on, so that
+\code{extract_theta(active_only = TRUE)}, the default, leaves inactive
+dyad-periods out. For GDELT data filtered with \code{\link[=filter_gdelt_states]{filter_gdelt_states()}},
+\code{\link[=gdelt_state_spells]{gdelt_state_spells()}} gives the periods.
+\itemize{
+\item The table stays rectangular (every dyad over the whole window), so
+that \code{\link[=prepare_stan_data]{prepare_stan_data()}} can build \code{Y}; inactive rows have zero
+counts.
+\item An event in an inactive period is an error naming the dyad-periods
+(it should have been dropped before aggregation, e.g. by
+\code{\link[=filter_gdelt_states]{filter_gdelt_states()}}). \code{\link[=filter_gdelt_states]{filter_gdelt_states()}} works at year
+level, so at a finer \code{resolution} use \code{gdelt_state_spells(whole_years = TRUE)}, or drop events outside the exact spells first.
+\item Every actor in the (in-window) data must be in \code{actor_periods};
+missing actors are an error listing them, and so is an
+\code{actor_periods} that covers none of them (often a sign of codes
+that were not harmonized, e.g. \code{ROM} against \code{ROU}).
+}
+
+Without \code{actor_periods} there is no \code{active} column, and the table is
+as before.
+}
+
 \section{Time IDs}{
 
 The time column holds absolute period IDs, named by resolution:
@@ -113,7 +153,10 @@ labels for every period in the range (yearly: \code{year}; monthly:
 \item \code{resolution}, \code{grouping_var}, \code{directed}: the arguments;
 \item \code{action_cols}: the class columns, in output order. With
 \code{action_cols = NULL}, \code{\link[=prepare_stan_data]{prepare_stan_data()}} uses them silently, as
-long as every one is still a column.
+long as every one is still a column;
+\item \code{actor_periods}: with \code{actor_periods}, the checked periods (a tibble
+with \code{actor}, \code{start}, \code{end}), which \code{\link[=prepare_stan_data]{prepare_stan_data()}} uses to
+set \code{active} for periods it adds beyond the table's own range.
 }
 
 These are conveniences. Some dplyr verbs drop them (e.g. \code{summarise()}
@@ -144,5 +187,20 @@ aggregate_events(
   events,
   grouping_var = "PentaClass", resolution = "monthly", directed = FALSE,
   start = "2018-01-01", end = "2019-12-31"
+)
+
+# dyad-periods outside the actors' state-system membership: Slovakia
+# is a state from 1993 on, so SVK_CZE 1992 is inactive, and
+# Czechoslovakia (CSK) leaves at the end of 1992
+events2 <- tibble::tibble(
+  Actor1CountryCode = c("SVK", "SVK", "USA"),
+  Actor2CountryCode = c("CZE", "CZE", "CSK"),
+  SQLDATE = c(19930301L, 19940301L, 19920301L),
+  PentaClass = c(0, 1, 1)
+)
+aggregate_events(
+  events2,
+  grouping_var = "PentaClass", start = "1992-01-01", end = "1994-12-31",
+  actor_periods = dplyr::rename(gdelt_state_spells(), actor = "iso3c")
 )
 }

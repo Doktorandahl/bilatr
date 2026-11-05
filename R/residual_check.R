@@ -422,7 +422,10 @@
 #'   `along_lower`/`along_upper`, `perp_norm2_mean`, `ppp_dyad`,
 #'   `phi_min` -- the smallest `phi_d` posterior draw seen for that dyad,
 #'   a modeling signal worth seeing in its own right when a dyad's `phi`
-#'   is barely identified),
+#'   is barely identified -- and `n_active`, the dyad's number of active
+#'   periods (all `T` periods unless the Stan data marks inactive ones; see
+#'   [extract_theta()], "Inactive periods"; the residuals use observed
+#'   periods only, which are always active)),
 #'   `categories` (one row per action category: `action_index`,
 #'   `event_class`, `class_label`, `contribution_obs`/`contribution_rep`
 #'   and their intervals, `contribution_ratio`), `global` (`pooled_ppp`,
@@ -675,8 +678,11 @@ check_compositional_residuals <- function(
       )
     }
 
+    n_active_tbl <- .dyad_ids_with_active(dyad_ids) %>%
+      dplyr::group_by(.data$dyad_id, .data$dyad, .data$dyad2) %>%
+      dplyr::summarise(n_active = sum(.data$active), .groups = "drop")
     dyads <- dplyr::bind_rows(dyad_rows) %>%
-      dplyr::left_join(dplyr::distinct(dyad_ids, dyad_id, dyad, dyad2), by = "dyad_id")
+      dplyr::left_join(n_active_tbl, by = "dyad_id")
 
     # --- 6. drop any draws with non-finite accumulators, then summarize
     # (a backstop, not the expected path -- see .drop_nonfinite_draws()) ---

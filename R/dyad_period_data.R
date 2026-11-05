@@ -14,10 +14,20 @@
 #' | Actor 1 / Actor 2 | `actor1`, `actor2` | optional (both or neither); no `NA`; no empty string; no leading/trailing whitespace; must not contain `"_"`; `actor1 != actor2`; constant within a dyad (each dyad maps to exactly one actor pair). Needed for the country-level offset of the `stable_gamma` model |
 #' | Time | chosen by the user (`time`) | integer-valued (integer, or a whole-number double); one unit = one period; no `NA`. Gaps are allowed: every dyad is filled over the whole `min(time):max(time)` range, missing periods becoming unobserved |
 #' | Sender share | `w_send` | optional; numeric in `[0, 1]`; constant within a dyad. The share of the dyad's events sent by `actor1`; only used by `stable_gamma` for undirected dyads |
+#' | Active | `active` | optional; logical; no `NA`; every action count must be 0 where it is `FALSE`. `TRUE` when both actors exist (e.g. are state system members) in the period; see below |
 #' | Action counts | `action_cols` | at least two columns; non-negative whole numbers; no `NA` |
 #'
 #' There must be at most one row per dyad and time period: duplicates are
 #' an error, never summed.
+#'
+#' The `active` column marks dyad-periods in which one of the actors does
+#' not exist, such as a country before it enters the state system or after
+#' it leaves (see [aggregate_events()], "Actor periods"). Such periods have
+#' no events, so they are unobserved in the model like any other period
+#' without events, but their \eqn{\theta} is a random-walk extrapolation
+#' with no data. [prepare_stan_data()] carries `active` into the
+#' `dyad_ids` attribute, and [extract_theta()] drops inactive periods by
+#' default.
 #'
 #' `action_cols` takes a character vector or a tidyselect expression
 #' (e.g. `c(coop, conflict)`, `starts_with("n_")`). If it is not given
@@ -26,8 +36,8 @@
 #' used. This is silent unless `data` also has whole-number columns the
 #' attribute does not name (say, a category merged with `mutate()` after
 #' aggregation): those are left out, with a `message()` naming them, so set
-#' `action_cols` explicitly to include them. Otherwise every column except the dyad, actor, time
-#' and `w_send` columns is used,
+#' `action_cols` explicitly to include them. Otherwise every column except the dyad, actor, time,
+#' `w_send` and `active` columns is used,
 #' with a warning naming the columns chosen; a column picked up this way
 #' that is not a non-negative whole-number count is an error. When
 #' `action_cols` is given explicitly, every other column is ignored.
@@ -66,17 +76,18 @@ NULL
 #' @param time Name of the time-period column.
 #' @param action_cols The action-count columns: a character vector of
 #'   column names or a tidyselect expression. `NULL` (default) means every
-#'   column except `dyad`, `actor1`, `actor2`, `time` and `w_send`, with a
+#'   column except `dyad`, `actor1`, `actor2`, `time`, `w_send` and `active`, with a
 #'   warning listing the columns chosen, unless `data` carries a usable
 #'   `action_cols` attribute; see `?bilatr_dyad_period_data`.
 #' @param dyad Name of the dyad column. It may be absent if both actor
 #'   columns are present (it is then built from them).
 #' @param actor1,actor2 Names of the optional actor columns.
 #' @param w_send Name of the optional sender-share column.
+#' @param active Name of the optional activity column.
 #' @return Invisibly, if every rule passes, a list of the resolved column
 #'   names: `dyad`, `time`, `action_cols` (character, in `data`'s
-#'   selection order), and `actor1`, `actor2`, `w_send` (each `NULL` if
-#'   the column is absent).
+#'   selection order), and `actor1`, `actor2`, `w_send`, `active` (each
+#'   `NULL` if the column is absent).
 #' @examples
 #' dp <- tibble::tibble(
 #'   dyad = c("a-b", "a-b", "a-c"),
@@ -91,6 +102,10 @@ NULL
 #' bad$threats[1] <- -1
 #' bad$period[2] <- 1L
 #' try(validate_bilatr_dyad_period(bad, time = "period", action_cols = c(talks, threats)))
+#'
+#' # an inactive dyad-period must have no events
+#' dp$active <- c(TRUE, FALSE, TRUE)
+#' try(validate_bilatr_dyad_period(dp, time = "period", action_cols = c(talks, threats)))
 #' @export
 validate_bilatr_dyad_period <- function(
   data,
@@ -99,9 +114,10 @@ validate_bilatr_dyad_period <- function(
   dyad = "dyad",
   actor1 = "actor1",
   actor2 = "actor2",
-  w_send = "w_send"
+  w_send = "w_send",
+  active = "active"
 ) {
-  .validate_dyad_period(data, time, rlang::enquo(action_cols), dyad, actor1, actor2, w_send)
+  .validate_dyad_period(data, time, rlang::enquo(action_cols), dyad, actor1, actor2, w_send, active)
 }
 
 #' Worker for [validate_bilatr_dyad_period()]
@@ -114,7 +130,8 @@ validate_bilatr_dyad_period <- function(
 #' @param action_quo A quosure of the `action_cols` expression.
 #' @return See [validate_bilatr_dyad_period()].
 #' @noRd
-.validate_dyad_period <- function(data, time, action_quo, dyad, actor1, actor2, w_send) {
+.validate_dyad_period <- function(data, time, action_quo, dyad, actor1, actor2, w_send,
+                                  active = "active") {
   fn <- "validate_bilatr_dyad_period()"
   if (!is.data.frame(data)) {
     stop(fn, ": `data` must be a data frame.", call. = FALSE)
@@ -128,6 +145,7 @@ validate_bilatr_dyad_period <- function(
   has_actors <- has_actor1 && has_actor2
   has_dyad <- dyad %in% names(data)
   has_w_send <- w_send %in% names(data)
+  has_active <- active %in% names(data)
 
   structural <- character(0)
   if (!time %in% names(data)) {
@@ -149,7 +167,7 @@ validate_bilatr_dyad_period <- function(
     stop(fn, ": ", paste(structural, collapse = "\n"), call. = FALSE)
   }
 
-  role_cols <- c(dyad, actor1, actor2, time, w_send)
+  role_cols <- c(dyad, actor1, actor2, time, w_send, active)
   action <- .resolve_action_cols(action_quo, data, role_cols)
   action_cols <- action$cols
 
@@ -251,7 +269,7 @@ validate_bilatr_dyad_period <- function(
   clashing <- intersect(action_cols, role_cols)
   if (length(clashing) > 0) {
     bullets <- c(bullets, sprintf(
-      "- `action_cols` includes the dyad/actor/time/w_send column(s) %s",
+      "- `action_cols` includes the dyad/actor/time/w_send/active column(s) %s",
       paste0("`", clashing, "`", collapse = ", ")
     ))
   }
@@ -265,7 +283,7 @@ validate_bilatr_dyad_period <- function(
         bullets <- c(bullets, sprintf(
           paste0(
             "- `%s` was picked up by the default `action_cols` (every column except ",
-            "the dyad/actor/time/w_send columns), but is not a column of non-negative ",
+            "the dyad/actor/time/w_send/active columns), but is not a column of non-negative ",
             "whole-number counts without NA; set `action_cols` explicitly"
           ),
           col
@@ -276,6 +294,24 @@ validate_bilatr_dyad_period <- function(
     } else {
       add_rule(sprintf("action column `%s` has missing (NA) values", col), bad_na)
       add_rule(sprintf("action column `%s` has values that are not non-negative whole numbers", col), bad_value)
+    }
+  }
+
+  if (has_active) {
+    act <- data[[active]]
+    if (!is.logical(act)) {
+      bullets <- c(bullets, sprintf("- `%s` must be logical (TRUE/FALSE), not %s", active, class(act)[1]))
+    } else {
+      add_rule(sprintf("`%s` has missing (NA) values", active), is.na(act))
+      count_cols <- setdiff(action_cols, clashing)
+      count_cols <- count_cols[purrr::map_lgl(data[count_cols], is.numeric)]
+      if (length(count_cols) > 0) {
+        nonzero <- Reduce(`|`, purrr::map(data[count_cols], ~ !is.na(.x) & .x != 0))
+        add_rule(
+          sprintf("rows with `%s` FALSE have non-zero action counts (an inactive dyad-period cannot have events)", active),
+          !is.na(act) & !act & nonzero
+        )
+      }
     }
   }
 
@@ -301,7 +337,8 @@ validate_bilatr_dyad_period <- function(
     action_cols = action_cols,
     actor1 = if (has_actors) actor1,
     actor2 = if (has_actors) actor2,
-    w_send = if (has_w_send) w_send
+    w_send = if (has_w_send) w_send,
+    active = if (has_active) active
   ))
 }
 
@@ -321,7 +358,7 @@ validate_bilatr_dyad_period <- function(
 #'
 #' @param action_quo A quosure of the `action_cols` expression.
 #' @param data The data frame.
-#' @param role_cols The dyad/actor/time/w_send column names.
+#' @param role_cols The dyad/actor/time/w_send/active column names.
 #' @return A list: `cols` (character) and `default` (`TRUE` if selected by
 #'   the `NULL` default).
 #' @noRd
@@ -346,7 +383,7 @@ validate_bilatr_dyad_period <- function(
     }
     cols <- setdiff(names(data), role_cols)
     warning(
-      "`action_cols` not set; using every column except the dyad/actor/time/w_send ",
+      "`action_cols` not set; using every column except the dyad/actor/time/w_send/active ",
       "columns as action counts: ", paste(cols, collapse = ", "),
       ". Set `action_cols` explicitly to silence this warning.",
       call. = FALSE

@@ -38,7 +38,7 @@
 //
 // ADDITIONAL PARAMETERS AND PRIORS
 //   gamma_z[a, c]  ~ std_normal()          (non-centered)
-//   sigma_gamma[a] ~ half-normal(0, 0.3)   (per-class spread across countries)
+//   sigma_gamma[a] ~ half-normal(0, 0.5)   (per-class spread across countries)
 //   The prior scale reflects a dyad-level compositional residual with an
 //   RMS of about 0.22 on the linear-predictor scale, found by
 //   check_compositional_residuals() in `stable` fits: a country-level
@@ -357,7 +357,7 @@ model {
   // prior, not by the likelihood, which is why the convergence
   // diagnostics leave gamma_z out (not sign ambiguity, but the same
   // treatment).
-  sigma_gamma ~ normal(0, 0.3);
+  sigma_gamma ~ normal(0, 0.5);
   to_vector(gamma_z) ~ std_normal();
 
   // likelihood, chunked via reduce_sum -- skipped entirely if prior_only,

@@ -75,12 +75,15 @@ order_event_classes <- function(classes, reference_category = NULL) {
 #' @param time_col Name of the time column.
 #' @param time_labels Optional data frame keyed by `time_col`; its other
 #'   columns are left-joined on.
+#' @param active Logical vector of `D * T` activity flags, in `dyad_id`-
+#'   then-time order, or `NULL` for all `TRUE`.
 #' @return A tibble with `dyad_id`, `time_index`, `dyad`, `dyad2`
 #'   (the undirected dyad key), `actor1`, `actor2` (`dyad2`/`actor1`/
-#'   `actor2` are `NA` when `actor1` is `NULL`), the time column, and any
-#'   `time_labels` columns.
+#'   `actor2` are `NA` when `actor1` is `NULL`), the time column, `active`,
+#'   and any `time_labels` columns.
 #' @noRd
-make_dyad_ids <- function(dyads, actor1, actor2, time_values, time_col, time_labels = NULL) {
+make_dyad_ids <- function(dyads, actor1, actor2, time_values, time_col, time_labels = NULL,
+                          active = NULL) {
   D <- length(dyads)
   Tn <- length(time_values)
   if (is.null(actor1)) {
@@ -97,7 +100,8 @@ make_dyad_ids <- function(dyads, actor1, actor2, time_values, time_col, time_lab
     dyad2 = rep(dyad2, each = Tn),
     actor1 = rep(actor1, each = Tn),
     actor2 = rep(actor2, each = Tn),
-    !!time_col := rep(time_values, times = D)
+    !!time_col := rep(time_values, times = D),
+    active = active %||% rep(TRUE, D * Tn)
   )
 
   if (is.null(time_labels)) {

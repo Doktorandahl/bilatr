@@ -79,7 +79,10 @@ dyad: \code{dyad_id}, \code{dyad}, \code{dyad2}, \code{n_d}, \code{n_obs_t}, \co
 \code{along_lower}/\code{along_upper}, \code{perp_norm2_mean}, \code{ppp_dyad},
 \code{phi_min} -- the smallest \code{phi_d} posterior draw seen for that dyad,
 a modeling signal worth seeing in its own right when a dyad's \code{phi}
-is barely identified),
+is barely identified -- and \code{n_active}, the dyad's number of active
+periods (all \code{T} periods unless the Stan data marks inactive ones; see
+\code{\link[=extract_theta]{extract_theta()}}, "Inactive periods"; the residuals use observed
+periods only, which are always active)),
 \code{categories} (one row per action category: \code{action_index},
 \code{event_class}, \code{class_label}, \code{contribution_obs}/\code{contribution_rep}
 and their intervals, \code{contribution_ratio}), \code{global} (\code{pooled_ppp},

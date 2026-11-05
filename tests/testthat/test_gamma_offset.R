@@ -144,8 +144,8 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   # distribution statements call the possibly-unnormalized _lupdf/
   # _lupmf variant, dropping additive terms that don't depend on the
   # sampled parameter: 0.5*log(2*pi) per gamma_z element (std_normal)
-  # and 0.5*log(2*pi) + log(0.3) per sigma_gamma element (normal(0, 0.3)
-  # -- 0.3 is the FIXED prior scale, not sigma_gamma's own value, so
+  # and 0.5*log(2*pi) + log(0.5) per sigma_gamma element (normal(0, 0.5)
+  # -- 0.5 is the FIXED prior scale, not sigma_gamma's own value, so
   # dropping it is legitimate; contrast the <lower=0> Jacobian below,
   # which genuinely depends on sigma_gamma and is NOT dropped, since it
   # isn't part of the `~` statement at all -- it's compiler-generated for
@@ -153,11 +153,11 @@ test_that("stable_gamma nests stable exactly at n_countries = 1 (CmdStan log_pro
   # dnorm(..., log = TRUE) here instead leaves an exactly reproducible,
   # value-independent residual: the dropped constants, which at this
   # fixture's A = 4, n_countries = 1 total
-  # 4*0.5*log(2*pi) + 4*(0.5*log(2*pi) + log(0.3)) = 2.535616 nats, not a
+  # 4*0.5*log(2*pi) + 4*(0.5*log(2*pi) + log(0.5)) = 4.578919 nats, not a
   # sum_to_zero_vector Jacobian term.
   gamma_prior_contrib_lupdf <- function(gamma_z, sigma_gamma) {
     gamma_z_kernel <- sum(-0.5 * as.vector(gamma_z)^2)
-    sigma_gamma_kernel <- sum(-0.5 * (sigma_gamma / 0.3)^2)
+    sigma_gamma_kernel <- sum(-0.5 * (sigma_gamma / 0.5)^2)
     jacobian <- sum(log(sigma_gamma)) # <lower=0> transform; not dropped
     gamma_z_kernel + sigma_gamma_kernel + jacobian
   }

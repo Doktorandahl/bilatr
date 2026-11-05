@@ -146,6 +146,15 @@ built from (\code{alpha_raw}, \code{z_theta0} or \code{mu_dyad_raw}, \code{theta
 their prior, so their R-hat is meaningless; they are left out of every
 tier.
 
+When the fit's Stan data marks inactive dyad-periods (an \code{active}
+column in its \code{dyad_ids} attribute; see \code{\link[=aggregate_events]{aggregate_events()}}, "Actor
+periods"), Tier 3 summarizes active periods only: an inactive period's
+\eqn{\theta} is a random-walk extrapolation with no data, so its
+R-hat and ESS say nothing about the fit to the data. \code{summary} then has
+\code{tier3_active_only = TRUE} and \code{n_tier3_inactive_excluded}, the number
+of dyad-periods left out. Without the Stan data (a \code{draws} object), or
+with Stan data that has no \code{active} column, every period is included.
+
 \code{tiers} limits which tiers are computed: quantities outside the
 requested tiers are not read at all, rather than read and hidden. Tier
 3 usually has by far the most quantities (one per dyad-period), so

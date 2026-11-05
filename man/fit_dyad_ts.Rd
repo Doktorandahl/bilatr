@@ -12,6 +12,7 @@ fit_dyad_ts(
   actor1 = "actor1",
   actor2 = "actor2",
   w_send = "w_send",
+  active = "active",
   directed = attr(data, "directed") \%||\% TRUE,
   reference_category = NULL,
   min_n_events = 1,
@@ -46,12 +47,12 @@ present, with a \code{message()}; otherwise errors.}
 
 \item{action_cols}{The action-count columns: a character vector or a
 tidyselect expression. \code{NULL} (default) means every column except
-the dyad/actor/time/\code{w_send} columns, with a warning; see
+the dyad/actor/time/\code{w_send}/\code{active} columns, with a warning; see
 \code{?bilatr_dyad_period_data}.}
 
-\item{dyad, actor1, actor2, w_send}{Names of the dyad, actor and
-sender-share columns; see \code{?bilatr_dyad_period_data}. The actor and
-\code{w_send} columns are optional.}
+\item{dyad, actor1, actor2, w_send, active}{Names of the dyad, actor,
+sender-share and activity columns; see \code{?bilatr_dyad_period_data}. The
+actor, \code{w_send} and \code{active} columns are optional.}
 
 \item{directed}{Whether the dyads are directed; see
 \code{\link[=prepare_stan_data]{prepare_stan_data()}}. Defaults to \code{attr(data, "directed")} if set

@@ -29,6 +29,12 @@ mapping from the root code (see \link{cameo_lookup}), so the two columns
 agree row for row. Requesting GDELT's column as well (explicitly, or
 via \code{"all"}) gives \code{recode_cameo()} an existing \code{QuadClass}, which it
 keeps, with a warning.
+
+\code{"core"} includes \code{Actor1Code}/\code{Actor2Code} and
+\code{Actor1CountryCode}/\code{Actor2CountryCode}, which
+\code{\link[=filter_gdelt_states]{filter_gdelt_states()}} and \code{\link[=read_gdelt]{read_gdelt()}}'s \code{recover_country_codes}
+and \code{states_only} work on; see \link{gdelt_countries} for what the country
+codes mean.
 }
 \examples{
 gdelt_columns("core")

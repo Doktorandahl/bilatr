@@ -62,6 +62,7 @@ library(bilatr)
 # 1. Events: GDELT 1.0 (or any table in the format of ?bilatr_event_data)
 status <- download_gdelt("2020-01-01", "2020-12-31", dest_dir = "gdelt")
 events <- read_gdelt(status$path[status$status %in% c("downloaded", "cached")])
+events <- filter_gdelt_states(events) # state-to-state events, ISO3 codes (?gdelt_countries)
 events <- recode_cameo(events)       # QuadClass, PentaClass, ModifiedRootCode
 
 # 2. Counts per dyad and period (see ?bilatr_dyad_period_data)
@@ -108,14 +109,19 @@ country-level offsets for each action class (see
 
 ## Estimated bilateral relations, 1991-2025
 
+[![DOI](https://zenodo.org/badge/1445654273.svg)](https://doi.org/10.5281/zenodo.23951818)
+
 The package's estimates for every country pair with at least one
 recorded event, 1991-2025, from GDELT 1.0 government, military and
 intelligence events, are published as a versioned data release (CC BY
-4.0) and downloaded on first use:
+4.0) on Zenodo, [doi:10.5281/zenodo.23951819](https://doi.org/10.5281/zenodo.23951819)
+(version `v2026.11`; [all versions](https://doi.org/10.5281/zenodo.23951818)).
+`download_bilatr_theta()` downloads a table once, verifies it and caches
+it; later calls read the cache:
 
 ```r
-theta_directed <- bilatr_theta("directed")       # 16,750 directed dyads
-theta_undirected <- bilatr_theta("undirected")   # 9,139 country pairs
+theta_directed <- download_bilatr_theta("directed")       # 16,750 directed dyads
+theta_undirected <- download_bilatr_theta("undirected")   # 9,139 country pairs
 ```
 
 `theta_sample` is a small extract that ships with the package. Known
@@ -139,7 +145,8 @@ citation("bilatr")
 ```
 
 When you use the estimated trajectories, please also cite the data
-release and GDELT (see `?theta_trajectories`).
+release ([doi:10.5281/zenodo.23951819](https://doi.org/10.5281/zenodo.23951819);
+its entry is in `citation("bilatr")`) and GDELT (see `?theta_trajectories`).
 
 ## License
 

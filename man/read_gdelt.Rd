@@ -15,6 +15,9 @@ read_gdelt(
   root_events_only = FALSE,
   event_codes = NULL,
   date_range = NULL,
+  recover_country_codes = FALSE,
+  states_only = FALSE,
+  harmonize_codes = TRUE,
   chunk_size = 100000L
 )
 }
@@ -76,6 +79,20 @@ files"), so this keeps the events \emph{dated} in the range among the
 files actually read; it does not recover events dated in the range
 but added on days outside those files.}
 
+\item{recover_country_codes}{\code{FALSE} (default), or \code{TRUE} to fill an
+empty \code{Actor1CountryCode}/\code{Actor2CountryCode} from the actor code's
+three-character prefix when that prefix is a code in
+\link{gdelt_countries}; see "Country codes and states".}
+
+\item{states_only}{\code{FALSE} (default), or \code{TRUE} to keep only events
+between two states in the event's year, by \code{\link[=filter_gdelt_states]{filter_gdelt_states()}};
+see "Country codes and states".}
+
+\item{harmonize_codes}{With \code{states_only = TRUE}: \code{TRUE} (default)
+rewrites the actor country codes to ISO3 codes (e.g. \code{ROM} to \code{ROU})
+and drops rows that this turns into self-dyads; \code{FALSE} keeps GDELT's
+codes. Ignored when \code{states_only = FALSE}.}
+
 \item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. The
 default, 100,000, is ten times readr's own, since GDELT backfiles run
 to millions of rows. Memory use depends on the rows kept, not on
@@ -121,6 +138,33 @@ GDELT 2.0 (15-minute files, the Mentions and GKG tables) is not
 supported by this function or by \code{\link[=gdelt_files]{gdelt_files()}}/\code{\link[=download_gdelt]{download_gdelt()}}.
 }
 
+\section{Country codes and states}{
+
+\code{Actor1CountryCode}/\code{Actor2CountryCode} hold GDELT's CAMEO country
+codes, which include regions (\code{EUR}, \code{WAF}), territories (\code{WSB}) and a
+few codes that differ from ISO3 (\code{ROM} for Romania); see
+\link{gdelt_countries}. Each chunk is processed in this order:
+\enumerate{
+\item with \code{recover_country_codes = TRUE}, an empty actor country code is
+filled from the first three characters of \code{Actor1Code}/\code{Actor2Code}
+when they are a code in \link{gdelt_countries} (GDELT leaves the country
+code empty for Romanian actors coded \code{ROU...}, for example);
+\item the row filters: \code{cross_border}, \code{actor_types}, \code{countries},
+\code{root_events_only}, \code{event_codes}, \code{date_range}, on the (possibly
+filled) raw codes;
+\item with \code{states_only = TRUE}, \code{\link[=filter_gdelt_states]{filter_gdelt_states()}}: rows in which
+either actor is not a state in the event's year are dropped and,
+with \code{harmonize_codes = TRUE}, both actor columns are rewritten to
+ISO3 codes and rows that become self-dyads are dropped. So a
+\code{ROM}-\code{ROU} event passes \code{cross_border}, whose raw codes differ, and
+is then dropped as a Romania-Romania self-dyad.
+}
+
+Each of the two steps reports once, after the last file, in a
+\code{message()}: the actor sides filled, per code, in the rows returned;
+and \code{\link[=filter_gdelt_states]{filter_gdelt_states()}}'s counts.
+}
+
 \examples{
 \dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
 # downloads one daily file (about 6 MB) into a temporary directory
@@ -128,6 +172,9 @@ dir <- tempfile("gdelt_")
 status <- download_gdelt("2020-01-01", dest_dir = dir)
 events <- read_gdelt(status$path)
 events
+
+# state-to-state events only, with ISO3 country codes
+states <- read_gdelt(status$path, recover_country_codes = TRUE, states_only = TRUE)
 unlink(dir, recursive = TRUE)
 \dontshow{\}) # examplesIf}
 }

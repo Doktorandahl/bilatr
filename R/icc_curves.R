@@ -34,7 +34,12 @@
   Tn <- stan_data$T
   n_sample <- min(n_dyads_fallback, D)
   sampled_d <- .with_seed(seed, sort(sample(D, n_sample)))
-  theta_vars <- unlist(lapply(sampled_d, function(d) paste0("theta[", d, ",", seq_len(Tn), "]")))
+  # active dyad-periods only: an inactive period's theta is a random-walk
+  # extrapolation with no data (see ?extract_theta, "Inactive periods")
+  ids <- .dyad_ids_with_active(attr(stan_data, "dyad_ids", exact = TRUE) %||%
+    tibble::tibble(dyad_id = rep(seq_len(D), each = Tn), time_index = rep(seq_len(Tn), times = D)))
+  ids <- ids[ids$dyad_id %in% sampled_d & ids$active, c("dyad_id", "time_index"), drop = FALSE]
+  theta_vars <- paste0("theta[", ids$dyad_id, ",", ids$time_index, "]")
 
   draws <- .get_draws(fit, theta_vars)
   theta_mat <- posterior::as_draws_matrix(draws)[, theta_vars, drop = FALSE]
@@ -65,7 +70,8 @@
 #' of a `theta_summary` tibble's `mean` column (e.g. [extract_theta()]'s
 #' output -- already in memory or on disk in most workflows), and only as
 #' a last resort a small draw-and-dyad subsample read directly off `fit`
-#' (with a `message()` noting the fallback). The default range is the
+#' (with a `message()` noting the fallback; it uses the sampled dyads'
+#' active periods only, see [extract_theta()], "Inactive periods"). The default range is the
 #' 1st-99th percentile of observed `theta` (`quantile_probs`), not the
 #' full range, so one extreme dyad does not flatten the plot.
 #'

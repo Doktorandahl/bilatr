@@ -11,6 +11,16 @@ model fitted in 'Stan'.
 * `download_gdelt()`, `read_gdelt()`, `gdelt_files()`, `gdelt_columns()` and
   `count_gdelt_actor_types()` download, read and filter GDELT 1.0 event
   files, with checksum verification and memory-bounded reading.
+* `gdelt_countries` classifies every GDELT 1.0 country code (state,
+  former state, territory, region or other) with its Correlates of War
+  membership years; `gdelt_country_name()`, `gdelt_country_type()`,
+  `gdelt_is_state()`, `gdelt_country_iso3()`, `filter_gdelt_states()` and
+  `gdelt_state_spells()` look codes up, keep state-to-state events in the
+  year of the event, and harmonize codes to ISO3 (e.g. `ROM` to `ROU`).
+  `read_gdelt()` and `count_gdelt_actor_types()` gain `states_only`,
+  `harmonize_codes` and `recover_country_codes` (which fills the empty
+  country codes GDELT leaves for Romanian, Taiwanese (before 2013) and
+  South Sudanese actors).
 * `recode_cameo()` and the `cameo_lookup` table map CAMEO event codes to
   QuadClass (as in GDELT), PentaClass and an 18-class ModifiedRootCode
   scheme.
@@ -24,11 +34,20 @@ model fitted in 'Stan'.
 * `aggregate_events()` counts events per dyad and period (directed or
   undirected; yearly, monthly, weekly or daily); `prepare_stan_data()`
   builds the Stan data.
+* `aggregate_events(actor_periods = )` marks dyad-periods in which an
+  actor does not exist (e.g. a country before it enters the state system)
+  with an `active` column, which `prepare_stan_data()` validates and
+  carries into `dyad_ids`; `extract_theta()` and
+  `diagnose_and_extract_bilatr()` drop those periods by default
+  (`active_only = TRUE`), and Tier 3 diagnostics leave them out.
 * `fit_panel()` and `fit_dyad_ts()` fit three models: `"stable"` (the
   default, a random-walk latent state) and the experimental `"ou"`
   (mean-reverting) and `"stable_gamma"` (country-level offsets). The
   latent scale is oriented by `reference_category`. Fits are reproducible
   with `seed`, and record which model and data they used.
+* In the `"stable_gamma"` model, the prior on the per-category country-offset
+  spread `sigma_gamma` is widened from half-normal(0, 0.3) to
+  half-normal(0, 0.5).
 * Models compile with `compile_bilatr_model()` into the user cache
   directory, never into the package library; `bilatr_clear_model_cache()`
   removes them.
@@ -56,8 +75,9 @@ model fitted in 'Stan'.
 ## Data
 
 * Estimated yearly trajectories for every country pair, 1991-2025
-  (`?theta_trajectories`), are downloaded with `bilatr_theta()` from a
-  versioned data release (`v2026.11`); `theta_sample` ships a small
+  (`?theta_trajectories`), are downloaded once and cached with
+  `download_bilatr_theta()` from a versioned data release (`v2026.11`,
+  doi:10.5281/zenodo.23951819, CC BY 4.0); `theta_sample` ships a small
   extract. Known gap: six states (Serbia, Romania, Bosnia and Herzegovina,
   Montenegro, Slovenia and Timor-Leste) are missing because of a
   country-code crosswalk error, to be corrected in the next data release,

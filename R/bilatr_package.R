@@ -41,6 +41,10 @@
 #' [count_gdelt_actor_types()], [recode_cameo()], [cameo_lookup],
 #' [validate_bilatr_events()] ([bilatr_event_data]).
 #'
+#' Country codes: [gdelt_countries], [gdelt_country_name()],
+#' [gdelt_country_type()], [gdelt_is_state()], [gdelt_country_iso3()],
+#' [filter_gdelt_states()], [gdelt_state_spells()].
+#'
 #' @section Preparation and fitting:
 #' [aggregate_events()], [validate_bilatr_dyad_period()]
 #' ([bilatr_dyad_period_data]), [prepare_stan_data()], [fit_panel()],
@@ -64,7 +68,7 @@
 #'
 #' @section Data:
 #' [theta_trajectories] (estimated bilateral relations for every country
-#' pair, 1991-2025, downloaded with [bilatr_theta()]; see also
+#' pair, 1991-2025, downloaded with [download_bilatr_theta()]; see also
 #' [bilatr_theta_versions()] and [bilatr_clear_data_cache()]),
 #' [theta_sample] (a shipped extract), [cameo_lookup] (the CAMEO
 #' recoding table), and [bilatr_example_fit()].

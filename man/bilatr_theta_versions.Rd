@@ -9,7 +9,7 @@ bilatr_theta_versions()
 \value{
 A tibble with one row per version, newest first: \code{version},
 \code{published} (the release date, \code{NA} when offline), \code{default} (the
-version \code{\link[=bilatr_theta]{bilatr_theta()}} uses when \code{version = NULL}) and \code{cached}.
+version \code{\link[=download_bilatr_theta]{download_bilatr_theta()}} uses when \code{version = NULL}) and \code{cached}.
 }
 \description{
 Asks the GitHub API which data releases exist, and marks the version
@@ -23,5 +23,5 @@ bilatr_theta_versions()
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=bilatr_theta]{bilatr_theta()}}, \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}.
+\code{\link[=download_bilatr_theta]{download_bilatr_theta()}}, \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}.
 }

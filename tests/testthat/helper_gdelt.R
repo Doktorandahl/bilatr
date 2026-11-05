@@ -276,3 +276,59 @@
   rows$QuadClass <- rep(1:4, times = c(5, 4, 5, 6))
   rows
 }
+
+#' Fixture rows with region, territory, CAMEO-only and empty country codes
+#'
+#' The twenty rows of [.make_gdelt_fixture_rows()] plus ten rows for the
+#' country-code helpers (1.0.0f), all GOV/GOV and cross-border by raw
+#' code unless noted:
+#'
+#' * 21: `EUR` (region) -> `USA`;
+#' * 22: `USA` -> `WSB` (territory);
+#' * 23: `ROM` -> `HUN` (CAMEO-only code; harmonizes to `ROU`);
+#' * 24: `ROM` -> `ROU` (different raw codes, one state: a self-dyad after
+#'   harmonization);
+#' * 25: empty `Actor1CountryCode` with `Actor1Code` `ROUGOV` (recoverable
+#'   as `ROU`) -> `USA`;
+#' * 26: `TMP` -> `AUS` (a state from 2002, as `TLS`);
+#' * 27: `SSD` -> `SDN` (South Sudan is a state from 2011);
+#' * 28: `VAT` -> `ITA` (not a COW member);
+#' * 29: empty `Actor2CountryCode` with `Actor2Code` `TWNGOV` (recoverable
+#'   as `TWN`) <- `CHN`;
+#' * 30: empty `Actor1CountryCode` with a role-only `Actor1Code` (`GOV`,
+#'   not recoverable) -> `USA`.
+#'
+#' @inheritParams .make_gdelt_fixture_rows
+#' @keywords internal
+.make_gdelt_country_rows <- function(sqldate, id_offset) {
+  rows <- .make_gdelt_fixture_rows(sqldate, id_offset)
+  extra <- rows[rep(1L, 10), ]
+  extra$GLOBALEVENTID <- id_offset + 21:30
+  extra$SOURCEURL <- paste0("http://example.com/", 21:30)
+  a1 <- c("EUR", "USA", "ROM", "ROM", NA, "TMP", "SSD", "VAT", "CHN", NA)
+  a2 <- c("USA", "WSB", "HUN", "ROU", "USA", "AUS", "SDN", "ITA", NA, "USA")
+  extra$Actor1CountryCode <- a1
+  extra$Actor2CountryCode <- a2
+  extra$Actor1Code <- ifelse(is.na(a1), c(rep(NA, 4), "ROUGOV", rep(NA, 4), "GOV")[seq_along(a1)], paste0(a1, "GOV"))
+  extra$Actor2Code <- ifelse(is.na(a2), "TWNGOV", paste0(a2, "GOV"))
+  rbind(rows, extra)
+}
+
+#' Build daily (2020) and monthly (2010) zips of [.make_gdelt_country_rows()]
+#'
+#' @return A list: `dir`, `files` (the two paths), `daily_rows`,
+#'   `monthly_rows`.
+#' @keywords internal
+.build_gdelt_country_fixtures <- function() {
+  if (!nzchar(Sys.which("zip"))) {
+    testthat::skip("no `zip` binary on PATH; cannot build GDELT test fixtures")
+  }
+  dir <- tempfile("gdelt_country_fixtures_")
+  dir.create(dir)
+  daily_rows <- .make_gdelt_country_rows(sqldate = 20200101L, id_offset = 600000000)
+  monthly_rows <- .make_gdelt_country_rows(sqldate = 20100115L, id_offset = 500000000)
+  files <- file.path(dir, c("20200101.export.CSV.zip", "201001.zip"))
+  .write_gdelt_fixture_zip(daily_rows, files[1], n_cols = 58L)
+  .write_gdelt_fixture_zip(monthly_rows, files[2], n_cols = 57L)
+  list(dir = dir, files = files, daily_rows = daily_rows, monthly_rows = monthly_rows)
+}

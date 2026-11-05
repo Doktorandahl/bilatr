@@ -1,0 +1,268 @@
+gdelt_code,name,name_source,entity_type,iso3c,cown,cow_start,cow_end,note,n_country_code,n_actor_prefix
+ABW,Aruba,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,52485,0
+AFG,Afghanistan,cameo_lookup,state,AFG,700,1946,,,11372300,0
+AFR,Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,11656314,0
+AGO,Angola,cameo_lookup,state,AGO,540,1975,,,890796,0
+AIA,Anguilla,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,26979,0
+ALA,Aland Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+ALB,Albania,cameo_lookup,state,ALB,339,1946,,,1069577,0
+AND,Andorra,cameo_lookup,state,AND,232,1993,,,16224,0
+ANT,Netherlands Antilles,cameo_lookup,territory,,,,,Netherlands Antilles (dissolved 2010; ISO3 ANT withdrawn). Never written by GDELT 1.0.,0,0
+ARE,United Arab Emirates,cameo_lookup,state,ARE,696,1971,,,3304193,0
+ARG,Argentina,cameo_lookup,state,ARG,160,1946,,,1673259,0
+ARM,Armenia,cameo_lookup,state,ARM,371,1991,,,3034389,0
+ASA,Asia,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,92767,0
+ASM,American Samoa,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+ATG,Antigua and Barbuda,cameo_lookup,state,ATG,58,1981,,,145790,0
+AUS,Australia,cameo_lookup,state,AUS,900,1946,,,18715979,0
+AUT,Austria,cameo_lookup,state,AUT,305,1955,,,1868238,0
+AZE,Azerbaijan,cameo_lookup,state,AZE,373,1991,,,3104239,0
+BAG,Baghdad,cameo_lookup,other,,,,,Baghdad: a city code in the CAMEO lookup; never written by GDELT 1.0.,0,0
+BDI,Burundi,cameo_lookup,state,BDI,516,1962,,,437111,0
+BEL,Belgium,cameo_lookup,state,BEL,211,1946,,,3447224,0
+BEN,Benin,cameo_lookup,state,BEN,434,1960,,,326584,0
+BFA,Burkina Faso,cameo_lookup,state,BFA,439,1960,,,333833,0
+BGD,Bangladesh,cameo_lookup,state,BGD,771,1971,,,3827588,0
+BGR,Bulgaria,cameo_lookup,state,BGR,355,1946,,,1603526,0
+BHR,Bahrain,cameo_lookup,state,BHR,692,1971,,,1250086,0
+BHS,Bahamas,cameo_lookup,state,BHS,31,1973,,,836663,0
+BIH,Bosnia and Herzegovina,cameo_lookup,state,BIH,346,1992,,"Bosnia and Herzegovina, COW 346 from 1992. In the lookup but never written by GDELT 1.0: its dictionaries have no Bosnian actor segment (Bosnian actors are coded by role only, e.g. GOV, MIL).",0,0
+BLK,Balkans,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,13,0
+BLR,Belarus,cameo_lookup,state,BLR,370,1991,,,1914622,0
+BLZ,Belize,cameo_lookup,state,BLZ,80,1981,,,406885,0
+BMU,Bermuda,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,329467,0
+BOL,Bolivia,cameo_lookup,state,BOL,145,1946,,,627743,0
+BRA,Brazil,cameo_lookup,state,BRA,140,1946,,,3247243,0
+BRB,Barbados,cameo_lookup,state,BRB,53,1966,,,316713,0
+BRN,Brunei Darussalam,cameo_lookup,state,BRN,835,1984,,,555638,0
+BTN,Bhutan,cameo_lookup,state,BTN,760,1971,,,321690,0
+BWA,Botswana,cameo_lookup,state,BWA,571,1966,,,498952,0
+CAF,Central African Republic,cameo_lookup,state,CAF,482,1960,,,303466,0
+CAN,Canada,cameo_lookup,state,CAN,20,1946,,,19022025,0
+CAS,Central Asia,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,44096,0
+CAU,Caucasus,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,311,0
+CEU,Central Europe,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,0,0
+CFR,Central Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,0,0
+CHE,Switzerland,cameo_lookup,state,CHE,225,1946,,,3749389,0
+CHL,Chile,cameo_lookup,state,CHL,155,1946,,,1307301,0
+CHN,China,cameo_lookup,state,CHN,710,1946,,,29321724,0
+CIV,Ivory Coast,cameo_lookup,state,CIV,437,1960,,,502400,0
+CMR,Cameroon,cameo_lookup,state,CMR,471,1960,,,572409,0
+COD,Democratic Republic of the Congo,cameo_lookup,state,COD,490,1960,,Democratic Republic of the Congo; GDELT also uses COD for Zaire (1971-1997). COW 490.,965568,0
+COG,Republic of the Congo,cameo_lookup_corrected,state,COG,484,1960,,Republic of the Congo; the lookup's label 'People's Republic of the Congo' is the 1970-1991 name. COW 484.,457368,0
+COK,Cook Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,80221,0
+COL,Colombia,cameo_lookup_corrected,state,COL,100,1946,,,2050786,0
+COM,Comoros,cameo_lookup,state,COM,581,1975,,,60461,0
+CPV,Cape Verde,cameo_lookup,state,CPV,402,1975,,,72545,0
+CRB,Caribbean,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,46252,0
+CRI,Costa Rica,cameo_lookup,state,CRI,94,1946,,,400307,0
+CUB,Cuba,cameo_lookup,state,CUB,40,1946,,,3007269,0
+CYM,Cayman Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,149816,0
+CYP,Cyprus,cameo_lookup,state,CYP,352,1960,,,1249548,0
+CZE,Czech Republic,cameo_lookup,state,CZE,316,1946,,"Czech Republic from 1993 (COW 316). GDELT has no Czechoslovakia code and writes CZE for Czechoslovak actors (e.g. 'Prague'), so CZE before 1993 is Czechoslovakia (COW 315, ISO3 CSK).",1540789,0
+DEU,Germany,cameo_lookup,state,DEU,255,1955,,"Germany. Before 1990 GDELT's DEU refers to West Germany (COW 260, member 1955-1990); from 1990 COW 255. ISO3 DEU throughout.",12783023,0
+DJI,Djibouti,cameo_lookup,state,DJI,522,1977,,,380036,0
+DMA,Dominica,cameo_lookup,state,DMA,54,1978,,,73666,0
+DNK,Denmark,cameo_lookup,state,DNK,390,1946,,,1903663,0
+DOM,Dominican Republic,cameo_lookup,state,DOM,42,1946,,,462621,0
+DZA,Algeria,cameo_lookup,state,DZA,615,1962,,,1134981,0
+EAF,Eastern Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,35044,0
+ECU,Ecuador,cameo_lookup,state,ECU,130,1946,,,786628,0
+EEU,Eastern Europe,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,49,0
+EGY,Egypt,cameo_lookup,state,EGY,651,1946,,,8350418,0
+EIN,East Indies,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,0,0
+ERI,Eritrea,cameo_lookup,state,ERI,531,1993,,"Eritrea, a COW state from 1993 (COW 531); part of Ethiopia before.",482943,0
+ESH,Western Sahara,cameo_lookup,territory,,,,,Western Sahara: not a COW member (D-f3). Never written by GDELT 1.0.,0,0
+ESP,Spain,cameo_lookup,state,ESP,230,1946,,,5469359,0
+EST,Estonia,cameo_lookup,state,EST,366,1991,,,694934,0
+ETH,Ethiopia,cameo_lookup,state,ETH,530,1946,,,2062562,0
+EUR,Europe,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,12547354,0
+FIN,Finland,cameo_lookup,state,FIN,375,1946,,,1416430,0
+FJI,Fiji,cameo_lookup,state,FJI,950,1970,,,918011,0
+FLK,Falkland Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+FRA,France,cameo_lookup,state,FRA,220,1946,,,16322537,0
+FRO,Faeroe Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+FSM,Micronesia,cameo_lookup,state,FSM,987,1991,,,227917,0
+GAB,Gabon,cameo_lookup,state,GAB,481,1960,,,153732,0
+GBR,United Kingdom,cameo_lookup,state,GBR,200,1946,,,39608064,0
+GEO,Georgia,cameo_lookup,state,GEO,372,1991,,,80824,0
+GGY,Guernsey,added,territory,,,,,"Not a GDELT country code: the actor-code prefix GGY (Guernsey, ISO3) with an empty country code.",0,89209
+GHA,Ghana,cameo_lookup,state,GHA,452,1957,,,3373950,0
+GIB,Gibraltar,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+GIN,Guinea,cameo_lookup,state,GIN,438,1958,,,392438,0
+GLP,Guadeloupe,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+GMB,Gambia,cameo_lookup,state,GMB,420,1965,,,511306,0
+GME,East Germany,added,former_state,DDR,265,1954,1990,"Not a GDELT country code: the actor-code prefix for East Germany, with an empty country code. COW 265 (1954-1990); ISO3 DDR (historical).",0,26820
+GMW,West Germany,added,former_state,DEU,260,1955,1990,"Not a GDELT country code: the actor-code prefix for West Germany, with an empty country code. COW 260 (1955-1990); harmonized to DEU.",0,25046
+GNB,Guinea-Bissau,cameo_lookup,state,GNB,404,1974,,,118481,0
+GNQ,Equatorial Guinea,cameo_lookup,state,GNQ,411,1968,,,109032,0
+GRC,Greece,cameo_lookup,state,GRC,350,1946,,,4457255,0
+GRD,Grenada,cameo_lookup,state,GRD,55,1974,,,304931,0
+GRL,Greenland,cameo_lookup,territory,,,,,Greenland: part of the Kingdom of Denmark. Never written by GDELT 1.0.,0,0
+GTM,Guatemala,cameo_lookup,state,GTM,90,1946,,,667754,0
+GUF,French Guiana,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+GUM,Guam,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+GUY,Guyana,cameo_lookup,state,GUY,110,1966,,,682947,0
+GZS,Gaza Strip,cameo_lookup,territory,,,,,Gaza Strip. CAMEO code; never written by GDELT 1.0.,0,0
+HKG,Hong Kong,cameo_lookup,territory,,,,,"Hong Kong: a special administrative region of China, not a COW member.",56201,0
+HND,Honduras,cameo_lookup,state,HND,91,1946,,,579688,0
+HRV,Croatia,cameo_lookup,state,HRV,344,1992,,"Croatia, a COW state from 1992 (COW 344, member from 1992-01-15); not a state in 1991.",1214471,0
+HTI,Haiti,cameo_lookup,state,HTI,41,1946,,,1238249,0
+HUN,Hungary,cameo_lookup,state,HUN,310,1946,,,1700322,0
+IDN,Indonesia,cameo_lookup,state,IDN,850,1949,,,5011587,0
+IMY,Isle of Man,cameo_lookup,territory,,,,,CAMEO code for the Isle of Man (ISO3 IMN); a Crown dependency. Never written by GDELT 1.0.,0,0
+IND,India,cameo_lookup,state,IND,750,1947,,,13534126,0
+IRL,Ireland,cameo_lookup,state,IRL,205,1946,,,7307910,0
+IRN,Iran,cameo_lookup,state,IRN,630,1946,,,15445245,0
+IRQ,Iraq,cameo_lookup,state,IRQ,645,1946,,,9842979,0
+ISL,Iceland,cameo_lookup,state,ISL,395,1946,,,373048,0
+ISR,Israel,cameo_lookup,state,ISR,666,1948,,,24854012,0
+ITA,Italy,cameo_lookup,state,ITA,325,1946,,,7638282,0
+JAM,Jamaica,cameo_lookup,state,JAM,51,1962,,,1426442,0
+JOR,Jordan,cameo_lookup,state,JOR,663,1946,,,4258970,0
+JPN,Japan,cameo_lookup,state,JPN,740,1952,,,11360372,0
+KAZ,Kazakhstan,cameo_lookup,state,KAZ,705,1991,,,1310415,0
+KEN,Kenya,cameo_lookup,state,KEN,501,1963,,,4733078,0
+KGZ,Kyrgyzstan,cameo_lookup,state,KGZ,703,1991,,,910190,0
+KHM,Cambodia,cameo_lookup,state,KHM,811,1953,,,1820776,0
+KIR,Kiribati,cameo_lookup,state,KIR,946,1999,,,63568,0
+KNA,Saint Kitts-Nevis,cameo_lookup,state,KNA,60,1983,,,197354,0
+KOR,South Korea,cameo_lookup,state,KOR,732,1949,,,6407923,0
+KWT,Kuwait,cameo_lookup,state,KWT,690,1961,,,1474991,0
+LAM,Latin America,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,4777,0
+LAO,Laos,cameo_lookup,state,LAO,812,1953,,,531770,0
+LBN,Lebanon,cameo_lookup,state,LBN,660,1946,,,4686692,0
+LBR,Liberia,cameo_lookup,state,LBR,450,1946,,,1100671,0
+LBY,Libya,cameo_lookup,state,LBY,620,1951,,,3133674,0
+LCA,Saint Lucia,cameo_lookup,state,LCA,56,1979,,,168979,0
+LIE,Liechtenstein,cameo_lookup,state,LIE,223,1990,,,45994,0
+LKA,Sri Lanka,cameo_lookup,state,LKA,780,1948,,,3041204,0
+LSO,Lesotho,cameo_lookup,state,LSO,570,1966,,,217303,0
+LTU,Lithuania,cameo_lookup,state,LTU,368,1991,,,908834,0
+LUX,Luxembourg,cameo_lookup,state,LUX,212,1946,,,500657,0
+LVA,Latvia,cameo_lookup,state,LVA,367,1991,,,682672,0
+MAC,Macao,cameo_lookup,territory,,,,,"Macao: a special administrative region of China, not a COW member.",52635,0
+MAR,Morocco,cameo_lookup,state,MAR,600,1956,,,1326324,0
+MCO,Monaco,cameo_lookup,state,MCO,221,1993,,,655674,0
+MDA,Moldova,cameo_lookup,state,MDA,359,1991,,,556217,0
+MDG,Madagascar,cameo_lookup,state,MDG,580,1960,,,202806,0
+MDT,Mediterranean,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,0,0
+MDV,Maldives,cameo_lookup,state,MDV,781,1965,,,1703155,0
+MEA,Middle East,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,364653,0
+MEX,Mexico,cameo_lookup,state,MEX,70,1946,,,6111991,0
+MHL,Marshall Islands,cameo_lookup,state,MHL,983,1991,,,92410,0
+MKD,Macedonia,cameo_lookup,state,MKD,343,1993,,"North Macedonia (lookup: 'Macedonia'), a COW state from 1993 (COW 343).",751011,0
+MLI,Mali,cameo_lookup,state,MLI,432,1960,,,729588,0
+MLT,Malta,cameo_lookup,state,MLT,338,1964,,,937447,0
+MMR,Myanmar,cameo_lookup,state,MMR,775,1948,,Myanmar; GDELT also uses MMR for Burma. COW 775.,2454864,0
+MNG,Mongolia,cameo_lookup,state,MNG,712,1946,,,401099,0
+MNP,Northern Mariana Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+MOZ,Mozambique,cameo_lookup,state,MOZ,541,1975,,,640596,0
+MRT,Mauritania,cameo_lookup,state,MRT,435,1960,,,216624,0
+MSR,Montserrat,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+MTN,Montenegro,cameo_lookup,state,MNE,341,2006,,CAMEO code for Montenegro; harmonized to ISO3 MNE. In the lookup but never written by GDELT 1.0 (no Montenegrin actor segment in its dictionaries). A COW state from 2006 (COW 341).,0,0
+MTQ,Martinique,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+MUS,Mauritius,cameo_lookup,state,MUS,590,1968,,,261363,0
+MWI,Malawi,cameo_lookup,state,MWI,553,1964,,,753018,0
+MYS,Malaysia,cameo_lookup,state,MYS,820,1957,,,5346034,0
+MYT,Mayotte,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+NAF,North Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,825,0
+NAM,Namibia,cameo_lookup,state,NAM,565,1990,,"Namibia, a COW state from 1990.",797129,0
+NCL,New Caledonia,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+NER,Niger,cameo_lookup,state,NER,436,1960,,,680096,0
+NFK,Norfolk Island,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+NGA,Nigeria,cameo_lookup,state,NGA,475,1960,,,14620962,0
+NIC,Nicaragua,cameo_lookup,state,NIC,93,1946,,,469683,0
+NIU,Niue,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+NLD,Netherlands,cameo_lookup,state,NLD,210,1946,,,3559807,0
+NMR,North America,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,907861,0
+NOR,Norway,cameo_lookup,state,NOR,385,1946,,,1953189,0
+NPL,Nepal,cameo_lookup,state,NPL,790,1946,,,1900762,0
+NRU,Nauru,cameo_lookup,state,NRU,970,1999,,,90227,0
+NZL,New Zealand,cameo_lookup,state,NZL,920,1946,,,4612107,0
+OMN,Oman,cameo_lookup,state,OMN,698,1971,,,922228,0
+PAK,Pakistan,cameo_lookup,state,PAK,770,1947,,,16063525,0
+PAN,Panama,cameo_lookup,state,PAN,95,1946,,,731269,0
+PCN,Pitcairn,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+PER,Peru,cameo_lookup,state,PER,135,1946,,,1324560,0
+PGS,Persian Gulf,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,187867,0
+PHL,Philippines,cameo_lookup,state,PHL,840,1946,,,8416712,0
+PLW,Palau,cameo_lookup,state,PLW,986,1994,,"Palau, a COW state from 1994.",72525,0
+PNG,Papua New Guinea,cameo_lookup,state,PNG,910,1975,,,464612,0
+POL,Poland,cameo_lookup,state,POL,290,1946,,,3517928,0
+PRI,Puerto Rico,cameo_lookup,territory,,,,,Puerto Rico: US territory.,195,0
+PRK,North Korea,cameo_lookup,state,PRK,731,1948,,,4884501,0
+PRT,Portugal,cameo_lookup,state,PRT,235,1946,,,1415289,0
+PRY,Paraguay,cameo_lookup,state,PRY,150,1946,,,241763,0
+PSE,Occupied Palestinian Territory,cameo_lookup,territory,,,,,Occupied Palestinian Territory: not a COW member (D-f3).,11848771,0
+PYF,French Polynesia,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+QAT,Qatar,cameo_lookup,state,QAT,694,1971,,,2858889,0
+REU,Reunion,cameo_lookup_corrected,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+ROM,Romania,cameo_lookup,state,ROU,360,1946,,"CAMEO code for Romania; harmonized to ISO3 ROU. GDELT writes ROM only rarely (about 11,000 rows 1991-2025): Romanian actors are coded ROU... in Actor1/2Code, a segment GDELT's country table lacks, so their country code is usually empty.",11019,0
+ROU,Romania,added,state,ROU,360,1946,,"Not a GDELT country code: the ISO3 code for Romania, which GDELT writes as the actor-code prefix (ROU...) but leaves out of Actor1/2CountryCode. Listed so harmonized data and actor-prefix recovery resolve.",0,1596396
+RUS,Russia,cameo_lookup,state,RUS,365,1946,,Russia. COW 365 covers the USSR and Russia as one state; GDELT has no USSR code (Soviet actors are coded RUS). ISO3 RUS throughout.,30277716,0
+RWA,Rwanda,cameo_lookup,state,RWA,517,1962,,,1354992,0
+SAF,Southern Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,147239,0
+SAM,South America,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,6556,0
+SAS,South Asia,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,434771,0
+SAU,Saudi Arabia,cameo_lookup,state,SAU,670,1946,,,7721673,0
+SCG,Serbia and Montenegro,added,former_state,SRB,345,1992,2006,"Not a GDELT country code: the actor-code prefix for Serbia and Montenegro (SCG...) when no SRB segment follows, which leaves the country code empty. COW 345 (FRY 1992-2003, Serbia and Montenegro 2003-2006); harmonized to SRB; not a state outside 1992-2006.",0,423
+SCN,Scandinavia,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,2843,0
+SDN,Sudan,cameo_lookup,state,SDN,625,1956,,"Sudan, COW 625, continuous through South Sudan's secession.",3284492,0
+SEA,Southeast Asia,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,1710760,0
+SEN,Senegal,cameo_lookup,state,SEN,433,1960,,,508233,0
+SGP,Singapore,cameo_lookup,state,SGP,830,1965,,,2551839,0
+SHN,Saint Helena,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,7943,0
+SJM,Svalbard and Jan Mayen Islands,cameo_lookup,territory,,,,,Svalbard and Jan Mayen: Norwegian territory.,0,0
+SLB,Solomon Islands,cameo_lookup,state,SLB,940,1978,,,228230,0
+SLE,Sierra Leone,cameo_lookup,state,SLE,451,1961,,,598950,0
+SLV,El Salvador,cameo_lookup,state,SLV,92,1946,,,599444,0
+SMR,San Marino,cameo_lookup,state,SMR,331,1992,,,15209,0
+SOM,Somalia,cameo_lookup,state,SOM,520,1960,,,2516263,0
+SPM,Saint Pierre and Miquelon,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+SRB,Serbia,cameo_lookup,state,SRB,345,1946,,"Serbia. COW treats Yugoslavia (1944-2006), Serbia and Montenegro, and Serbia as one state, 345; GDELT writes SRB (actor codes SCGSRB...) throughout. Harmonized to SRB in every year, so the series is continuous. Before 1992, SRB (the Serbian republic) is mapped to COW 345 (SFR Yugoslavia).",1006442,0
+SSD,South Sudan,added,state,SSD,626,2011,,"Not in the CAMEO lookup, but written by GDELT 1.0's daily files (and as an actor-code prefix, with an empty country code, in the backfiles). A COW state from 2011 (COW 626).",841356,202442
+STP,Sao Tome and Principe,cameo_lookup,state,STP,403,1975,,,39445,0
+SUR,Suriname,cameo_lookup,state,SUR,115,1975,,,82677,0
+SVK,Slovakia,cameo_lookup,state,SVK,317,1993,,"Slovakia, a COW state from 1993 (COW 317); not a state before.",788619,0
+SVN,Slovenia,cameo_lookup,state,SVN,349,1992,,"Slovenia, COW 349 from 1992. In the lookup but never written by GDELT 1.0 (no Slovenian actor segment).",0,0
+SWE,Sweden,cameo_lookup,state,SWE,380,1946,,,2287588,0
+SWZ,Swaziland,cameo_lookup,state,SWZ,572,1968,,"Eswatini (lookup: 'Swaziland'), COW 572.",177230,0
+SYC,Seychelles,cameo_lookup,state,SYC,591,1976,,,349909,0
+SYR,Syria,cameo_lookup,state,SYR,652,1946,,,11931725,0
+TCA,Turks and Caicos Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+TCD,Chad,cameo_lookup,state,TCD,483,1960,,,817688,0
+TGO,Togo,cameo_lookup,state,TGO,461,1960,,,188233,0
+THA,Thailand,cameo_lookup,state,THA,800,1946,,,3906830,0
+TJK,Tajikistan,cameo_lookup,state,TJK,702,1991,,,842494,0
+TKL,Tokelau,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+TKM,Turkmenistan,cameo_lookup,state,TKM,701,1991,,,611544,0
+TMP,East Timor,cameo_lookup,state,TLS,860,2002,,"CAMEO code for East Timor; harmonized to ISO3 TLS. A COW state from 2002 (independence 2002-05-20; COW member from 2002-09-27); before that an occupied/UN-administered territory, so not a state.",272869,0
+TON,Tonga,cameo_lookup,state,TON,955,1999,,,158898,0
+TTO,Trinidad and Tobago,cameo_lookup,state,TTO,52,1962,,,644113,0
+TUN,Tunisia,cameo_lookup,state,TUN,616,1956,,,1155243,0
+TUR,Turkey,cameo_lookup,state,TUR,640,1946,,,12023041,0
+TUV,Tuvalu,cameo_lookup,state,TUV,947,2000,,,43794,0
+TWN,Taiwan,cameo_lookup,state,TWN,713,1949,,"Taiwan, a COW state (713) under D-f3. In the backfiles (to March 2013) Taiwanese actors usually have an empty country code and only the actor-code prefix TWN.",2078455,1041508
+TZA,Tanzania,cameo_lookup,state,TZA,510,1961,,,1150955,0
+UGA,Uganda,cameo_lookup,state,UGA,500,1962,,,2707312,0
+UKR,Ukraine,cameo_lookup,state,UKR,369,1991,,,11770765,0
+URY,Uruguay,cameo_lookup,state,URY,165,1946,,,295165,0
+USA,United States,cameo_lookup,state,USA,2,1946,,,249797039,0
+UZB,Uzbekistan,cameo_lookup,state,UZB,704,1991,,,925661,0
+VAT,Vatican City,cameo_lookup,other,,,,,"Vatican City: sovereign, but not a COW system member (D-f3). countrycode's cown 327 is the Papal States (1816-1860) and is not used.",971349,0
+VCT,Saint Vincent and the Grenadines,cameo_lookup,state,VCT,57,1979,,,180624,0
+VEN,Venezuela,cameo_lookup,state,VEN,101,1946,,,2326317,0
+VGB,British Virgin Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+VIR,United States Virgin Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,0,0
+VNM,Vietnam,cameo_lookup,state,VNM,816,1954,,"Vietnam, COW 816 (North Vietnam from 1954); GDELT has no code for the Republic of Vietnam (COW 817, 1954-1975).",4563261,0
+VUT,Vanuatu,cameo_lookup,state,VUT,935,1981,,,131234,0
+WAF,West Africa,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,217609,0
+WLF,Wallis and Futuna Islands,cameo_lookup,territory,,,,,Non-state territory: an ISO 3166-1 code with no COW state.,1388,0
+WSB,West Bank,cameo_lookup,territory,,,,,West Bank. CAMEO code; never written by GDELT 1.0.,0,0
+WSM,Samoa,cameo_lookup,state,WSM,990,1976,,,205428,0
+WST,The West,cameo_lookup,region,,,,,Region or supranational grouping (CAMEO).,2358015,0
+YEM,Yemen,cameo_lookup,state,YEM,679,1946,,"Yemen. Before unification (1990-05-22) GDELT's YEM is taken as North Yemen (COW 678), the predecessor in place; South Yemen (COW 680) has no GDELT code.",2649458,0
+ZAF,South Africa,cameo_lookup,state,ZAF,560,1946,,,3887317,0
+ZMB,Zambia,cameo_lookup,state,ZMB,551,1964,,,1255803,0
+ZWE,Zimbabwe,cameo_lookup,state,ZWE,552,1965,,,2838061,0

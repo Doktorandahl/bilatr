@@ -11,7 +11,8 @@ validate_bilatr_dyad_period(
   dyad = "dyad",
   actor1 = "actor1",
   actor2 = "actor2",
-  w_send = "w_send"
+  w_send = "w_send",
+  active = "active"
 )
 }
 \arguments{
@@ -21,7 +22,7 @@ validate_bilatr_dyad_period(
 
 \item{action_cols}{The action-count columns: a character vector of
 column names or a tidyselect expression. \code{NULL} (default) means every
-column except \code{dyad}, \code{actor1}, \code{actor2}, \code{time} and \code{w_send}, with a
+column except \code{dyad}, \code{actor1}, \code{actor2}, \code{time}, \code{w_send} and \code{active}, with a
 warning listing the columns chosen, unless \code{data} carries a usable
 \code{action_cols} attribute; see \code{?bilatr_dyad_period_data}.}
 
@@ -31,12 +32,14 @@ columns are present (it is then built from them).}
 \item{actor1, actor2}{Names of the optional actor columns.}
 
 \item{w_send}{Name of the optional sender-share column.}
+
+\item{active}{Name of the optional activity column.}
 }
 \value{
 Invisibly, if every rule passes, a list of the resolved column
 names: \code{dyad}, \code{time}, \code{action_cols} (character, in \code{data}'s
-selection order), and \code{actor1}, \code{actor2}, \code{w_send} (each \code{NULL} if
-the column is absent).
+selection order), and \code{actor1}, \code{actor2}, \code{w_send}, \code{active} (each
+\code{NULL} if the column is absent).
 }
 \description{
 Checks \code{data} against every rule in \code{?bilatr_dyad_period_data},
@@ -60,4 +63,8 @@ bad <- dp
 bad$threats[1] <- -1
 bad$period[2] <- 1L
 try(validate_bilatr_dyad_period(bad, time = "period", action_cols = c(talks, threats)))
+
+# an inactive dyad-period must have no events
+dp$active <- c(TRUE, FALSE, TRUE)
+try(validate_bilatr_dyad_period(dp, time = "period", action_cols = c(talks, threats)))
 }

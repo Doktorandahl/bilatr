@@ -16,12 +16,34 @@
 #' 4. fills every dyad over the whole `time_range` (by default
 #'    `min(time):max(time)` of the table), missing periods becoming
 #'    all-zero and unobserved (`is_obs = 0`; a period is observed when its
-#'    counts sum to more than zero);
+#'    counts sum to more than zero), and sets each period's `active` flag
+#'    (see "Inactive periods");
 #' 5. drops dyads with fewer than `min_n_events` events in total;
 #' 6. if both actor columns are present, builds the country index
 #'    (`n_countries`, `ctry_a`, `ctry_b`) and `w_send`, with a `message()`
 #'    reporting `n_countries` and the dyads-per-country distribution;
 #' 7. resolves `filter_dyads` and builds the list and its attributes.
+#'
+#' @section Inactive periods:
+#' A table with an `active` column (from [aggregate_events()]'s
+#' `actor_periods`; see `?bilatr_dyad_period_data`) marks dyad-periods in
+#' which an actor does not exist. They have zero counts, so they are
+#' unobserved (`is_obs = 0`) like any period without events, and the Stan
+#' data list is exactly what it would be without the column; `min_n_events`
+#' counts events in active periods only, which is the same thing. The flag
+#' is carried into the `dyad_ids` attribute, so that [extract_theta()] and
+#' [diagnose_and_extract_bilatr()] can leave these periods out.
+#'
+#' The `dyad_ids` attribute always has an `active` column. A period that
+#' the grid adds (one absent from the table, e.g. beyond its range when
+#' `time_range` is wider) is:
+#'
+#' * `TRUE` when the table has no `active` column, so every period is
+#'   active, as before;
+#' * otherwise, when `data` carries [aggregate_events()]'s `actor_periods`
+#'   attribute (and its `resolution`, and actor columns), active when both
+#'   actors are active at some point in the period, by the same rule;
+#' * otherwise `TRUE`.
 #'
 #' @section Size:
 #' `Y` is a dense `D x T x A` integer array, about `D * T * A * 4` bytes
@@ -39,11 +61,11 @@
 #'   present, with a `message()`; otherwise errors.
 #' @param action_cols The action-count columns: a character vector or a
 #'   tidyselect expression. `NULL` (default) means every column except
-#'   the dyad/actor/time/`w_send` columns, with a warning; see
+#'   the dyad/actor/time/`w_send`/`active` columns, with a warning; see
 #'   `?bilatr_dyad_period_data`.
-#' @param dyad,actor1,actor2,w_send Names of the dyad, actor and
-#'   sender-share columns; see `?bilatr_dyad_period_data`. The actor and
-#'   `w_send` columns are optional.
+#' @param dyad,actor1,actor2,w_send,active Names of the dyad, actor,
+#'   sender-share and activity columns; see `?bilatr_dyad_period_data`. The
+#'   actor, `w_send` and `active` columns are optional.
 #' @param directed Whether the dyads are directed. Defaults to
 #'   `attr(data, "directed")` if set (by [aggregate_events()]), else
 #'   `TRUE`. Only matters for `w_send`: with `directed = TRUE` a `w_send`
@@ -141,7 +163,8 @@
 #'   * `dyad_ids`: one row per dyad-period, with `dyad_id`, `time_index`,
 #'     `dyad`, `dyad2` (the undirected dyad key), `actor1`, `actor2`
 #'     (`dyad2`/`actor1`/`actor2` are `NA` without actor columns), the time
-#'     column, and any `time_labels` columns; see [extract_theta()];
+#'     column, `active` (see "Inactive periods"), and any `time_labels`
+#'     columns; see [extract_theta()];
 #'   * `event_classes`: the action-column names, in `Y`'s order;
 #'   * `country_codes`: the countries in `ctry_a`/`ctry_b` index order
 #'     (`NULL` without actor columns); see [extract_gamma()];
@@ -188,6 +211,7 @@ prepare_stan_data <- function(
   actor1 = "actor1",
   actor2 = "actor2",
   w_send = "w_send",
+  active = "active",
   directed = attr(data, "directed") %||% TRUE,
   reference_category = NULL,
   min_n_events = 1,
@@ -231,7 +255,7 @@ prepare_stan_data <- function(
   time <- .resolve_time_col(data, time)
 
   # 1. validate; resolves action_cols exactly once
-  cols <- .validate_dyad_period(data, time, rlang::enquo(action_cols), dyad, actor1, actor2, w_send)
+  cols <- .validate_dyad_period(data, time, rlang::enquo(action_cols), dyad, actor1, actor2, w_send, active)
   has_actors <- !is.null(cols$actor1)
   dyad_vec <- if (dyad %in% names(data)) {
     as.character(data[[dyad]])
@@ -240,6 +264,7 @@ prepare_stan_data <- function(
   }
   time_vec <- as.integer(data[[time]])
   w_send_vec <- if (!is.null(cols$w_send)) as.double(data[[w_send]])
+  active_vec <- if (!is.null(cols$active)) data[[active]]
   if (directed && !is.null(w_send_vec) && any(w_send_vec != 1)) {
     stop(
       fn, ": `directed = TRUE`, but `", w_send, "` is not 1 in every row (a directed ",
@@ -283,6 +308,7 @@ prepare_stan_data <- function(
       dyad_vec <- dyad_vec[in_range]
       time_vec <- time_vec[in_range]
       w_send_vec <- w_send_vec[in_range]
+      active_vec <- active_vec[in_range]
       counts <- purrr::map(counts, ~ .x[in_range])
       actor1_vec <- actor1_vec[in_range]
       actor2_vec <- actor2_vec[in_range]
@@ -329,6 +355,9 @@ prepare_stan_data <- function(
   # (.k1, .k2, ...) so no action column can collide with the key columns.
   count_names <- paste0(".k", seq_len(A))
   long <- tibble::tibble(.dyad = dyad_vec, .time = time_vec, !!!rlang::set_names(counts, count_names))
+  if (!is.null(active_vec)) {
+    long$.active <- active_vec
+  }
   # C-locale (radix) sort: the same order dplyr::group_by() gives, so
   # dyad_id does not depend on the locale.
   dyads <- sort(unique(dyad_vec), method = "radix")
@@ -401,13 +430,16 @@ prepare_stan_data <- function(
     )
   }
 
+  grid_active <- .grid_active(grid, dyad_info, has_actors, data)
+
   dyad_ids <- make_dyad_ids(
     dyads,
     actor1 = if (has_actors) dyad_info$actor1,
     actor2 = if (has_actors) dyad_info$actor2,
     time_values = time_values,
     time_col = time,
-    time_labels = time_labels
+    time_labels = time_labels,
+    active = grid_active
   )
 
   # 8. filter_dyads, the list, and attributes
@@ -459,6 +491,42 @@ prepare_stan_data <- function(
   attr(stan_data, "w_send_imputed") <- w_send_imputed
 
   stan_data
+}
+
+#' The `active` flag of every row of [prepare_stan_data()]'s filled grid
+#'
+#' Rows from the table keep their `active` value; rows the grid added
+#' follow the rules in ?prepare_stan_data, "Inactive periods".
+#'
+#' @param grid The filled grid (`.dyad`, `.time`, and `.active` when the
+#'   table has an `active` column), in `dyad_id`-then-time order.
+#' @param dyad_info Per-dyad `dyad`, `actor1`, `actor2`.
+#' @param has_actors Whether the table has actor columns.
+#' @param data The original table (for its attributes).
+#' @return A logical vector, one per grid row.
+#' @noRd
+.grid_active <- function(grid, dyad_info, has_actors, data) {
+  if (!".active" %in% names(grid)) {
+    return(rep(TRUE, nrow(grid)))
+  }
+  active <- grid$.active
+  added <- is.na(active)
+  if (!any(added)) {
+    return(active)
+  }
+  periods <- attr(data, "actor_periods")
+  resolution <- attr(data, "resolution")
+  if (has_actors && is.data.frame(periods) && rlang::is_string(resolution)) {
+    a <- dyad_info[match(grid$.dyad[added], dyad_info$dyad), ]
+    origin <- attr(data, "time_origin") %||% as.Date(NA)
+    active[added] <- .dyad_period_active(
+      a$actor1, a$actor2, grid$.time[added], resolution, origin,
+      .normalize_actor_periods(periods, "prepare_stan_data()"), "prepare_stan_data()"
+    )
+  } else {
+    active[added] <- TRUE
+  }
+  active
 }
 
 #' Resolve [prepare_stan_data()]'s `time = NULL`

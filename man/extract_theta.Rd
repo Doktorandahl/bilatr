@@ -8,6 +8,7 @@ extract_theta(
   fit,
   stan_data = NULL,
   probs = c(0.05, 0.5, 0.95),
+  active_only = TRUE,
   max_memory_mb = 8192,
   chunk_size = NULL,
   n_cores = 1L
@@ -28,6 +29,9 @@ It must carry its \code{dyad_ids} attribute.}
 \item{probs}{Posterior quantiles to report alongside the mean. Only
 the default is supported when \code{fit} is CSV file paths (see Details).}
 
+\item{active_only}{\code{TRUE} (default) drops inactive dyad-periods; \code{FALSE}
+keeps every period. See "Inactive periods".}
+
 \item{max_memory_mb, chunk_size, n_cores}{Only used when
 \code{fit} is CSV file paths; the same as \code{\link[=diagnose_convergence]{diagnose_convergence()}}'s
 arguments of the same name (including the message when
@@ -36,7 +40,7 @@ arguments of the same name (including the message when
 \value{
 A tibble with one row per dyad-period: \code{dyad_id},
 \code{time_index}, the other \code{dyad_ids} columns (\code{dyad}, \code{dyad2}, \code{actor1},
-\code{actor2}, the time column and its labels), the posterior \code{mean}
+\code{actor2}, the time column, \code{active} and the time labels), the posterior \code{mean}
 of theta, and one column per requested quantile.
 }
 \description{
@@ -69,6 +73,18 @@ files" in \code{\link[=diagnose_convergence]{diagnose_convergence()}}). This mod
 default \code{probs} (the 5\%, 50\% and 95\% quantiles); pass an in-memory
 \code{fit} for other quantiles.
 }
+\section{Inactive periods}{
+
+A dyad-period in which one of the actors does not exist (a country
+before it enters the state system or after it leaves; see
+\code{\link[=aggregate_events]{aggregate_events()}}, "Actor periods") has no events, so its
+\eqn{\theta} is a random-walk extrapolation with no data, not an
+estimate. With \code{active_only = TRUE}, the default, such periods (those
+with \code{active = FALSE} in the \code{dyad_ids} attribute) are left out. Stan
+data from before \code{active} existed has no such column; every period
+then counts as active.
+}
+
 \examples{
 # CmdStan CSVs from a completed run, never read into this R session (here,
 # the example fit shipped with bilatr); the *_stan_data.rds that

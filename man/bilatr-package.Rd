@@ -51,6 +51,10 @@ them.
 \code{\link[=download_gdelt]{download_gdelt()}}, \code{\link[=read_gdelt]{read_gdelt()}}, \code{\link[=gdelt_files]{gdelt_files()}}, \code{\link[=gdelt_columns]{gdelt_columns()}},
 \code{\link[=count_gdelt_actor_types]{count_gdelt_actor_types()}}, \code{\link[=recode_cameo]{recode_cameo()}}, \link{cameo_lookup},
 \code{\link[=validate_bilatr_events]{validate_bilatr_events()}} (\link{bilatr_event_data}).
+
+Country codes: \link{gdelt_countries}, \code{\link[=gdelt_country_name]{gdelt_country_name()}},
+\code{\link[=gdelt_country_type]{gdelt_country_type()}}, \code{\link[=gdelt_is_state]{gdelt_is_state()}}, \code{\link[=gdelt_country_iso3]{gdelt_country_iso3()}},
+\code{\link[=filter_gdelt_states]{filter_gdelt_states()}}, \code{\link[=gdelt_state_spells]{gdelt_state_spells()}}.
 }
 
 \section{Preparation and fitting}{
@@ -85,7 +89,7 @@ extraction from CmdStan CSV files in one read).
 \section{Data}{
 
 \link{theta_trajectories} (estimated bilateral relations for every country
-pair, 1991-2025, downloaded with \code{\link[=bilatr_theta]{bilatr_theta()}}; see also
+pair, 1991-2025, downloaded with \code{\link[=download_bilatr_theta]{download_bilatr_theta()}}; see also
 \code{\link[=bilatr_theta_versions]{bilatr_theta_versions()}} and \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}),
 \link{theta_sample} (a shipped extract), \link{cameo_lookup} (the CAMEO
 recoding table), and \code{\link[=bilatr_example_fit]{bilatr_example_fit()}}.

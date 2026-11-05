@@ -46,13 +46,13 @@ GDELT 1.0 event data, The GDELT Project,
 Yearly latent trajectories (\eqn{\theta}) of the level of bilateral
 relations for every country pair with at least one recorded event,
 estimated with bilatr from GDELT 1.0 event data. The data are not
-shipped with the package: \code{\link[=bilatr_theta]{bilatr_theta()}} downloads them from a
+shipped with the package: \code{\link[=download_bilatr_theta]{download_bilatr_theta()}} downloads them from a
 versioned data release (see "Getting the data"). A small extract,
 \link{theta_sample}, ships for examples.
 }
 \details{
-There are two tables. \code{bilatr_theta("directed")} holds the directed
-model (one series per sender-receiver pair); \code{bilatr_theta("undirected")}
+There are two tables. \code{download_bilatr_theta("directed")} holds the directed
+model (one series per sender-receiver pair); \code{download_bilatr_theta("undirected")}
 holds the undirected model (one series per unordered pair, events in
 both directions pooled). Each row gives both the smoothed estimate --
 the posterior of \eqn{\theta_{dt}} given all years, 1991-2025 -- and the
@@ -73,10 +73,16 @@ root-mean-square 1. Because the \code{stable_gamma} model includes
 country-level category offsets, \eqn{\theta} is measured net of each
 country's baseline mix of event types.
 
-Dyad-years before a dyad's first recorded event are dropped: the
+Dyad-years before a dyad's first recorded event, and dyad-years in which
+either country was not a member of the state system, are dropped: the
 likelihood is only evaluated in years with events, so \eqn{\theta}
 before the first event is the random-walk prior smoothed backwards
-from that event and carries no information from the dyad's own data.
+from that event and carries no information from the dyad's own data,
+and a year outside membership has no events by construction (see
+\code{\link[=aggregate_events]{aggregate_events()}}, "Actor periods"). The membership rule applies from
+the next data update (\code{v2027.01}); \code{v2026.11} used a membership test
+without years (see "Known gaps"), so it still has, for example,
+Slovakia's dyad-years for 1991-1992.
 After the first event every year through 2025 is kept, including
 years without events (where \eqn{\theta} is interpolated or, at the
 end of a series, extrapolated by the random walk), so each dyad's
@@ -89,9 +95,14 @@ event is kept when both actors carry \code{GOV}, \code{MIL} or \code{SPY} in any
 their \code{Type1Code}/\code{Type2Code}/\code{Type3Code} fields and the two actors'
 country codes differ. This is
 \code{read_gdelt(actor_types = c("GOV", "MIL", "SPY"), actor_type_match = "both", cross_border = TRUE)}, the defaults. All events are used, root
-events or not, with no filter on event codes. Events were further
-restricted to those where both actors' country codes map to a
-Correlates of War state system member (see "Known gaps").
+events or not, except that events with CAMEO codes 010-015, 017, 024x,
+025x, 040 and 041 (\code{BilatrClass} 0 in the original coding: neutral and
+low-intensity statements) are excluded, which is why two
+\code{ModifiedRootCode} classes do not occur. Events were further restricted
+to those where both actors' country codes map to a Correlates of War
+state system member (see "Known gaps"); \code{\link[=filter_gdelt_states]{filter_gdelt_states()}} applies
+this restriction, by the year of each event, and the next data update
+(\code{v2027.01}) is built with it (\code{read_gdelt(states_only = TRUE)}).
 
 \strong{Model.} The \code{stable_gamma} model, at yearly resolution, with events
 grouped by \code{ModifiedRootCode} (16 of its 18 classes occur in the data,
@@ -102,15 +113,16 @@ used are the ones in this version of bilatr.
 }
 \section{Getting the data}{
 
-\code{bilatr_theta("directed")} and \code{bilatr_theta("undirected")} download a
-table once, verify its checksum, and cache it in
-\code{tools::R_user_dir("bilatr", "data")}; later calls read the cache.
+\code{download_bilatr_theta("directed")} and
+\code{download_bilatr_theta("undirected")} download a table once, verify its
+checksum, and cache it in \code{tools::R_user_dir("bilatr", "data")}; later
+calls read the cache without using the internet.
 The data are published as versioned releases of
 \url{https://github.com/doktorandahl/bilatr-data} under the CC BY 4.0
 license, archived on Zenodo. Each bilatr release is pinned to one data
 version (\code{v2026.11} for this one), so the same code returns the same
-data; \code{bilatr_theta(version = "latest")} asks for the newest release,
-and \code{\link[=bilatr_theta_versions]{bilatr_theta_versions()}} lists them. \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}
+data; \code{download_bilatr_theta(version = "latest")} asks for the newest
+release, and \code{\link[=bilatr_theta_versions]{bilatr_theta_versions()}} lists them. \code{\link[=bilatr_clear_data_cache]{bilatr_clear_data_cache()}}
 deletes the cache.
 
 Without bilatr, the same files can be read directly, e.g.
@@ -118,9 +130,12 @@ Without bilatr, the same files can be read directly, e.g.
 \code{read.csv()} on \code{theta_directed.csv.gz}; see the data repository's
 README.
 
-Please cite the data release by its Zenodo DOI (Zenodo DOI: to be
-added once the record is published), the bilatr package
-(\code{citation("bilatr")}), and the GDELT references below.
+Please cite the data release by the DOI of the version you use, for
+these data (\code{v2026.11}) \doi{10.5281/zenodo.23951819}; the DOI
+\doi{10.5281/zenodo.23951818} refers to all versions of the data
+release. Please also cite the GDELT references below. Cite the bilatr
+package (\code{citation("bilatr")}) for the method and the software; the
+entry for the data release is there too.
 }
 
 \section{Known gaps}{
@@ -152,8 +167,8 @@ subset(theta_sample, type == "directed" & dyad \%in\% c("NOR_SWE", "SWE_NOR"))
 subset(theta_sample, type == "undirected" & dyad == "NOR_SWE")
 \dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
 # the full tables (downloaded once, then cached)
-theta_directed <- bilatr_theta("directed")
-theta_undirected <- bilatr_theta("undirected")
+theta_directed <- download_bilatr_theta("directed")
+theta_undirected <- download_bilatr_theta("undirected")
 \dontshow{\}) # examplesIf}
 }
 \references{
@@ -165,8 +180,8 @@ The GDELT Project. Global Database of Events, Language, and Tone
 (GDELT). Accessed 31 January 2026, \url{https://gdeltproject.org/}.
 }
 \seealso{
-\code{\link[=bilatr_theta]{bilatr_theta()}} to download the tables; \link{theta_sample} for
-the extract that ships with the package; \link{cameo_lookup} for the
+\code{\link[=download_bilatr_theta]{download_bilatr_theta()}} to download the tables; \link{theta_sample}
+for the extract that ships with the package; \link{cameo_lookup} for the
 \code{ModifiedRootCode} classes; \code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}} for how
 the theta summaries are extracted from a fit.
 }

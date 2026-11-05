@@ -17,6 +17,16 @@ reference:
       - cameo_lookup
       - validate_bilatr_events
       - bilatr_event_data
+  - subtitle: Country codes
+    desc: Names and entity types of GDELT country codes, state-system membership, and a state-to-state filter with ISO3 codes.
+    contents:
+      - gdelt_countries
+      - gdelt_country_name
+      - gdelt_country_type
+      - gdelt_is_state
+      - gdelt_country_iso3
+      - filter_gdelt_states
+      - gdelt_state_spells
 
   - title: Preparation and fitting
     desc: Count events per dyad and period, and fit the models with CmdStan.
@@ -78,7 +88,7 @@ reference:
     desc: The estimated theta trajectories and the example fit.
     contents:
       - theta_trajectories
-      - bilatr_theta
+      - download_bilatr_theta
       - bilatr_theta_versions
       - bilatr_clear_data_cache
       - theta_sample

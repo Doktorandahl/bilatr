@@ -21,6 +21,37 @@
 #' `end`, with zero counts where it had no events. So `start = "1991-01-01",
 #' end = "2025-12-31"` covers every year (or month) of 1991-2025.
 #'
+#' @section Actor periods:
+#' A country that enters or leaves the state system inside the window
+#' (Slovakia from 1993, Czechoslovakia until 1992) still gets a row for
+#' every period, because the table is rectangular. Those rows have zero
+#' counts, so they never enter the likelihood, but a fitted model still
+#' gives them \eqn{\theta} values, which are random-walk extrapolations
+#' with no data. `actor_periods` marks them: with it, the output gets a
+#' logical `active` column, `TRUE` when **both** actors are active at some
+#' point in the period (the same at-any-point rule [gdelt_is_state()] uses
+#' for years), and [prepare_stan_data()], [extract_theta()] and
+#' [diagnose_and_extract_bilatr()] carry it on, so that
+#' `extract_theta(active_only = TRUE)`, the default, leaves inactive
+#' dyad-periods out. For GDELT data filtered with [filter_gdelt_states()],
+#' [gdelt_state_spells()] gives the periods.
+#'
+#' * The table stays rectangular (every dyad over the whole window), so
+#'   that [prepare_stan_data()] can build `Y`; inactive rows have zero
+#'   counts.
+#' * An event in an inactive period is an error naming the dyad-periods
+#'   (it should have been dropped before aggregation, e.g. by
+#'   [filter_gdelt_states()]). [filter_gdelt_states()] works at year
+#'   level, so at a finer `resolution` use `gdelt_state_spells(whole_years
+#'   = TRUE)`, or drop events outside the exact spells first.
+#' * Every actor in the (in-window) data must be in `actor_periods`;
+#'   missing actors are an error listing them, and so is an
+#'   `actor_periods` that covers none of them (often a sign of codes
+#'   that were not harmonized, e.g. `ROM` against `ROU`).
+#'
+#' Without `actor_periods` there is no `active` column, and the table is
+#' as before.
+#'
 #' @section Time IDs:
 #' The time column holds absolute period IDs, named by resolution:
 #'
@@ -50,7 +81,10 @@
 #' * `resolution`, `grouping_var`, `directed`: the arguments;
 #' * `action_cols`: the class columns, in output order. With
 #'   `action_cols = NULL`, [prepare_stan_data()] uses them silently, as
-#'   long as every one is still a column.
+#'   long as every one is still a column;
+#' * `actor_periods`: with `actor_periods`, the checked periods (a tibble
+#'   with `actor`, `start`, `end`), which [prepare_stan_data()] uses to
+#'   set `active` for periods it adds beyond the table's own range.
 #'
 #' These are conveniences. Some dplyr verbs drop them (e.g. `summarise()`
 #' does; `filter()`, `select()`, `mutate()` and `arrange()` keep them).
@@ -88,8 +122,13 @@
 #' @param actor1,actor2 Names of the sender/target actor columns; see
 #'   `?bilatr_event_data`.
 #' @param date Name of the event-date column; see `?bilatr_event_data`.
+#' @param actor_periods `NULL` (default), or a data frame of the periods in
+#'   which each actor is active, one row per spell, with columns `actor`,
+#'   `start` and `end`: `Date`s, or strings `as.Date()` parses; `end = NA`
+#'   means open (still active). See "Actor periods".
 #' @return A tibble with exactly the columns `dyad`, `actor1`, `actor2`,
-#'   the time column (see Time IDs), `w_send`, and one integer count
+#'   the time column (see Time IDs), `w_send`, `active` (only with
+#'   `actor_periods`; see "Actor periods"), and one integer count
 #'   column per event class, named by the raw class value. Sorted by
 #'   `dyad` (C-locale) then time. `w_send` is per dyad, repeated on every
 #'   row: exactly `1` when `directed = TRUE`; when undirected, the share of
@@ -108,6 +147,21 @@
 #'   grouping_var = "PentaClass", resolution = "monthly", directed = FALSE,
 #'   start = "2018-01-01", end = "2019-12-31"
 #' )
+#'
+#' # dyad-periods outside the actors' state-system membership: Slovakia
+#' # is a state from 1993 on, so SVK_CZE 1992 is inactive, and
+#' # Czechoslovakia (CSK) leaves at the end of 1992
+#' events2 <- tibble::tibble(
+#'   Actor1CountryCode = c("SVK", "SVK", "USA"),
+#'   Actor2CountryCode = c("CZE", "CZE", "CSK"),
+#'   SQLDATE = c(19930301L, 19940301L, 19920301L),
+#'   PentaClass = c(0, 1, 1)
+#' )
+#' aggregate_events(
+#'   events2,
+#'   grouping_var = "PentaClass", start = "1992-01-01", end = "1994-12-31",
+#'   actor_periods = dplyr::rename(gdelt_state_spells(), actor = "iso3c")
+#' )
 #' @export
 aggregate_events <- function(
   data,
@@ -119,10 +173,14 @@ aggregate_events <- function(
   class_order = NULL,
   actor1 = "Actor1CountryCode",
   actor2 = "Actor2CountryCode",
-  date = "SQLDATE"
+  date = "SQLDATE",
+  actor_periods = NULL
 ) {
   resolution <- match.arg(resolution)
   fn <- "aggregate_events()"
+  if (!is.null(actor_periods)) {
+    actor_periods <- .normalize_actor_periods(actor_periods, fn)
+  }
 
   validate_bilatr_events(data, grouping_var, actor1, actor2, date)
   slim <- .slim_event_table(data, grouping_var, actor1, actor2, date)
@@ -210,8 +268,19 @@ aggregate_events <- function(
   result <- tidyr::expand_grid(dyad_info, .time = time_range) %>%
     dplyr::left_join(counts, by = c("dyad", ".time")) %>%
     dplyr::mutate(dplyr::across(dplyr::all_of(classes), ~ tidyr::replace_na(.x, 0L))) %>%
-    dplyr::arrange(.data$dyad, .data$.time) %>%
-    dplyr::select("dyad", "actor1", "actor2", !!time_col := ".time", "w_send", dplyr::all_of(classes))
+    dplyr::arrange(.data$dyad, .data$.time)
+
+  if (!is.null(actor_periods)) {
+    result$active <- .dyad_period_active(
+      result$actor1, result$actor2, result$.time, resolution, origin, actor_periods, fn
+    )
+    .check_inactive_events(result, classes, time_col, fn)
+  }
+
+  result <- dplyr::select(
+    result, "dyad", "actor1", "actor2", !!time_col := ".time", "w_send",
+    dplyr::any_of("active"), dplyr::all_of(classes)
+  )
 
   attr(result, "time_labels") <- .time_labels(time_range, resolution, origin)
   attr(result, "time_col") <- time_col
@@ -220,7 +289,160 @@ aggregate_events <- function(
   attr(result, "grouping_var") <- grouping_var
   attr(result, "directed") <- directed
   attr(result, "action_cols") <- classes
+  if (!is.null(actor_periods)) {
+    attr(result, "actor_periods") <- actor_periods
+  }
   result
+}
+
+#' Check and normalize `actor_periods`
+#'
+#' @param actor_periods A data frame with `actor`, `start`, `end`.
+#' @param fn The calling function, for errors.
+#' @return A tibble with `actor` (character), `start` and `end` (`Date`;
+#'   `end` may be `NA`).
+#' @noRd
+.normalize_actor_periods <- function(actor_periods, fn) {
+  if (!is.data.frame(actor_periods)) {
+    stop(fn, ": `actor_periods` must be NULL or a data frame with columns `actor`, `start` and `end`.",
+         call. = FALSE)
+  }
+  missing_cols <- setdiff(c("actor", "start", "end"), names(actor_periods))
+  if (length(missing_cols) > 0) {
+    stop(
+      fn, ": `actor_periods` is missing column(s) ", paste0("`", missing_cols, "`", collapse = ", "),
+      "; it needs `actor`, `start` and `end` (e.g. gdelt_state_spells() with `iso3c` renamed to `actor`).",
+      call. = FALSE
+    )
+  }
+  as_date <- function(x, arg) {
+    out <- if (inherits(x, "Date")) {
+      x
+    } else if (is.character(x) || is.factor(x) || (is.logical(x) && all(is.na(x)))) {
+      tryCatch(as.Date(as.character(x)), error = function(e) rep(as.Date(NA), length(x)))
+    } else {
+      stop(fn, ": `actor_periods$", arg, "` must be a Date or a character column of dates.",
+           call. = FALSE)
+    }
+    bad <- !is.na(x) & is.na(out)
+    if (any(bad)) {
+      stop(
+        fn, ": `actor_periods$", arg, "` has value(s) that are not dates: ",
+        paste0("\"", utils::head(unique(as.character(x[bad])), 5), "\"", collapse = ", "), ".",
+        call. = FALSE
+      )
+    }
+    out
+  }
+  out <- tibble::tibble(
+    actor = as.character(actor_periods$actor),
+    start = as_date(actor_periods$start, "start"),
+    end = as_date(actor_periods$end, "end")
+  )
+  problems <- c(
+    if (anyNA(out$actor) || any(out$actor == "")) "`actor` has missing or empty values",
+    if (anyNA(out$start)) "`start` has missing values (only `end` may be NA, for an open spell)",
+    if (any(!is.na(out$end) & !is.na(out$start) & out$end < out$start)) "some spells end before they start"
+  )
+  if (length(problems) > 0) {
+    stop(fn, ": `actor_periods`: ", paste(problems, collapse = "; "), ".", call. = FALSE)
+  }
+  out
+}
+
+#' First and last day of each period
+#'
+#' @param time_id Integer period IDs (see [aggregate_events()], Time IDs).
+#' @param resolution The resolution.
+#' @param origin The origin `Date` (weekly/daily).
+#' @return A list of two `Date` vectors, `start` and `end`.
+#' @noRd
+.period_bounds <- function(time_id, resolution, origin) {
+  switch(resolution,
+    yearly = list(
+      start = as.Date(sprintf("%04d-01-01", time_id)),
+      end = as.Date(sprintf("%04d-12-31", time_id))
+    ),
+    monthly = {
+      year <- time_id %/% 12L
+      month <- time_id %% 12L + 1L
+      start <- as.Date(sprintf("%04d-%02d-01", year, month))
+      next_start <- as.Date(sprintf("%04d-%02d-01", year + (month == 12L), month %% 12L + 1L))
+      list(start = start, end = next_start - 1L)
+    },
+    weekly = list(start = origin + time_id * 7L, end = origin + time_id * 7L + 6L),
+    daily = list(start = origin + time_id, end = origin + time_id)
+  )
+}
+
+#' Is each dyad-period active (both actors in a spell at some point)?
+#'
+#' Computes activity on the unique actor x period pairs, then looks the
+#' rows up. Errors if `periods` lacks some actors, or covers none.
+#'
+#' @param actor1,actor2 Character vectors of the rows' actors.
+#' @param time_id Integer period IDs of the rows.
+#' @param resolution,origin As in [.period_bounds()].
+#' @param periods Normalized actor periods.
+#' @param fn The calling function, for errors.
+#' @return A logical vector, one per row.
+#' @noRd
+.dyad_period_active <- function(actor1, actor2, time_id, resolution, origin, periods, fn) {
+  actors <- unique(c(actor1, actor2))
+  covered <- actors %in% periods$actor
+  if (!any(covered)) {
+    stop(
+      fn, ": `actor_periods` covers none of the ", length(actors), " actors in the data (e.g. ",
+      .show_codes(sort(actors), 5), "). Check that its `actor` codes are the same codes as the ",
+      "data's (for GDELT, harmonize them with filter_gdelt_states()).",
+      call. = FALSE
+    )
+  }
+  if (!all(covered)) {
+    missing_actors <- sort(actors[!covered], method = "radix")
+    stop(
+      fn, ": ", length(missing_actors), " actor(s) in the data are not in `actor_periods`: ",
+      .show_codes(missing_actors, 20), ". Every actor needs at least one period.",
+      call. = FALSE
+    )
+  }
+  times <- sort(unique(time_id))
+  bounds <- .period_bounds(times, resolution, origin)
+  grid <- tidyr::expand_grid(actor = actors, .k = seq_along(times))
+  grid$.p_start <- bounds$start[grid$.k]
+  grid$.p_end <- bounds$end[grid$.k]
+  hits <- dplyr::inner_join(grid, periods, by = "actor", relationship = "many-to-many") %>%
+    dplyr::filter(.data$start <= .data$.p_end & (is.na(.data$end) | .data$end >= .data$.p_start)) %>%
+    dplyr::distinct(.data$actor, .data$.k)
+  active_key <- paste(hits$actor, times[hits$.k], sep = "\r")
+  (paste(actor1, time_id, sep = "\r") %in% active_key) &
+    (paste(actor2, time_id, sep = "\r") %in% active_key)
+}
+
+#' Error on events in inactive dyad-periods
+#'
+#' @param result The aggregated table, with `.time` and `active`.
+#' @param classes The count columns.
+#' @param time_col The time column's name, for the message.
+#' @param fn The calling function.
+#' @noRd
+.check_inactive_events <- function(result, classes, time_col, fn) {
+  total <- rowSums(as.matrix(result[classes]))
+  bad <- !result$active & total > 0
+  if (!any(bad)) {
+    return(invisible(TRUE))
+  }
+  show <- utils::head(which(bad), 10)
+  stop(
+    fn, ": ", sum(total[bad]), " event(s) in ", sum(bad), " dyad-period(s) in which an actor is ",
+    "not active under `actor_periods`: ",
+    paste0(result$dyad[show], " ", time_col, " ", result$.time[show], " (", total[show], ")",
+           collapse = ", "),
+    if (sum(bad) > 10) sprintf(", and %d more", sum(bad) - 10) else "",
+    ". Drop these events before aggregating (for GDELT, with filter_gdelt_states(); at a ",
+    "resolution finer than yearly, also use gdelt_state_spells(whole_years = TRUE)).",
+    call. = FALSE
+  )
 }
 
 #' Parse a `start`/`end` window bound

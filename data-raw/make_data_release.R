@@ -3,7 +3,7 @@
 # Builds the files of one bilatr-data release (the estimated theta
 # trajectories, published outside the package in the public repository
 # doktorandahl/bilatr-data and archived on Zenodo; fetched in R with
-# bilatr_theta()).
+# download_bilatr_theta()).
 #
 # Writes to dev/data_release/<version>/:
 #   theta_directed.rds, theta_undirected.rds        the tibbles, xz-compressed
@@ -31,6 +31,13 @@ release_date <- "2026-11-04"
 bilatr_version <- "1.0.0"
 src_dir <- "data"
 src_commit <- "12733c7" # last commit with data/theta_*.rda
+# Zenodo DOIs. The concept DOI (all versions) is fixed. A version's own DOI
+# is minted only when its GitHub release is archived, so `version_doi` is NA
+# while building a release; fill it in afterwards (dev/data_release/
+# POST_RELEASE_EDITS.md) and in R/theta_data.R.
+concept_doi <- "10.5281/zenodo.23951818"
+version_doi <- c(v2026.11 = "10.5281/zenodo.23951819")[version]
+badge <- "https://zenodo.org/badge/1445654273.svg"
 out <- file.path("dev", "data_release", version)
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
 
@@ -138,8 +145,19 @@ known_gaps <- c(
   "January 2027."
 )
 
+doi_lines <- c(
+  if (!is.na(version_doi)) {
+    sprintf("- `%s`: [doi:%s](https://doi.org/%s)", version, version_doi, version_doi)
+  } else {
+    sprintf("- `%s`: see the Zenodo record (the DOI is minted on release)", version)
+  },
+  sprintf("- all versions: [doi:%s](https://doi.org/%s)", concept_doi, concept_doi)
+)
+
 readme <- c(
   paste("#", title),
+  "",
+  sprintf("[![DOI](%s)](https://doi.org/%s)", badge, concept_doi),
   "",
   sprintf("Data version **%s** (released %s), built for the R package", version, release_date),
   sprintf("[bilatr](https://github.com/doktorandahl/bilatr) %s.", bilatr_version),
@@ -166,7 +184,7 @@ readme <- c(
   "",
   "```r",
   "library(bilatr)",
-  sprintf("theta <- bilatr_theta(\"directed\", version = \"%s\")", version),
+  sprintf("theta <- download_bilatr_theta(\"directed\", version = \"%s\")", version),
   "```",
   "",
   "Without bilatr:",
@@ -237,10 +255,17 @@ readme <- c(
   "",
   "## How to cite",
   "",
-  "Please cite the data release by its DOI (see the Zenodo record for the",
-  "version you use; a DOI for all versions is in `CITATION.cff`), and the",
-  "bilatr package (`citation(\"bilatr\")` in R). The underlying events are",
-  "GDELT's; please also cite:",
+  "Please cite the data release by the DOI of the version you use:",
+  "",
+  doi_lines,
+  "",
+  "Randahl, D., Lundgren, M. and Vikberg, C. (2026). bilatr theta",
+  "trajectories: latent bilateral relations, 1991-2025. Data release",
+  sprintf("%s. Zenodo. <https://doi.org/%s>", version,
+          if (is.na(version_doi)) concept_doi else version_doi),
+  "",
+  "Please also cite the bilatr package (`citation(\"bilatr\")` in R). The",
+  "underlying events are GDELT's; please also cite:",
   "",
   "- Leetaru, K. and Schrodt, P. A. (2013). \"GDELT: Global Data on Events,",
   "  Location and Tone, 1979-2012.\" Paper presented at the International",
@@ -309,7 +334,16 @@ cff <- c(
   "license: CC-BY-4.0",
   "repository-code: \"https://github.com/doktorandahl/bilatr-data\"",
   "url: \"https://github.com/doktorandahl/bilatr\"",
-  "# doi: 10.5281/zenodo.XXXXXXX   (concept DOI; added once the Zenodo record exists)",
+  sprintf("doi: %s", concept_doi),
+  "identifiers:",
+  "  - type: doi",
+  sprintf("    value: %s", concept_doi),
+  "    description: \"Concept DOI: all versions of the data release\"",
+  if (!is.na(version_doi)) c(
+    "  - type: doi",
+    sprintf("    value: %s", version_doi),
+    sprintf("    description: \"Version DOI of data release %s\"", version)
+  ),
   "authors:",
   unlist(lapply(authors, function(a) c(
     sprintf("  - family-names: \"%s\"", a$family),

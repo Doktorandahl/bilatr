@@ -15,6 +15,7 @@ diagnose_and_extract_bilatr(
   tiers = 1:3,
   event_classes = NULL,
   class_labels = NULL,
+  active_only = TRUE,
   max_memory_mb = 8192,
   chunk_size = NULL,
   n_cores = 1L
@@ -66,6 +67,12 @@ vector named by event class, or an unnamed one in \code{event_classes}
 order. Ignored when \code{event_classes} is \code{NULL} (nothing to key labels
 by). \code{NULL} (default) uses \code{event_class_labels(stan_data)} (see
 \code{\link[=event_class_labels]{event_class_labels()}}).}
+
+\item{active_only}{\code{TRUE} (default) leaves inactive dyad-periods out of
+\code{theta}, \code{theta_filtered} and \code{theta_filtered_sd} (see
+\code{\link[=extract_theta]{extract_theta()}}, "Inactive periods"); \code{FALSE} keeps them. The
+Tier 3 diagnostics always cover active periods only, when the Stan
+data marks them (see \code{\link[=diagnose_convergence]{diagnose_convergence()}}).}
 
 \item{max_memory_mb}{CSV files with Tier 3 only. The memory budget, in
 MB, that sets how many Tier 3 variables are read per chunk. Defaults

@@ -1,7 +1,8 @@
 citHeader(paste(
-  "To cite bilatr, the method or the software, please use the entry below.",
-  "For the estimated theta trajectories, please also cite the data release",
-  "and the GDELT references given in ?theta_trajectories."
+  "To cite the bilatr method or software, please use the first entry below.",
+  "When you use the estimated theta trajectories (download_bilatr_theta()),",
+  "please cite the data release (second entry) and the GDELT references",
+  "given in ?theta_trajectories."
 ))
 
 bibentry(
@@ -19,5 +20,24 @@ bibentry(
     "Randahl, D., Lundgren, M. and Vikberg, C. (2026).",
     "bilatr: Hierarchical Dynamic IRT Models for Latent Bilateral Relations.",
     "R package version 1.0.0, <https://github.com/doktorandahl/bilatr>."
+  )
+)
+
+bibentry(
+  bibtype = "Misc",
+  title = "{bilatr} theta trajectories: latent bilateral relations, 1991-2025",
+  author = c(
+    person("David", "Randahl", comment = c(ORCID = "0000-0003-1069-6067")),
+    person("Magnus", "Lundgren", comment = c(ORCID = "0000-0002-9961-3645")),
+    person("Carl", "Vikberg", comment = c(ORCID = "0000-0001-7523-9196"))
+  ),
+  year = "2026",
+  howpublished = "Zenodo",
+  note = "Data release v2026.11",
+  doi = "10.5281/zenodo.23951819",
+  textVersion = paste(
+    "Randahl, D., Lundgren, M. and Vikberg, C. (2026).",
+    "bilatr theta trajectories: latent bilateral relations, 1991-2025.",
+    "Data release v2026.11. Zenodo. doi:10.5281/zenodo.23951819."
   )
 )

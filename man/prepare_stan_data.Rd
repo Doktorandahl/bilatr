@@ -12,6 +12,7 @@ prepare_stan_data(
   actor1 = "actor1",
   actor2 = "actor2",
   w_send = "w_send",
+  active = "active",
   directed = attr(data, "directed") \%||\% TRUE,
   reference_category = NULL,
   min_n_events = 1,
@@ -37,12 +38,12 @@ present, with a \code{message()}; otherwise errors.}
 
 \item{action_cols}{The action-count columns: a character vector or a
 tidyselect expression. \code{NULL} (default) means every column except
-the dyad/actor/time/\code{w_send} columns, with a warning; see
+the dyad/actor/time/\code{w_send}/\code{active} columns, with a warning; see
 \code{?bilatr_dyad_period_data}.}
 
-\item{dyad, actor1, actor2, w_send}{Names of the dyad, actor and
-sender-share columns; see \code{?bilatr_dyad_period_data}. The actor and
-\code{w_send} columns are optional.}
+\item{dyad, actor1, actor2, w_send, active}{Names of the dyad, actor,
+sender-share and activity columns; see \code{?bilatr_dyad_period_data}. The
+actor, \code{w_send} and \code{active} columns are optional.}
 
 \item{directed}{Whether the dyads are directed. Defaults to
 \code{attr(data, "directed")} if set (by \code{\link[=aggregate_events]{aggregate_events()}}), else
@@ -154,7 +155,8 @@ Attributes:
 \item \code{dyad_ids}: one row per dyad-period, with \code{dyad_id}, \code{time_index},
 \code{dyad}, \code{dyad2} (the undirected dyad key), \code{actor1}, \code{actor2}
 (\code{dyad2}/\code{actor1}/\code{actor2} are \code{NA} without actor columns), the time
-column, and any \code{time_labels} columns; see \code{\link[=extract_theta]{extract_theta()}};
+column, \code{active} (see "Inactive periods"), and any \code{time_labels}
+columns; see \code{\link[=extract_theta]{extract_theta()}};
 \item \code{event_classes}: the action-column names, in \code{Y}'s order;
 \item \code{country_codes}: the countries in \code{ctry_a}/\code{ctry_b} index order
 (\code{NULL} without actor columns); see \code{\link[=extract_gamma]{extract_gamma()}};
@@ -182,7 +184,8 @@ rest in \code{data}'s column order;
 \item fills every dyad over the whole \code{time_range} (by default
 \code{min(time):max(time)} of the table), missing periods becoming
 all-zero and unobserved (\code{is_obs = 0}; a period is observed when its
-counts sum to more than zero);
+counts sum to more than zero), and sets each period's \code{active} flag
+(see "Inactive periods");
 \item drops dyads with fewer than \code{min_n_events} events in total;
 \item if both actor columns are present, builds the country index
 (\code{n_countries}, \code{ctry_a}, \code{ctry_b}) and \code{w_send}, with a \code{message()}
@@ -190,6 +193,30 @@ reporting \code{n_countries} and the dyads-per-country distribution;
 \item resolves \code{filter_dyads} and builds the list and its attributes.
 }
 }
+\section{Inactive periods}{
+
+A table with an \code{active} column (from \code{\link[=aggregate_events]{aggregate_events()}}'s
+\code{actor_periods}; see \code{?bilatr_dyad_period_data}) marks dyad-periods in
+which an actor does not exist. They have zero counts, so they are
+unobserved (\code{is_obs = 0}) like any period without events, and the Stan
+data list is exactly what it would be without the column; \code{min_n_events}
+counts events in active periods only, which is the same thing. The flag
+is carried into the \code{dyad_ids} attribute, so that \code{\link[=extract_theta]{extract_theta()}} and
+\code{\link[=diagnose_and_extract_bilatr]{diagnose_and_extract_bilatr()}} can leave these periods out.
+
+The \code{dyad_ids} attribute always has an \code{active} column. A period that
+the grid adds (one absent from the table, e.g. beyond its range when
+\code{time_range} is wider) is:
+\itemize{
+\item \code{TRUE} when the table has no \code{active} column, so every period is
+active, as before;
+\item otherwise, when \code{data} carries \code{\link[=aggregate_events]{aggregate_events()}}'s \code{actor_periods}
+attribute (and its \code{resolution}, and actor columns), active when both
+actors are active at some point in the period, by the same rule;
+\item otherwise \code{TRUE}.
+}
+}
+
 \section{Size}{
 
 \code{Y} is a dense \verb{D x T x A} integer array, about \code{D * T * A * 4} bytes

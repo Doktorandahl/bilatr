@@ -11,6 +11,9 @@ count_gdelt_actor_types(
   cross_border = TRUE,
   root_events_only = FALSE,
   date_range = NULL,
+  recover_country_codes = FALSE,
+  states_only = FALSE,
+  harmonize_codes = TRUE,
   chunk_size = 100000L
 )
 }
@@ -40,6 +43,20 @@ files"), so this keeps the events \emph{dated} in the range among the
 files actually read; it does not recover events dated in the range
 but added on days outside those files.}
 
+\item{recover_country_codes}{\code{FALSE} (default), or \code{TRUE} to fill an
+empty \code{Actor1CountryCode}/\code{Actor2CountryCode} from the actor code's
+three-character prefix when that prefix is a code in
+\link{gdelt_countries}; see "Country codes and states".}
+
+\item{states_only}{\code{FALSE} (default), or \code{TRUE} to keep only events
+between two states in the event's year, by \code{\link[=filter_gdelt_states]{filter_gdelt_states()}};
+see "Country codes and states".}
+
+\item{harmonize_codes}{With \code{states_only = TRUE}: \code{TRUE} (default)
+rewrites the actor country codes to ISO3 codes (e.g. \code{ROM} to \code{ROU})
+and drops rows that this turns into self-dyads; \code{FALSE} keeps GDELT's
+codes. Ignored when \code{states_only = FALSE}.}
+
 \item{chunk_size}{Rows per \code{readr::read_tsv_chunked()} chunk. The
 default, 100,000, is ten times readr's own, since GDELT backfiles run
 to millions of rows. Memory use depends on the rows kept, not on
@@ -57,7 +74,10 @@ distinct type code it carries on each side, so a row with \code{GOV}/\code{MIL}
 on Actor1 and \code{SPY} on Actor2 contributes to both \verb{(GOV, SPY)} and
 \verb{(MIL, SPY)}). Applies the same \code{countries}/\code{cross_border}/
 \code{root_events_only}/\code{date_range} filters as \code{\link[=read_gdelt]{read_gdelt()}}, but not
-\code{actor_types}, since its purpose is to tune that argument.
+\code{actor_types}, since its purpose is to tune that argument. The
+country-code steps (\code{recover_country_codes}, \code{states_only},
+\code{harmonize_codes}) work as in \code{\link[=read_gdelt]{read_gdelt()}} (see its "Country codes
+and states"), with their messages.
 }
 \examples{
 \dontshow{if (interactive()) withAutoprint(\{ # examplesIf}

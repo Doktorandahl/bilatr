@@ -159,6 +159,12 @@ NULL
 #' via `"all"`) gives `recode_cameo()` an existing `QuadClass`, which it
 #' keeps, with a warning.
 #'
+#' `"core"` includes `Actor1Code`/`Actor2Code` and
+#' `Actor1CountryCode`/`Actor2CountryCode`, which
+#' [filter_gdelt_states()] and [read_gdelt()]'s `recover_country_codes`
+#' and `states_only` work on; see [gdelt_countries] for what the country
+#' codes mean.
+#'
 #' @param set One of `"core"` (the essentials: identifiers, both actors'
 #'   `Code`/`CountryCode`/`Type1-3Code`, the event-code hierarchy,
 #'   `IsRootEvent`, and the numeric/impact fields), `"actors"` (`"core"`
@@ -476,6 +482,30 @@ gdelt_files <- function(start, end = start) {
 #' GDELT 2.0 (15-minute files, the Mentions and GKG tables) is not
 #' supported by this function or by [gdelt_files()]/[download_gdelt()].
 #'
+#' @section Country codes and states:
+#' `Actor1CountryCode`/`Actor2CountryCode` hold GDELT's CAMEO country
+#' codes, which include regions (`EUR`, `WAF`), territories (`WSB`) and a
+#' few codes that differ from ISO3 (`ROM` for Romania); see
+#' [gdelt_countries]. Each chunk is processed in this order:
+#'
+#' 1. with `recover_country_codes = TRUE`, an empty actor country code is
+#'    filled from the first three characters of `Actor1Code`/`Actor2Code`
+#'    when they are a code in [gdelt_countries] (GDELT leaves the country
+#'    code empty for Romanian actors coded `ROU...`, for example);
+#' 2. the row filters: `cross_border`, `actor_types`, `countries`,
+#'    `root_events_only`, `event_codes`, `date_range`, on the (possibly
+#'    filled) raw codes;
+#' 3. with `states_only = TRUE`, [filter_gdelt_states()]: rows in which
+#'    either actor is not a state in the event's year are dropped and,
+#'    with `harmonize_codes = TRUE`, both actor columns are rewritten to
+#'    ISO3 codes and rows that become self-dyads are dropped. So a
+#'    `ROM`-`ROU` event passes `cross_border`, whose raw codes differ, and
+#'    is then dropped as a Romania-Romania self-dyad.
+#'
+#' Each of the two steps reports once, after the last file, in a
+#' `message()`: the actor sides filled, per code, in the rows returned;
+#' and [filter_gdelt_states()]'s counts.
+#'
 #' @param files Character vector of paths to GDELT export zips (or, for a
 #'   non-zipped file, a plain tab-separated path). Must be non-empty.
 #' @param columns Character vector of column names to keep in the result
@@ -523,6 +553,17 @@ gdelt_files <- function(start, end = start) {
 #'   files"), so this keeps the events *dated* in the range among the
 #'   files actually read; it does not recover events dated in the range
 #'   but added on days outside those files.
+#' @param recover_country_codes `FALSE` (default), or `TRUE` to fill an
+#'   empty `Actor1CountryCode`/`Actor2CountryCode` from the actor code's
+#'   three-character prefix when that prefix is a code in
+#'   [gdelt_countries]; see "Country codes and states".
+#' @param states_only `FALSE` (default), or `TRUE` to keep only events
+#'   between two states in the event's year, by [filter_gdelt_states()];
+#'   see "Country codes and states".
+#' @param harmonize_codes With `states_only = TRUE`: `TRUE` (default)
+#'   rewrites the actor country codes to ISO3 codes (e.g. `ROM` to `ROU`)
+#'   and drops rows that this turns into self-dyads; `FALSE` keeps GDELT's
+#'   codes. Ignored when `states_only = FALSE`.
 #' @param chunk_size Rows per `readr::read_tsv_chunked()` chunk. The
 #'   default, 100,000, is ten times readr's own, since GDELT backfiles run
 #'   to millions of rows. Memory use depends on the rows kept, not on
@@ -535,6 +576,9 @@ gdelt_files <- function(start, end = start) {
 #' status <- download_gdelt("2020-01-01", dest_dir = dir)
 #' events <- read_gdelt(status$path)
 #' events
+#'
+#' # state-to-state events only, with ISO3 country codes
+#' states <- read_gdelt(status$path, recover_country_codes = TRUE, states_only = TRUE)
 #' unlink(dir, recursive = TRUE)
 #' @export
 read_gdelt <- function(
@@ -548,6 +592,9 @@ read_gdelt <- function(
   root_events_only = FALSE,
   event_codes = NULL,
   date_range = NULL,
+  recover_country_codes = FALSE,
+  states_only = FALSE,
+  harmonize_codes = TRUE,
   chunk_size = 100000L
 ) {
   actor_type_match <- match.arg(actor_type_match)
@@ -556,6 +603,7 @@ read_gdelt <- function(
   if (length(files) == 0) {
     stop("read_gdelt(): `files` must be a non-empty character vector of paths.", call. = FALSE)
   }
+  .check_gdelt_country_flags(recover_country_codes, states_only, harmonize_codes, "read_gdelt()")
 
   schema <- .gdelt_schema()
   if (identical(columns, "all")) {
@@ -590,8 +638,10 @@ read_gdelt <- function(
     "Actor1CountryCode", "Actor2CountryCode",
     "Actor1Type1Code", "Actor1Type2Code", "Actor1Type3Code",
     "Actor2Type1Code", "Actor2Type2Code", "Actor2Type3Code",
-    "IsRootEvent", "EventCode", "SQLDATE"
+    "IsRootEvent", "EventCode", "SQLDATE",
+    if (recover_country_codes) c("Actor1Code", "Actor2Code")
   )
+  country_steps <- .gdelt_country_steps(recover_country_codes, states_only, harmonize_codes)
 
   results <- purrr::map(files, function(f) {
     .read_gdelt_one(
@@ -601,11 +651,82 @@ read_gdelt <- function(
       countries = countries, country_match = country_match,
       cross_border = cross_border, root_events_only = root_events_only,
       event_codes = event_codes, date_bounds = date_bounds,
-      chunk_size = chunk_size
+      chunk_size = chunk_size, country_steps = country_steps
     )
   })
 
+  .gdelt_country_steps_report(country_steps, "read_gdelt()")
   dplyr::bind_rows(results)
+}
+
+#' Check `recover_country_codes`/`states_only`/`harmonize_codes`
+#' @noRd
+.check_gdelt_country_flags <- function(recover_country_codes, states_only, harmonize_codes, caller) {
+  for (arg in c("recover_country_codes", "states_only", "harmonize_codes")) {
+    if (!rlang::is_bool(get(arg))) {
+      stop(caller, ": `", arg, "` must be TRUE or FALSE.", call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+#' Per-call state for the country-code steps of the GDELT readers
+#'
+#' An environment, so the chunk callbacks can accumulate counts across
+#' chunks and files.
+#' @noRd
+.gdelt_country_steps <- function(recover_country_codes, states_only, harmonize_codes) {
+  env <- new.env(parent = emptyenv())
+  env$recover <- recover_country_codes
+  env$states_only <- states_only
+  env$harmonize <- harmonize_codes
+  env$filled <- stats::setNames(integer(0), character(0))
+  env$state_stats <- NULL
+  env
+}
+
+#' Apply the country-code steps around `.gdelt_apply_filters()`
+#'
+#' Recovery first, then `filter_rows` (the row filters), then the state
+#' filter; see ?read_gdelt, "Country codes and states".
+#'
+#' @param chunk A raw chunk.
+#' @param steps From [.gdelt_country_steps()].
+#' @param filter_rows A function of a chunk applying the row filters.
+#' @param caller The calling function.
+#' @return The kept rows, without the helper columns.
+#' @noRd
+.gdelt_country_filter_chunk <- function(chunk, steps, filter_rows, caller) {
+  if (steps$recover) {
+    chunk <- .gdelt_recover_country_codes(chunk)
+  }
+  chunk <- filter_rows(chunk)
+  if (steps$states_only) {
+    res <- .gdelt_filter_states(
+      chunk, "Actor1CountryCode", "Actor2CountryCode", "SQLDATE", steps$harmonize, caller
+    )
+    chunk <- res$data
+    steps$state_stats <- .gdelt_merge_state_stats(steps$state_stats, res$stats)
+  }
+  if (steps$recover) {
+    filled <- .count_values(c(stats::na.omit(chunk$.filled1), stats::na.omit(chunk$.filled2)))
+    steps$filled <- .add_counts(steps$filled, filled)
+    chunk$.filled1 <- NULL
+    chunk$.filled2 <- NULL
+  }
+  chunk
+}
+
+#' Emit the country-code steps' messages, once per call
+#' @noRd
+.gdelt_country_steps_report <- function(steps, caller) {
+  if (steps$recover) {
+    message(.gdelt_recover_message(steps$filled, caller))
+  }
+  if (steps$states_only && !is.null(steps$state_stats)) {
+    message(.gdelt_states_message(steps$state_stats, caller))
+  }
+  invisible(steps)
 }
 
 #' Read and filter one GDELT file (the per-file worker for [read_gdelt()])
@@ -622,7 +743,8 @@ read_gdelt <- function(
                              actor_types, actor_type_match,
                              countries, country_match,
                              cross_border, root_events_only,
-                             event_codes, date_bounds, chunk_size = 100000L) {
+                             event_codes, date_bounds, chunk_size = 100000L,
+                             country_steps = .gdelt_country_steps(FALSE, FALSE, TRUE)) {
   expected_n <- .gdelt_filename_ncols(file)
   first_line <- .gdelt_first_line(file, "read_gdelt()")
   actual_n <- .gdelt_count_fields(first_line)
@@ -646,10 +768,12 @@ read_gdelt <- function(
   readr::read_tsv_chunked(
     file,
     callback = readr::SideEffectChunkCallback$new(function(chunk, pos) {
-      filtered <- .gdelt_apply_filters(
-        chunk, actor_types, actor_type_match, countries, country_match,
-        cross_border, root_events_only, event_codes, date_bounds
-      )
+      filtered <- .gdelt_country_filter_chunk(chunk, country_steps, function(x) {
+        .gdelt_apply_filters(
+          x, actor_types, actor_type_match, countries, country_match,
+          cross_border, root_events_only, event_codes, date_bounds
+        )
+      }, "read_gdelt()")
       if (nrow(filtered) > 0) {
         chunks[[length(chunks) + 1]] <<- filtered[read_cols]
       }
@@ -982,7 +1106,8 @@ download_gdelt <- function(
 .count_gdelt_actor_types_one <- function(file, schema,
                                           countries, country_match,
                                           cross_border, root_events_only,
-                                          date_bounds, chunk_size = 100000L) {
+                                          date_bounds, chunk_size = 100000L,
+                                          country_steps = .gdelt_country_steps(FALSE, FALSE, TRUE)) {
   expected_n <- .gdelt_filename_ncols(file)
   first_line <- .gdelt_first_line(file, "count_gdelt_actor_types()")
   actual_n <- .gdelt_count_fields(first_line)
@@ -997,13 +1122,15 @@ download_gdelt <- function(
   readr::read_tsv_chunked(
     file,
     callback = readr::SideEffectChunkCallback$new(function(chunk, pos) {
-      filtered <- .gdelt_apply_filters(
-        chunk,
-        actor_types = NULL, actor_type_match = "both",
-        countries = countries, country_match = country_match,
-        cross_border = cross_border, root_events_only = root_events_only,
-        event_codes = NULL, date_bounds = date_bounds
-      )
+      filtered <- .gdelt_country_filter_chunk(chunk, country_steps, function(x) {
+        .gdelt_apply_filters(
+          x,
+          actor_types = NULL, actor_type_match = "both",
+          countries = countries, country_match = country_match,
+          cross_border = cross_border, root_events_only = root_events_only,
+          event_codes = NULL, date_bounds = date_bounds
+        )
+      }, "count_gdelt_actor_types()")
       if (nrow(filtered) > 0) {
         chunks[[length(chunks) + 1]] <<- .gdelt_count_actor_types_chunk(filtered)
       }
@@ -1033,7 +1160,10 @@ download_gdelt <- function(
 #' on Actor1 and `SPY` on Actor2 contributes to both `(GOV, SPY)` and
 #' `(MIL, SPY)`). Applies the same `countries`/`cross_border`/
 #' `root_events_only`/`date_range` filters as [read_gdelt()], but not
-#' `actor_types`, since its purpose is to tune that argument.
+#' `actor_types`, since its purpose is to tune that argument. The
+#' country-code steps (`recover_country_codes`, `states_only`,
+#' `harmonize_codes`) work as in [read_gdelt()] (see its "Country codes
+#' and states"), with their messages.
 #'
 #' @inheritParams read_gdelt
 #' @return A tibble of `actor1_type`, `actor2_type`, `n`, sorted by `n`
@@ -1051,12 +1181,18 @@ count_gdelt_actor_types <- function(
   cross_border = TRUE,
   root_events_only = FALSE,
   date_range = NULL,
+  recover_country_codes = FALSE,
+  states_only = FALSE,
+  harmonize_codes = TRUE,
   chunk_size = 100000L
 ) {
   country_match <- match.arg(country_match)
   if (length(files) == 0) {
     stop("count_gdelt_actor_types(): `files` must be a non-empty character vector of paths.", call. = FALSE)
   }
+  caller <- "count_gdelt_actor_types()"
+  .check_gdelt_country_flags(recover_country_codes, states_only, harmonize_codes, caller)
+  country_steps <- .gdelt_country_steps(recover_country_codes, states_only, harmonize_codes)
 
   schema <- .gdelt_schema()
   date_bounds <- .gdelt_resolve_date_range(date_range)
@@ -1067,9 +1203,11 @@ count_gdelt_actor_types <- function(
       schema = schema,
       countries = countries, country_match = country_match,
       cross_border = cross_border, root_events_only = root_events_only,
-      date_bounds = date_bounds, chunk_size = chunk_size
+      date_bounds = date_bounds, chunk_size = chunk_size,
+      country_steps = country_steps
     )
   })
+  .gdelt_country_steps_report(country_steps, caller)
 
   dplyr::bind_rows(per_file) %>%
     dplyr::group_by(.data$actor1_type, .data$actor2_type) %>%

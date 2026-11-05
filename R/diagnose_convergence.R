@@ -466,8 +466,13 @@
 #' assumes), and every other Tier 3 base name gets one row in
 #' `tier3_other` -- no per-dyad breakdown, so no `filter_dyads`
 #' index-translation is needed there either.
+#'
+#' With `dyad_ids` (the Stan data's attribute, with `active`), `theta`
+#' entries of inactive dyad-periods are left out of `tier3`: they are
+#' random-walk extrapolations with no data (see ?extract_theta, "Inactive
+#' periods").
 #' @noRd
-.compute_tier3 <- function(summ, n_dt_tbl, rhat_threshold, ess_threshold) {
+.compute_tier3 <- function(summ, n_dt_tbl, rhat_threshold, ess_threshold, dyad_ids = NULL) {
   tier3_raw <- summ %>%
     dplyr::filter(tier == 3L) %>%
     dplyr::mutate(
@@ -478,6 +483,10 @@
   theta_joined <- tier3_raw %>%
     dplyr::filter(.data$base_name == "theta") %>%
     dplyr::left_join(n_dt_tbl, by = "dyad_id")
+  if (!is.null(dyad_ids) && "active" %in% names(dyad_ids)) {
+    inactive <- dyad_ids[!dyad_ids$active, c("dyad_id", "time_index"), drop = FALSE]
+    theta_joined <- dplyr::anti_join(theta_joined, inactive, by = c("dyad_id", "time_index"))
+  }
 
   tier3 <- theta_joined %>%
     dplyr::group_by(dyad_id, n_dt) %>%
@@ -552,12 +561,15 @@
 #'   trace of the section at all.
 #' @param country_codes Optional character vector for labeling
 #'   `gamma`'s `country_index`; see [.compute_gamma_tier()].
+#' @param dyad_ids Optional `dyad_ids` attribute of the Stan data; with an
+#'   `active` column, Tier 3 covers active periods only.
 #' @return A list of class `bilatr_diagnostics`; see
 #'   [diagnose_convergence()]'s `@return` for the element-by-element
 #'   description.
 #' @noRd
 .assemble_bilatr_diagnostics <- function(summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
-                                          has_gamma = FALSE, country_codes = NULL) {
+                                          has_gamma = FALSE, country_codes = NULL,
+                                          dyad_ids = NULL) {
   tier1 <- if (1L %in% tiers) {
     .compute_tier1(summ, rhat_threshold, ess_threshold, exclude_pattern = if (has_gamma) "^gamma\\[" else NULL)
   } else {
@@ -570,7 +582,13 @@
   }
   tier2_result <- if (2L %in% tiers) .compute_tier2(summ, n_dt_tbl) else NULL
   tier2 <- tier2_result$tier2
-  tier3_result <- if (3L %in% tiers) .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold) else NULL
+  tier3_active_only <- !is.null(dyad_ids) && "active" %in% names(dyad_ids)
+  tier3_result <- if (3L %in% tiers) {
+    .compute_tier3(summ, n_dt_tbl, rhat_threshold, ess_threshold,
+                   dyad_ids = if (tier3_active_only) dyad_ids)
+  } else {
+    NULL
+  }
   tier3 <- tier3_result$tier3
   tier3_other <- tier3_result$tier3_other
 
@@ -593,6 +611,8 @@
     n_tier3_other_groups = if (!is.null(tier3_other)) nrow(tier3_other) else NA_integer_,
     n_tier3_other_rhat_above = if (!is.null(tier3_other)) sum(tier3_other$n_rhat_above, na.rm = TRUE) else NA_integer_,
     n_tier3_other_ess_below = if (!is.null(tier3_other)) sum(tier3_other$n_ess_below, na.rm = TRUE) else NA_integer_,
+    tier3_active_only = tier3_active_only,
+    n_tier3_inactive_excluded = if (3L %in% tiers && tier3_active_only) sum(!dyad_ids$active) else 0L,
     rhat_threshold = rhat_threshold,
     ess_threshold = ess_threshold
   )
@@ -1181,6 +1201,15 @@
 #' their prior, so their R-hat is meaningless; they are left out of every
 #' tier.
 #'
+#' When the fit's Stan data marks inactive dyad-periods (an `active`
+#' column in its `dyad_ids` attribute; see [aggregate_events()], "Actor
+#' periods"), Tier 3 summarizes active periods only: an inactive period's
+#' \eqn{\theta} is a random-walk extrapolation with no data, so its
+#' R-hat and ESS say nothing about the fit to the data. `summary` then has
+#' `tier3_active_only = TRUE` and `n_tier3_inactive_excluded`, the number
+#' of dyad-periods left out. Without the Stan data (a `draws` object), or
+#' with Stan data that has no `active` column, every period is included.
+#'
 #' `tiers` limits which tiers are computed: quantities outside the
 #' requested tiers are not read at all, rather than read and hidden. Tier
 #' 3 usually has by far the most quantities (one per dyad-period), so
@@ -1343,7 +1372,7 @@ diagnose_convergence <- function(
   # The Stan data is looked up only when it is needed: for the model
   # (when not given) and for the default n_dt.
   needs_n_dt <- any(c(2L, 3L) %in% tiers) && is.null(n_dt)
-  stan_data <- if (needs_n_dt || is.null(stan_model) || !is.null(n_dt)) {
+  stan_data <- if (needs_n_dt || is.null(stan_model) || !is.null(n_dt) || 3L %in% tiers) {
     .stan_data_from_fit(fit, NULL, caller, required = FALSE)
   }
   # stan_model only decides has_gamma below: Rhat/ESS are invariant to
@@ -1375,7 +1404,8 @@ diagnose_convergence <- function(
 
   .assemble_bilatr_diagnostics(
     summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
-    has_gamma = has_gamma, country_codes = attr(stan_data, "country_codes")
+    has_gamma = has_gamma, country_codes = attr(stan_data, "country_codes"),
+    dyad_ids = attr(stan_data, "dyad_ids", exact = TRUE)
   )
 }
 
@@ -1472,8 +1502,13 @@ print.bilatr_diagnostics <- function(x, n_tier2 = 20, n_gamma = 10, ...) {
     }, error = function(e) NA_real_)
 
     cat(sprintf(
-      "== Tier 3: per-dyad-period latent states (theta, aggregated; %d dyads) ==\n",
-      x$summary$n_dyads_tier3
+      "== Tier 3: per-dyad-period latent states (theta, aggregated; %d dyads%s) ==\n",
+      x$summary$n_dyads_tier3,
+      if (isTRUE(x$summary$tier3_active_only)) {
+        sprintf("; active periods only, %d inactive left out", x$summary$n_tier3_inactive_excluded)
+      } else {
+        ""
+      }
     ))
     cat(sprintf(
       "%.0f%% of dyads have min theta ESS below threshold (%s)%s.\n",

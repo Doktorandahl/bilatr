@@ -21,7 +21,7 @@ test_that("a valid table passes and returns the resolved column names invisibly"
   expect_invisible(res <- validate(valid_dp(), action_cols = c(coop, conf)))
   expect_identical(res, list(
     dyad = "dyad", time = "period", action_cols = c("coop", "conf"),
-    actor1 = "actor1", actor2 = "actor2", w_send = "w_send"
+    actor1 = "actor1", actor2 = "actor2", w_send = "w_send", active = NULL
   ))
 })
 
@@ -79,7 +79,7 @@ test_that("K >= 2 action columns are required", {
 })
 
 test_that("action_cols may not include a role column", {
-  expect_error(validate(valid_dp(), action_cols = c(coop, conf, period)), "includes the dyad/actor/time/w_send column")
+  expect_error(validate(valid_dp(), action_cols = c(coop, conf, period)), "includes the dyad/actor/time/w_send/active column")
 })
 
 test_that("several broken rules are reported in a single error", {

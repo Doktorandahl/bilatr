@@ -112,7 +112,8 @@ observed spread, so it is resolved cheapest first: an explicit
 of a \code{theta_summary} tibble's \code{mean} column (e.g. \code{\link[=extract_theta]{extract_theta()}}'s
 output -- already in memory or on disk in most workflows), and only as
 a last resort a small draw-and-dyad subsample read directly off \code{fit}
-(with a \code{message()} noting the fallback). The default range is the
+(with a \code{message()} noting the fallback; it uses the sampled dyads'
+active periods only, see \code{\link[=extract_theta]{extract_theta()}}, "Inactive periods"). The default range is the
 1st-99th percentile of observed \code{theta} (\code{quantile_probs}), not the
 full range, so one extreme dyad does not flatten the plot.
 

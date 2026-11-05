@@ -4,8 +4,9 @@
 # package. Documented in ?theta_trajectories.
 
 # ---------------------------------------------------------------------------
-# Release coordinates. The DOI and Zenodo constants are filled in once the
-# Zenodo record of each data release exists; NA means "not yet available".
+# Release coordinates. Each data release adds its version DOI and its Zenodo
+# file URL here (from the record's `files` entries at
+# https://zenodo.org/api/records/<id>); NA means "not available".
 # ---------------------------------------------------------------------------
 
 #' Data release coordinates
@@ -20,16 +21,20 @@
 .BILATR_DATA_DEFAULT_VERSION <- "v2026.11"
 .BILATR_DATA_GITHUB_URL <- "https://github.com/doktorandahl/bilatr-data/releases/download/"
 .BILATR_DATA_API_URL <- "https://api.github.com/repos/doktorandahl/bilatr-data/releases?per_page=100"
-.BILATR_DATA_CONCEPT_DOI <- NA_character_ # PENDING: Zenodo concept DOI (all versions)
-.BILATR_DATA_VERSION_DOI <- c(v2026.11 = NA_character_) # PENDING: Zenodo version DOIs
-.BILATR_DATA_ZENODO_URL <- c(v2026.11 = NA_character_) # PENDING: Zenodo file URLs
+.BILATR_DATA_CONCEPT_DOI <- "10.5281/zenodo.23951818" # all versions
+.BILATR_DATA_VERSION_DOI <- c(v2026.11 = "10.5281/zenodo.23951819")
+.BILATR_DATA_ZENODO_URL <- c(
+  v2026.11 = "https://zenodo.org/records/23951819/files/Doktorandahl/bilatr-data-v2026.11.zip"
+)
 
-#' Download the estimated theta trajectories
+#' Download (once) the estimated theta trajectories
 #'
-#' Downloads one table of the estimated bilateral-relations trajectories
-#' described in [theta_trajectories] from the bilatr data release,
-#' verifies its checksum, caches it, and returns it. Later calls read the
-#' cached copy without using the internet.
+#' Returns one table of the estimated bilateral-relations trajectories
+#' described in [theta_trajectories]. The first call for a table and data
+#' version **downloads** it from the bilatr data release (a few MB),
+#' verifies its checksum and saves it in a local cache, with a message
+#' naming the version, the size and the cache path. Every later call reads
+#' the cached copy, silently and without using the internet.
 #'
 #' The data are published as versioned releases of the public repository
 #' <https://github.com/doktorandahl/bilatr-data>, archived on Zenodo, under
@@ -59,7 +64,7 @@
 #'   the internet even when that version is cached.
 #' @param refresh If `TRUE`, download again even when a cached copy
 #'   exists.
-#' @param quiet If `TRUE`, no progress messages.
+#' @param quiet If `TRUE`, no messages, not even on the first download.
 #'
 #' @return A tibble with one row per dyad-year and the columns described
 #'   in [theta_trajectories].
@@ -67,19 +72,19 @@
 #' @section Errors:
 #' Without an internet connection (and no cached copy), when a file is
 #' missing from the release, or when a checksum does not match,
-#' `bilatr_theta()` stops with an error that names the URL(s) tried and the
+#' `download_bilatr_theta()` stops with an error that names the URL(s) tried and the
 #' cache path. It never returns a partial or unverified table.
 #'
 #' @seealso [theta_trajectories] for what the data are, [theta_sample] for
 #'   a small extract that ships with the package.
 #' @export
 #' @examplesIf interactive()
-#' theta <- bilatr_theta("directed")
+#' theta <- download_bilatr_theta("directed") # downloads once, then reads the cache
 #' subset(theta, dyad %in% c("NOR_SWE", "SWE_NOR") & year >= 2020)
 #'
 #' # the versions available, and which are cached
 #' bilatr_theta_versions()
-bilatr_theta <- function(type = c("directed", "undirected"), version = NULL,
+download_bilatr_theta <- function(type = c("directed", "undirected"), version = NULL,
                          refresh = FALSE, quiet = FALSE) {
   type <- rlang::arg_match(type)
   .check_data_flag(refresh, "refresh")
@@ -90,7 +95,7 @@ bilatr_theta <- function(type = c("directed", "undirected"), version = NULL,
   tryCatch(
     readRDS(path),
     error = function(e) {
-      stop("bilatr_theta(): could not read the cached file `", path, "` (",
+      stop("download_bilatr_theta(): could not read the cached file `", path, "` (",
            conditionMessage(e), "). Use `refresh = TRUE` to download it again.",
            call. = FALSE)
     }
@@ -106,8 +111,8 @@ bilatr_theta <- function(type = c("directed", "undirected"), version = NULL,
 #'
 #' @return A tibble with one row per version, newest first: `version`,
 #'   `published` (the release date, `NA` when offline), `default` (the
-#'   version [bilatr_theta()] uses when `version = NULL`) and `cached`.
-#' @seealso [bilatr_theta()], [bilatr_clear_data_cache()].
+#'   version [download_bilatr_theta()] uses when `version = NULL`) and `cached`.
+#' @seealso [download_bilatr_theta()], [bilatr_clear_data_cache()].
 #' @export
 #' @examplesIf interactive()
 #' bilatr_theta_versions()
@@ -132,13 +137,13 @@ bilatr_theta_versions <- function() {
 
 #' Delete cached theta data
 #'
-#' Deletes the files [bilatr_theta()] cached under
+#' Deletes the files [download_bilatr_theta()] cached under
 #' `tools::R_user_dir("bilatr", "data")`.
 #'
 #' @param version A data version such as `"v2026.11"`, or `NULL` (the
 #'   default) for every cached version.
 #' @return The deleted version directories, invisibly.
-#' @seealso [bilatr_theta()], [bilatr_clear_model_cache()] for compiled
+#' @seealso [download_bilatr_theta()], [bilatr_clear_model_cache()] for compiled
 #'   models.
 #' @export
 #' @examples
@@ -207,12 +212,12 @@ bilatr_clear_data_cache <- function(version = NULL) {
   }
   if (identical(version, "latest")) {
     releases <- tryCatch(.bilatr_data_releases(), error = function(e) {
-      stop("bilatr_theta(version = \"latest\"): ", conditionMessage(e),
+      stop("download_bilatr_theta(version = \"latest\"): ", conditionMessage(e),
            " Use `version = NULL` for the pinned version (", .BILATR_DATA_DEFAULT_VERSION,
            "), or name a cached version.", call. = FALSE)
     })
     if (nrow(releases) == 0) {
-      stop("bilatr_theta(version = \"latest\"): the data repository has no releases.",
+      stop("download_bilatr_theta(version = \"latest\"): the data repository has no releases.",
            call. = FALSE)
     }
     return(releases$version[[1]])
@@ -244,26 +249,41 @@ bilatr_clear_data_cache <- function(version = NULL) {
 
 #' The published `v*` releases, newest first
 #'
-#' Parses the release list without a JSON dependency: each release object
-#' carries exactly one `tag_name`, `prerelease` and `published_at` field.
-#' Drafts and pre-releases are skipped.
+#' Parses the GitHub API's release list with jsonlite. Drafts, pre-releases
+#' and tags that are not data versions are skipped.
 #' @return A tibble with `version` and `published` (a `Date`).
 #' @noRd
 .bilatr_data_releases <- function() {
   json <- .bilatr_data_api_get()
-  field <- function(name, value) {
-    m <- regmatches(json, gregexpr(sprintf("\"%s\"\\s*:\\s*%s", name, value), json))[[1]]
-    sub(sprintf("^\"%s\"\\s*:\\s*", name), "", m)
+  releases <- tryCatch(jsonlite::fromJSON(json, simplifyVector = FALSE),
+                       error = function(e) NULL)
+  if (!is.list(releases) || !is.null(names(releases))) {
+    # The API reports errors as an object, e.g. {"message": "API rate limit exceeded ..."}
+    api_msg <- if (is.list(releases) && is.character(releases$message)) {
+      paste0(" (", releases$message[[1]], ")")
+    } else {
+      ""
+    }
+    stop("Unexpected response from the GitHub API when listing the data releases",
+         api_msg, ".", call. = FALSE)
   }
-  tags <- gsub("\"", "", field("tag_name", "\"[^\"]*\""))
-  pre <- field("prerelease", "(true|false)")
-  published <- gsub("\"", "", field("published_at", "(\"[^\"]*\"|null)"))
-  if (length(tags) != length(pre) || length(tags) != length(published)) {
-    stop("Unexpected response from the GitHub API when listing the data releases.",
-         call. = FALSE)
-  }
-  keep <- grepl("^v[0-9]", tags) & pre == "false" & published != "null"
-  out <- tibble::tibble(version = tags[keep], published = as.Date(substr(published[keep], 1, 10)))
+  string <- function(x) if (is.character(x) && length(x) == 1 && !is.na(x)) x else NULL
+  rows <- lapply(releases, function(r) {
+    if (!is.list(r)) {
+      return(NULL)
+    }
+    tag <- string(r$tag_name)
+    published <- string(r$published_at)
+    if (is.null(tag) || is.null(published) || !grepl("^v[0-9]", tag) ||
+      !identical(r$prerelease, FALSE) || isTRUE(r$draft)) {
+      return(NULL)
+    }
+    tibble::tibble(version = tag, published = as.Date(substr(published, 1, 10)))
+  })
+  out <- dplyr::bind_rows(
+    tibble::tibble(version = character(0), published = as.Date(character(0))),
+    rows
+  )
   out[order(out$published, out$version, decreasing = TRUE, method = "radix"), , drop = FALSE]
 }
 
@@ -369,7 +389,7 @@ bilatr_clear_data_cache <- function(version = NULL) {
     if (file.exists(sums_path)) {
       expected <- .bilatr_data_read_sums(sums_path)[file]
       if (!is.na(expected) && !identical(tolower(unname(sums$fun(path))), unname(expected))) {
-        stop("bilatr_theta(): the cached file `", path, "` does not match its checksum in `",
+        stop("download_bilatr_theta(): the cached file `", path, "` does not match its checksum in `",
              sums_path, "`. Use `refresh = TRUE` to download it again.", call. = FALSE)
       }
     }
@@ -379,7 +399,7 @@ bilatr_clear_data_cache <- function(version = NULL) {
   old <- options(timeout = max(300, getOption("timeout")))
   on.exit(options(old), add = TRUE)
   if (!dir.exists(dir) && !dir.create(dir, recursive = TRUE, showWarnings = FALSE)) {
-    stop("bilatr_theta(): could not create the cache directory `", dir, "`.", call. = FALSE)
+    stop("download_bilatr_theta(): could not create the cache directory `", dir, "`.", call. = FALSE)
   }
 
   # 1. The release's checksum file, written through a temp file.
@@ -405,16 +425,27 @@ bilatr_clear_data_cache <- function(version = NULL) {
   }
   actual <- tolower(unname(sums$fun(tmp)))
   if (!identical(actual, unname(expected))) {
-    stop("bilatr_theta(): the file downloaded from <", url, "> does not match its checksum (",
+    stop("download_bilatr_theta(): the file downloaded from <", url, "> does not match its checksum (",
          sums$file, "), so it was not cached. Nothing was written to `", path, "`.",
          call. = FALSE)
   }
   unlink(c(path, sums_path))
   if (!file.rename(tmp, path) || !file.rename(sums_tmp, sums_path)) {
     unlink(path)
-    stop("bilatr_theta(): could not write to the cache `", path, "`.", call. = FALSE)
+    stop("download_bilatr_theta(): could not write to the cache `", path, "`.", call. = FALSE)
+  }
+  if (!quiet) {
+    message("Downloaded ", file, " (data version ", version, ", ",
+            .bilatr_data_format_size(file.size(path)), ") and cached it at `", path,
+            "`. Later calls read this copy without downloading.")
   }
   path
+}
+
+#' File size for messages, such as "2.3 MB"
+#' @noRd
+.bilatr_data_format_size <- function(bytes) {
+  if (bytes >= 1e6) sprintf("%.1f MB", bytes / 1e6) else sprintf("%.0f kB", max(1, bytes / 1e3))
 }
 
 #' Error message naming every URL tried and the cache path
@@ -422,7 +453,7 @@ bilatr_clear_data_cache <- function(version = NULL) {
 .bilatr_data_fail_msg <- function(file, version, path, what) {
   urls <- vapply(.bilatr_data_sources(file, version), `[[`, "", "url")
   paste0(
-    "bilatr_theta(): ", what, " (data version ", version, ").\n",
+    "download_bilatr_theta(): ", what, " (data version ", version, ").\n",
     "Tried: ", paste0("<", urls, ">", collapse = ", "), ".\n",
     "Cache path: `", path, "`.\n",
     "Check your internet connection, or that the version exists ",

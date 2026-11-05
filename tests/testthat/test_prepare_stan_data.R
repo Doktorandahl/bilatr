@@ -89,7 +89,7 @@ test_that("without actor columns, no country fields; dyad2/actor1/actor2 are NA"
   ))
   expect_null(attr(sd, "country_codes"))
   ids <- attr(sd, "dyad_ids")
-  expect_named(ids, c("dyad_id", "time_index", "dyad", "dyad2", "actor1", "actor2", "week_id"))
+  expect_named(ids, c("dyad_id", "time_index", "dyad", "dyad2", "actor1", "actor2", "week_id", "active"))
   expect_true(all(is.na(ids$dyad2)))
   expect_true(all(is.na(ids$actor1)))
   expect_identical(ids$dyad_id, rep(1:3, each = 6))
@@ -223,7 +223,7 @@ test_that("time_labels are joined into dyad_ids, and the attribute may be droppe
   labels <- tibble::tibble(week_id = 3861:3866, week_start = as.Date("1946-01-01") + (3861:3866) * 7L)
   sd <- prep(synthetic_dp(), time_labels = labels)
   ids <- attr(sd, "dyad_ids")
-  expect_named(ids, c("dyad_id", "time_index", "dyad", "dyad2", "actor1", "actor2", "week_id", "week_start"))
+  expect_named(ids, c("dyad_id", "time_index", "dyad", "dyad2", "actor1", "actor2", "week_id", "active", "week_start"))
   expect_identical(ids$week_start[1], as.Date("2019-12-31"))
   expect_error(prep(synthetic_dp(), time_labels = tibble::tibble(year = 1)), "must be a data frame with a `week_id` column")
 
@@ -362,7 +362,7 @@ test_that("an action_cols attribute naming a missing column falls back to the de
   expect_identical(attr(agg, "action_cols"), c("0", "1", "3"))
   expect_warning(
     sd <- suppressMessages(prepare_stan_data(agg)),
-    "`action_cols` not set; using every column except the dyad/actor/time/w_send columns as action counts: 0, 1"
+    "`action_cols` not set; using every column except the dyad/actor/time/w_send/active columns as action counts: 0, 1"
   )
   expect_identical(attr(sd, "event_classes"), c("0", "1"))
 })

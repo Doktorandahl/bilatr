@@ -22,7 +22,7 @@ theta_sample
 An extract of the trajectories described in \link{theta_trajectories}, for
 examples and vignettes: ten country pairs, both directions of each from
 the directed table and the pair from the undirected table, all years.
-The full tables are downloaded with \code{\link[=bilatr_theta]{bilatr_theta()}}.
+The full tables are downloaded with \code{\link[=download_bilatr_theta]{download_bilatr_theta()}}.
 }
 \details{
 The pairs are United States-China, United States-Russia,
@@ -39,6 +39,6 @@ table(theta_sample$type)
 unique(theta_sample$dyad[theta_sample$type == "undirected"])
 }
 \seealso{
-\link{theta_trajectories}, \code{\link[=bilatr_theta]{bilatr_theta()}}.
+\link{theta_trajectories}, \code{\link[=download_bilatr_theta]{download_bilatr_theta()}}.
 }
 \keyword{datasets}

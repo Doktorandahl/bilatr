@@ -1,0 +1,17 @@
+country,decade,criterion,n
+BIH,1990s,geo_only,4754
+BIH,2000s,geo_only,1540
+BIH,2010s,geo_only,1287
+BIH,2020s,geo_only,361
+KOS,1990s,geo_only,393
+KOS,2000s,geo_only,493
+KOS,2010s,geo_only,2857
+KOS,2020s,geo_only,1266
+MNE,1990s,geo_only,343
+MNE,2000s,geo_only,766
+MNE,2010s,geo_only,1208
+MNE,2020s,geo_only,480
+SVN,1990s,geo_only,1040
+SVN,2000s,geo_only,2243
+SVN,2010s,geo_only,2277
+SVN,2020s,geo_only,1102

@@ -2,7 +2,7 @@
 #
 # NOTE: since bilatr 1.0.0 the theta tables are no longer in data/. They are
 # published as a data release (data-raw/make_data_release.R, fetched with
-# bilatr_theta()); data/theta_sample.rda is built by
+# download_bilatr_theta()); data/theta_sample.rda is built by
 # data-raw/make_theta_sample.R. This script is kept as the record of how
 # the v2026.11 tables were first saved.
 #

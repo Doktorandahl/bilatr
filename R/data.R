@@ -71,17 +71,160 @@
 #' table(cameo_lookup$QuadClassName, cameo_lookup$PentaClass)
 "cameo_lookup"
 
+#' GDELT country codes: names, entity types and state-system membership
+#'
+#' One row per country code that GDELT 1.0 can write in
+#' `Actor1CountryCode`/`Actor2CountryCode`: every code in GDELT's CAMEO
+#' country lookup, every code observed in the full GDELT 1.0 event archive
+#' for 1991-2025, and seven actor-code prefixes that GDELT leaves without a
+#' country code (see "Codes GDELT does not write"). The helpers
+#' [gdelt_country_name()], [gdelt_country_type()], [gdelt_is_state()],
+#' [gdelt_country_iso3()], [filter_gdelt_states()] and
+#' [gdelt_state_spells()] are built on it.
+#'
+#' @format A tibble with 267 rows and 9 columns:
+#' \describe{
+#'   \item{gdelt_code}{Character. The code as GDELT writes it (three
+#'     upper-case letters); unique.}
+#'   \item{name}{Character. GDELT's label, cleaned; see `name_source`.}
+#'   \item{name_source}{Character. `"cameo_lookup"` (GDELT's label as
+#'     is), `"cameo_lookup_corrected"` (three corrections: `COL`
+#'     "Columbia" to "Colombia", `REU` "Runion" to "Reunion", `COG`
+#'     "People's Republic of the Congo" to "Republic of the Congo") or
+#'     `"added"` (a code not in the lookup).}
+#'   \item{entity_type}{Character; see "Entity types".}
+#'   \item{iso3c}{Character. The ISO 3166-1 alpha-3 code a state code is
+#'     harmonized to (its latest one, for a code with successor periods),
+#'     or `NA` for a non-state code.}
+#'   \item{cown}{Integer. The Correlates of War (COW) state number for the
+#'     code's latest period, or `NA`.}
+#'   \item{cow_start, cow_end}{Integer. The first and last year, from 1946
+#'     on, in which the code is a state system member; `cow_end` is `NA`
+#'     for a current member. A code can map to different states in
+#'     different years (see "Successor rules"); [gdelt_is_state()] and
+#'     [gdelt_country_iso3()] resolve them by year.}
+#'   \item{note}{Character. The reason for every decision that is not
+#'     automatic; `NA` for plain cases.}
+#' }
+#'
+#' @section Entity types:
+#' * `"state"` (195 codes): a current member of the COW state system. The
+#'   195 codes cover 194 of COW's 195 current members; Kosovo has no GDELT
+#'   code.
+#' * `"former_state"` (3): a code that is a state only in earlier years:
+#'   `GME` (East Germany, 1954-1990), `GMW` (West Germany, 1955-1990) and
+#'   `SCG` (Serbia and Montenegro, 1992-2006).
+#' * `"territory"` (42): an ISO 3166-1 code with no COW state, e.g. `HKG`,
+#'   `MAC`, `PRI`, `SJM`, `GRL`, and the Palestinian codes `PSE`, `WSB`
+#'   (West Bank) and `GZS` (Gaza Strip), and Western Sahara (`ESH`).
+#' * `"region"` (25): a continent, sub-region or other grouping, e.g. `EUR`
+#'   (Europe), `AFR`, `WAF` (West Africa), `MEA` (Middle East), `WST` (the
+#'   West).
+#' * `"other"` (2): `VAT` (Vatican City, sovereign but not a COW member)
+#'   and `BAG` (Baghdad, a city code in the lookup).
+#'
+#' @section States:
+#' A code is a state in year \eqn{t} when it maps to a COW state system
+#' member at any point during \eqn{t}, so the rule is time-varying:
+#' Slovakia (`SVK`) is a state from 1993, Timor-Leste (`TMP`) from 2002,
+#' South Sudan (`SSD`) from 2011. Two spells of one COW state number are
+#' merged when they are contiguous at year level. In a year with two
+#' candidate periods for one code, the period holding on 31 December wins
+#' (Germany in 1990 is COW 255, not 260). The COW data (v2024) end on
+#' 2024-12-31; a state that is a member on that date is a current member
+#' (`cow_end = NA`), taken as a member through 2025 and after.
+#'
+#' @section Harmonization:
+#' State codes are harmonized to ISO 3166-1 alpha-3, so that dyad keys
+#' match the [theta_trajectories] tables: `ROM` (CAMEO's code for Romania)
+#' becomes `ROU`, `TMP` becomes `TLS` and `MTN` becomes `MNE`; every other
+#' current-state code already is its ISO3 code. One code is used per COW
+#' state number and period. Where COW keeps one number through a change
+#' of name, the current code is used throughout: `SRB` for COW 345
+#' (Yugoslavia, Serbia and Montenegro, Serbia) in every year, and `RUS`
+#' for COW 365 (the Soviet Union and Russia).
+#'
+#' @section Successor rules:
+#' * **Serbia** (`SRB`, `SCG`): COW 345 is one state from 1944 on; both
+#'   codes harmonize to `SRB`, so Serbia's series is continuous. `SCG` is a
+#'   state only in 1992-2006.
+#' * **Czechoslovakia** (`CZE`): GDELT has no Czechoslovakia code and
+#'   writes `CZE` for Czechoslovak actors too, so `CZE` before 1993 is
+#'   Czechoslovakia (COW 315, ISO3 `CSK`) and from 1993 the Czech Republic
+#'   (316). Slovakia (`SVK`, 317) is a state from 1993.
+#' * **Germany** (`DEU`, `GMW`, `GME`): before 1990 GDELT's `DEU` is West
+#'   Germany (COW 260); from 1990, Germany (255). Both harmonize to `DEU`.
+#'   `GMW` (West Germany, 260) is `DEU` and `GME` (East Germany, 265) is
+#'   `DDR`, through 1990.
+#' * **Yemen** (`YEM`): before 1990, North Yemen (COW 678); from 1990,
+#'   Yemen (679). South Yemen (680) has no GDELT code.
+#' * **Russia** (`RUS`): COW 365 throughout; GDELT has no Soviet Union
+#'   code.
+#' * **Others:** Croatia (`HRV`) and Bosnia and Herzegovina (`BIH`) are
+#'   states from 1992, North Macedonia (`MKD`) and Eritrea (`ERI`) from
+#'   1993, Palau (`PLW`) from 1994, Montenegro (`MTN`) from 2006; Sudan
+#'   (`SDN`) is continuous through South Sudan's secession; `COD` covers
+#'   Zaire and `MMR` covers Burma.
+#'
+#' @section Contested cases:
+#' Contested and borderline cases follow the COW rule. **Taiwan** (`TWN`,
+#' COW 713) is a state. **Kosovo** (COW 347, a member from 2008-02-20) is a
+#' state, but GDELT 1.0 has no code for it. **Palestine** (`PSE`, `WSB`,
+#' `GZS`) and **Western Sahara** (`ESH`) are territories. **Vatican City**
+#' (`VAT`) is not a COW member; the COW number 327 that some crosswalks
+#' give it is the Papal States (1816-1860).
+#'
+#' @section Codes GDELT does not write:
+#' GDELT 1.0 derives the country code from the leading country segment of
+#' the actor code (`Actor1Code`), and leaves the country code empty when
+#' its own country table lacks that segment. Seven such prefixes are
+#' listed here, with `name_source = "added"` where GDELT has no label:
+#' `ROU` (Romania: actors are coded `ROU...`, but GDELT's table has
+#' `ROM`), `TWN` (Taiwan, in the backfiles to March 2013), `SSD` (South
+#' Sudan, in the backfiles), `SCG`, `GME`, `GMW` and `GGY` (Guernsey).
+#' [read_gdelt()]'s `recover_country_codes = TRUE` fills an empty country
+#' code from such a prefix.
+#'
+#' Four states have no code GDELT 1.0 ever writes, as a country code or
+#' as an actor-code prefix, in any year: **Bosnia and Herzegovina**,
+#' **Slovenia** and **Montenegro** (`BIH`, `SVN` and `MTN` are in the
+#' lookup but never occur) and **Kosovo** (no code at all). Their actors
+#' are coded by role only (e.g. `GOV`, `MIL`), so their events cannot be
+#' assigned to them from the country codes, and state-to-state event
+#' tables built from GDELT 1.0 do not include them.
+#'
+#' @source Built by `data-raw/gdelt_country_codes.R` in the source
+#'   package, from:
+#'   * the GDELT Project's CAMEO country lookup,
+#'     <https://gdeltproject.org/data/lookups/CAMEO.country.txt>
+#'     (261 codes, accessed 2026-11-05);
+#'   * Correlates of War Project (2024), State System Membership, v2024,
+#'     <https://correlatesofwar.org/data-sets/state-system-membership/>;
+#'   * Arel-Bundock, V., Enevoldsen, N. and Yetman, C. (2018).
+#'     countrycode: An R package to convert country names and country
+#'     codes. *Journal of Open Source Software* 3(28), 848
+#'     (`countrycode::codelist`, version 1.6.1, for ISO3 codes, COW
+#'     numbers and names);
+#'   * the country codes in the full GDELT 1.0 event archive, 1991-2025
+#'     (`data-raw/gdelt_country_codes_inventory.R`).
+#' @seealso [filter_gdelt_states()], [gdelt_state_spells()].
+#' @examples
+#' table(gdelt_countries$entity_type)
+#' subset(gdelt_countries, entity_type == "former_state", gdelt_code:cow_end)
+#' @keywords datasets
+"gdelt_countries"
+
 #' Estimated bilateral-relations trajectories, 1991-2025
 #'
 #' Yearly latent trajectories (\eqn{\theta}) of the level of bilateral
 #' relations for every country pair with at least one recorded event,
 #' estimated with bilatr from GDELT 1.0 event data. The data are not
-#' shipped with the package: [bilatr_theta()] downloads them from a
+#' shipped with the package: [download_bilatr_theta()] downloads them from a
 #' versioned data release (see "Getting the data"). A small extract,
 #' [theta_sample], ships for examples.
 #'
-#' There are two tables. `bilatr_theta("directed")` holds the directed
-#' model (one series per sender-receiver pair); `bilatr_theta("undirected")`
+#' There are two tables. `download_bilatr_theta("directed")` holds the directed
+#' model (one series per sender-receiver pair); `download_bilatr_theta("undirected")`
 #' holds the undirected model (one series per unordered pair, events in
 #' both directions pooled). Each row gives both the smoothed estimate --
 #' the posterior of \eqn{\theta_{dt}} given all years, 1991-2025 -- and the
@@ -102,10 +245,16 @@
 #' country-level category offsets, \eqn{\theta} is measured net of each
 #' country's baseline mix of event types.
 #'
-#' Dyad-years before a dyad's first recorded event are dropped: the
+#' Dyad-years before a dyad's first recorded event, and dyad-years in which
+#' either country was not a member of the state system, are dropped: the
 #' likelihood is only evaluated in years with events, so \eqn{\theta}
 #' before the first event is the random-walk prior smoothed backwards
-#' from that event and carries no information from the dyad's own data.
+#' from that event and carries no information from the dyad's own data,
+#' and a year outside membership has no events by construction (see
+#' [aggregate_events()], "Actor periods"). The membership rule applies from
+#' the next data update (`v2027.01`); `v2026.11` used a membership test
+#' without years (see "Known gaps"), so it still has, for example,
+#' Slovakia's dyad-years for 1991-1992.
 #' After the first event every year through 2025 is kept, including
 #' years without events (where \eqn{\theta} is interpolated or, at the
 #' end of a series, extrapolated by the random walk), so each dyad's
@@ -154,9 +303,14 @@
 #' country codes differ. This is
 #' `read_gdelt(actor_types = c("GOV", "MIL", "SPY"), actor_type_match =
 #' "both", cross_border = TRUE)`, the defaults. All events are used, root
-#' events or not, with no filter on event codes. Events were further
-#' restricted to those where both actors' country codes map to a
-#' Correlates of War state system member (see "Known gaps").
+#' events or not, except that events with CAMEO codes 010-015, 017, 024x,
+#' 025x, 040 and 041 (`BilatrClass` 0 in the original coding: neutral and
+#' low-intensity statements) are excluded, which is why two
+#' `ModifiedRootCode` classes do not occur. Events were further restricted
+#' to those where both actors' country codes map to a Correlates of War
+#' state system member (see "Known gaps"); [filter_gdelt_states()] applies
+#' this restriction, by the year of each event, and the next data update
+#' (`v2027.01`) is built with it (`read_gdelt(states_only = TRUE)`).
 #'
 #' **Model.** The `stable_gamma` model, at yearly resolution, with events
 #' grouped by `ModifiedRootCode` (16 of its 18 classes occur in the data,
@@ -166,15 +320,16 @@
 #' used are the ones in this version of bilatr.
 #'
 #' @section Getting the data:
-#' `bilatr_theta("directed")` and `bilatr_theta("undirected")` download a
-#' table once, verify its checksum, and cache it in
-#' `tools::R_user_dir("bilatr", "data")`; later calls read the cache.
+#' `download_bilatr_theta("directed")` and
+#' `download_bilatr_theta("undirected")` download a table once, verify its
+#' checksum, and cache it in `tools::R_user_dir("bilatr", "data")`; later
+#' calls read the cache without using the internet.
 #' The data are published as versioned releases of
 #' <https://github.com/doktorandahl/bilatr-data> under the CC BY 4.0
 #' license, archived on Zenodo. Each bilatr release is pinned to one data
 #' version (`v2026.11` for this one), so the same code returns the same
-#' data; `bilatr_theta(version = "latest")` asks for the newest release,
-#' and [bilatr_theta_versions()] lists them. [bilatr_clear_data_cache()]
+#' data; `download_bilatr_theta(version = "latest")` asks for the newest
+#' release, and [bilatr_theta_versions()] lists them. [bilatr_clear_data_cache()]
 #' deletes the cache.
 #'
 #' Without bilatr, the same files can be read directly, e.g.
@@ -182,9 +337,12 @@
 #' `read.csv()` on `theta_directed.csv.gz`; see the data repository's
 #' README.
 #'
-#' Please cite the data release by its Zenodo DOI (Zenodo DOI: to be
-#' added once the record is published), the bilatr package
-#' (`citation("bilatr")`), and the GDELT references below.
+#' Please cite the data release by the DOI of the version you use, for
+#' these data (`v2026.11`) \doi{10.5281/zenodo.23951819}; the DOI
+#' \doi{10.5281/zenodo.23951818} refers to all versions of the data
+#' release. Please also cite the GDELT references below. Cite the bilatr
+#' package (`citation("bilatr")`) for the method and the software; the
+#' entry for the data release is there too.
 #'
 #' @section Known gaps:
 #' * **Correlates of War restriction.** Events were further restricted to
@@ -212,8 +370,8 @@
 #'
 #' The GDELT Project. Global Database of Events, Language, and Tone
 #' (GDELT). Accessed 31 January 2026, <https://gdeltproject.org/>.
-#' @seealso [bilatr_theta()] to download the tables; [theta_sample] for
-#'   the extract that ships with the package; [cameo_lookup] for the
+#' @seealso [download_bilatr_theta()] to download the tables; [theta_sample]
+#'   for the extract that ships with the package; [cameo_lookup] for the
 #'   `ModifiedRootCode` classes; [diagnose_and_extract_bilatr()] for how
 #'   the theta summaries are extracted from a fit.
 #' @examples
@@ -224,8 +382,8 @@
 #' subset(theta_sample, type == "undirected" & dyad == "NOR_SWE")
 #' @examplesIf interactive()
 #' # the full tables (downloaded once, then cached)
-#' theta_directed <- bilatr_theta("directed")
-#' theta_undirected <- bilatr_theta("undirected")
+#' theta_directed <- download_bilatr_theta("directed")
+#' theta_undirected <- download_bilatr_theta("undirected")
 #' @keywords datasets
 #' @name theta_trajectories
 NULL
@@ -235,7 +393,7 @@ NULL
 #' An extract of the trajectories described in [theta_trajectories], for
 #' examples and vignettes: ten country pairs, both directions of each from
 #' the directed table and the pair from the undirected table, all years.
-#' The full tables are downloaded with [bilatr_theta()].
+#' The full tables are downloaded with [download_bilatr_theta()].
 #'
 #' The pairs are United States-China, United States-Russia,
 #' Russia-Ukraine, China-Japan, South Korea-North Korea, India-Pakistan,
@@ -248,7 +406,7 @@ NULL
 #'   with the same values (data version `v2026.11`).
 #' @source Data version `v2026.11` of the bilatr theta trajectories; see
 #'   [theta_trajectories].
-#' @seealso [theta_trajectories], [bilatr_theta()].
+#' @seealso [theta_trajectories], [download_bilatr_theta()].
 #' @examples
 #' # United States toward China and China toward the United States
 #' us_cn <- subset(theta_sample, type == "directed" & dyad %in% c("USA_CHN", "CHN_USA"))

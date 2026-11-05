@@ -43,6 +43,10 @@ expect_matches_reference <- function(name) {
   if (cases[[name]]$resolution == "monthly") {
     new_ids$month_id <- NULL
   }
+  # dyad_ids always has `active` now (1.0.0f); without actor periods it is
+  # all TRUE. The frozen reference predates it.
+  expect_true(is.logical(new_ids$active) && all(new_ids$active), label = paste0(name, ": active all TRUE"))
+  new_ids$active <- NULL
   expect_identical(new_ids, old_ids, label = paste0(name, ": dyad_ids"))
   invisible(list(old = old, new = new))
 }

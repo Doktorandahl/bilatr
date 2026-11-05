@@ -19,12 +19,22 @@ the single place the contract is spelled out.
    Actor 1 / Actor 2 \tab \code{actor1}, \code{actor2} \tab optional (both or neither); no \code{NA}; no empty string; no leading/trailing whitespace; must not contain \code{"_"}; \code{actor1 != actor2}; constant within a dyad (each dyad maps to exactly one actor pair). Needed for the country-level offset of the \code{stable_gamma} model \cr
    Time \tab chosen by the user (\code{time}) \tab integer-valued (integer, or a whole-number double); one unit = one period; no \code{NA}. Gaps are allowed: every dyad is filled over the whole \code{min(time):max(time)} range, missing periods becoming unobserved \cr
    Sender share \tab \code{w_send} \tab optional; numeric in \verb{[0, 1]}; constant within a dyad. The share of the dyad's events sent by \code{actor1}; only used by \code{stable_gamma} for undirected dyads \cr
+   Active \tab \code{active} \tab optional; logical; no \code{NA}; every action count must be 0 where it is \code{FALSE}. \code{TRUE} when both actors exist (e.g. are state system members) in the period; see below \cr
    Action counts \tab \code{action_cols} \tab at least two columns; non-negative whole numbers; no \code{NA} \cr
 }
 
 
 There must be at most one row per dyad and time period: duplicates are
 an error, never summed.
+
+The \code{active} column marks dyad-periods in which one of the actors does
+not exist, such as a country before it enters the state system or after
+it leaves (see \code{\link[=aggregate_events]{aggregate_events()}}, "Actor periods"). Such periods have
+no events, so they are unobserved in the model like any other period
+without events, but their \eqn{\theta} is a random-walk extrapolation
+with no data. \code{\link[=prepare_stan_data]{prepare_stan_data()}} carries \code{active} into the
+\code{dyad_ids} attribute, and \code{\link[=extract_theta]{extract_theta()}} drops inactive periods by
+default.
 
 \code{action_cols} takes a character vector or a tidyselect expression
 (e.g. \code{c(coop, conflict)}, \code{starts_with("n_")}). If it is not given
@@ -33,8 +43,8 @@ output does) naming only columns still present, those columns are
 used. This is silent unless \code{data} also has whole-number columns the
 attribute does not name (say, a category merged with \code{mutate()} after
 aggregation): those are left out, with a \code{message()} naming them, so set
-\code{action_cols} explicitly to include them. Otherwise every column except the dyad, actor, time
-and \code{w_send} columns is used,
+\code{action_cols} explicitly to include them. Otherwise every column except the dyad, actor, time,
+\code{w_send} and \code{active} columns is used,
 with a warning naming the columns chosen; a column picked up this way
 that is not a non-negative whole-number count is an error. When
 \code{action_cols} is given explicitly, every other column is ignored.

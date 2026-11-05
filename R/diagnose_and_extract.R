@@ -36,6 +36,11 @@
 #'   single `*_stan_data.rds` file next to `csv_files` (which
 #'   [fit_panel()]/[fit_dyad_ts()] write to their `output_dir`), with a
 #'   `message()`; errors if there is none or more than one.
+#' @param active_only `TRUE` (default) leaves inactive dyad-periods out of
+#'   `theta`, `theta_filtered` and `theta_filtered_sd` (see
+#'   [extract_theta()], "Inactive periods"); `FALSE` keeps them. The
+#'   Tier 3 diagnostics always cover active periods only, when the Stan
+#'   data marks them (see [diagnose_convergence()]).
 #' @param n_dt Each dyad's total number of events, for tiers 2 and 3.
 #'   `NULL` (default) computes it from `stan_data`; see
 #'   [diagnose_convergence()] for passing your own.
@@ -84,6 +89,7 @@ diagnose_and_extract_bilatr <- function(
   rhat_threshold = 1.01, ess_threshold = 400, tiers = 1:3,
   event_classes = NULL,
   class_labels = NULL,
+  active_only = TRUE,
   max_memory_mb = 8192, chunk_size = NULL, n_cores = 1L
 ) {
   caller <- "diagnose_and_extract_bilatr()"
@@ -101,6 +107,9 @@ diagnose_and_extract_bilatr <- function(
   max_memory_mb_missing <- missing(max_memory_mb)
 
   tiers <- .validate_tiers(tiers)
+  if (!rlang::is_bool(active_only)) {
+    stop(caller, ": `active_only` must be TRUE or FALSE.", call. = FALSE)
+  }
 
   stan_data <- .stan_data_from_fit(csv_files, stan_data, caller)
   stan_model <- .resolve_stan_model_for_fit(csv_files, stan_data, stan_model, caller)
@@ -114,6 +123,10 @@ diagnose_and_extract_bilatr <- function(
       call. = FALSE
     )
   }
+  # Tier 3 is restricted only when the Stan data itself marks inactive
+  # periods (as diagnose_convergence() does); the joins below need the column.
+  dyad_ids_diag <- dyad_ids
+  dyad_ids <- .dyad_ids_with_active(dyad_ids)
 
   # has_gamma/country_codes for .assemble_bilatr_diagnostics()'s
   # gamma-vs-Tier-1 split, with country_code labels on the gamma table.
@@ -127,7 +140,8 @@ diagnose_and_extract_bilatr <- function(
 
   diagnostics <- .assemble_bilatr_diagnostics(
     summ, n_dt_tbl, tiers, rhat_threshold, ess_threshold,
-    has_gamma = has_gamma, country_codes = country_codes
+    has_gamma = has_gamma, country_codes = country_codes,
+    dyad_ids = dyad_ids_diag
   )
 
   extract_from_summ <- function(prefix) {
@@ -139,7 +153,8 @@ diagnose_and_extract_bilatr <- function(
   theta <- extract_from_summ("theta[") %>%
     dplyr::mutate(variable = stringr::str_remove_all(variable, "theta\\[|\\]")) %>%
     tidyr::separate(variable, into = c("dyad_id", "time_index"), sep = ",", convert = TRUE) %>%
-    dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
+    dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index")) %>%
+    .keep_active(active_only)
 
   # theta_filtered/theta_filtered_sd (present only if
   # compute_theta_filtered = 1 was set): their first index is the
@@ -161,7 +176,8 @@ diagnose_and_extract_bilatr <- function(
       dplyr::select(-idx) %>%
       dplyr::mutate(dyad_id = stan_data$filter_dyads[filter_index]) %>%
       dplyr::select(-filter_index) %>%
-      dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index"))
+      dplyr::left_join(dyad_ids, by = c("dyad_id", "time_index")) %>%
+      .keep_active(active_only)
   }
 
   theta_filtered <- filtered_extract("theta_filtered[")

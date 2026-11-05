@@ -34,6 +34,7 @@ Depends:
 Imports:
     data.table,
     dplyr,
+    jsonlite,
     parallel,
     posterior (>= 1.0.0),
     purrr,

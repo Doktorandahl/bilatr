@@ -14,7 +14,7 @@ default) for every cached version.}
 The deleted version directories, invisibly.
 }
 \description{
-Deletes the files \code{\link[=bilatr_theta]{bilatr_theta()}} cached under
+Deletes the files \code{\link[=download_bilatr_theta]{download_bilatr_theta()}} cached under
 \code{tools::R_user_dir("bilatr", "data")}.
 }
 \examples{
@@ -25,6 +25,6 @@ bilatr_clear_data_cache("v2026.11")
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=bilatr_theta]{bilatr_theta()}}, \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}} for compiled
+\code{\link[=download_bilatr_theta]{download_bilatr_theta()}}, \code{\link[=bilatr_clear_model_cache]{bilatr_clear_model_cache()}} for compiled
 models.
 }

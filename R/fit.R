@@ -370,7 +370,7 @@ bilatr_init_fn <- function(stan_data, stan_model = .BILATR_DEFAULT_MODEL) {
         # is unconstrained) but, like alpha_raw above, leaves the
         # projected-out directions exactly at their prior mode with no
         # spread to break out of. sigma_gamma starts small (its
-        # half-normal(0, 0.3) prior means the data should pull it up if
+        # half-normal(0, 0.5) prior means the data should pull it up if
         # warranted, not down from an over-confident large start).
         list(
           gamma_z = matrix(stats::rnorm(A * n_countries, 0, 0.1), A, n_countries),
@@ -478,7 +478,7 @@ fit_bilatr <- function(
 #' `stan_data` as `data`, supplying any of them is an error.
 #' @noRd
 .bilatr_prep_args <- c(
-  "time", "action_cols", "dyad", "actor1", "actor2", "w_send", "directed",
+  "time", "action_cols", "dyad", "actor1", "actor2", "w_send", "active", "directed",
   "reference_category", "min_n_events", "time_range", "chunk_size",
   "rho_prior_a", "rho_prior_b", "compute_log_lik", "prior_only",
   "compute_theta_filtered", "filter_dyads"
@@ -586,6 +586,7 @@ fit_bilatr <- function(
       actor1 = prep$actor1,
       actor2 = prep$actor2,
       w_send = prep$w_send,
+      active = prep$active,
       directed = prep$directed,
       reference_category = prep$reference_category,
       min_n_events = prep$min_n_events,
@@ -853,6 +854,7 @@ fit_dyad_ts <- function(
   actor1 = "actor1",
   actor2 = "actor2",
   w_send = "w_send",
+  active = "active",
   directed = attr(data, "directed") %||% TRUE,
   reference_category = NULL,
   min_n_events = 1,
@@ -989,6 +991,7 @@ fit_panel <- function(
   actor1 = "actor1",
   actor2 = "actor2",
   w_send = "w_send",
+  active = "active",
   directed = attr(data, "directed") %||% TRUE,
   reference_category = NULL,
   min_n_events = 1,
