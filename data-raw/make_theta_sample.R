@@ -12,7 +12,7 @@
 
 library(tibble)
 
-release <- file.path("dev", "data_release", "v2026.11")
+release <- file.path("dev", "data_release", "v2026.11.1")
 
 pairs <- list(
   c("USA", "CHN"), c("USA", "RUS"), c("RUS", "UKR"), c("CHN", "JPN"),

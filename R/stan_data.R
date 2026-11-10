@@ -49,8 +49,8 @@
 #' `Y` is a dense `D x T x A` integer array, about `D * T * A * 4` bytes
 #' (the filled grid has `D * T` rows). `T` counts every period in
 #' `time_range`, observed or not, so finer time units grow it fast:
-#' 16,750 dyads over 35 years with 16 action types is about 37 MB yearly,
-#' 450 MB monthly and 13.7 GB daily. Daily (or similarly fine) resolution
+#' 17,125 dyads over 35 years with 16 action types is about 38 MB yearly,
+#' 460 MB monthly and 14.0 GB daily. Daily (or similarly fine) resolution
 #' is only practical for few dyads or short windows; use `time_range` to
 #' pin `T`.
 #'

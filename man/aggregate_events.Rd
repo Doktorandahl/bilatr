@@ -169,9 +169,9 @@ does; \code{filter()}, \code{select()}, \code{mutate()} and \code{arrange()} kee
 
 The Stan data's \code{Y} is a dense \verb{D x T x A} integer array (dyads x
 periods x classes), about \code{D * T * A * 4} bytes, and the dyad-period
-table itself has \code{D * T} rows. Finer resolutions multiply \code{T}: 16,750
-dyads over 35 years with 16 classes is about 37 MB at yearly
-resolution, 450 MB monthly, and about 13.7 GB daily. Daily resolution
+table itself has \code{D * T} rows. Finer resolutions multiply \code{T}: 17,125
+dyads over 35 years with 16 classes is about 38 MB at yearly
+resolution, 460 MB monthly, and about 14.0 GB daily. Daily resolution
 is only practical for few dyads or short windows.
 }
 

@@ -114,21 +114,19 @@ country-level offsets for each action class (see
 The package's estimates for every country pair with at least one
 recorded event, 1991-2025, from GDELT 1.0 government, military and
 intelligence events, are published as a versioned data release (CC BY
-4.0) on Zenodo, [doi:10.5281/zenodo.23951819](https://doi.org/10.5281/zenodo.23951819)
-(version `v2026.11`; [all versions](https://doi.org/10.5281/zenodo.23951818)).
+4.0) on Zenodo, [doi:10.5281/zenodo.24109618](https://doi.org/10.5281/zenodo.24109618)
+(version `v2026.11.1`; [all versions](https://doi.org/10.5281/zenodo.23951818)).
 `download_bilatr_theta()` downloads a table once, verifies it and caches
 it; later calls read the cache:
 
 ```r
-theta_directed <- download_bilatr_theta("directed")       # 16,750 directed dyads
-theta_undirected <- download_bilatr_theta("undirected")   # 9,139 country pairs
+theta_directed <- download_bilatr_theta("directed")       # 17,125 directed dyads
+theta_undirected <- download_bilatr_theta("undirected")   # 9,342 country pairs
 ```
 
-`theta_sample` is a small extract that ships with the package. Known
-gap: six states (Serbia, Romania, Bosnia and Herzegovina, Montenegro,
-Slovenia and Timor-Leste) are missing from the current release because
-of a country-code matching error; this will be corrected in the next
-data update, expected in January 2027. See `?theta_trajectories`.
+`theta_sample` is a small extract that ships with the package. Slovenia,
+Bosnia and Herzegovina, Kosovo and Montenegro are absent, because GDELT
+1.0 has no country code for them; see `?theta_trajectories`.
 
 ## Vignettes
 
@@ -145,7 +143,7 @@ citation("bilatr")
 ```
 
 When you use the estimated trajectories, please also cite the data
-release ([doi:10.5281/zenodo.23951819](https://doi.org/10.5281/zenodo.23951819);
+release ([doi:10.5281/zenodo.24109618](https://doi.org/10.5281/zenodo.24109618);
 its entry is in `citation("bilatr")`) and GDELT (see `?theta_trajectories`).
 
 ## License

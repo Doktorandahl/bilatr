@@ -33,11 +33,11 @@ bibentry(
   ),
   year = "2026",
   howpublished = "Zenodo",
-  note = "Data release v2026.11",
-  doi = "10.5281/zenodo.23951819",
+  note = "Data release v2026.11.1",
+  doi = "10.5281/zenodo.24109618",
   textVersion = paste(
     "Randahl, D., Lundgren, M. and Vikberg, C. (2026).",
     "bilatr theta trajectories: latent bilateral relations, 1991-2025.",
-    "Data release v2026.11. Zenodo. doi:10.5281/zenodo.23951819."
+    "Data release v2026.11.1. Zenodo. doi:10.5281/zenodo.24109618."
   )
 )

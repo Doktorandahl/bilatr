@@ -76,9 +76,9 @@ model fitted in 'Stan'.
 
 * Estimated yearly trajectories for every country pair, 1991-2025
   (`?theta_trajectories`), are downloaded once and cached with
-  `download_bilatr_theta()` from a versioned data release (`v2026.11`,
-  doi:10.5281/zenodo.23951819, CC BY 4.0); `theta_sample` ships a small
-  extract. Known gap: six states (Serbia, Romania, Bosnia and Herzegovina,
-  Montenegro, Slovenia and Timor-Leste) are missing because of a
-  country-code crosswalk error, to be corrected in the next data release,
-  expected in January 2027.
+  `download_bilatr_theta()` from a versioned data release (`v2026.11.1`,
+  doi:10.5281/zenodo.24109618, CC BY 4.0); `theta_sample` ships a small
+  extract. Known gap: Slovenia, Bosnia and Herzegovina, Kosovo and
+  Montenegro are absent, because GDELT 1.0 has no country code for them.
+  The earlier data release `v2026.11` is superseded and is kept only for
+  reproducing earlier work.

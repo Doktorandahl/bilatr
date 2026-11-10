@@ -15,7 +15,7 @@ download_bilatr_theta(
 \item{type}{\code{"directed"} (one series per sender-receiver pair) or
 \code{"undirected"} (one series per unordered pair).}
 
-\item{version}{The data version, such as \code{"v2026.11"}. \code{NULL} (the
+\item{version}{The data version, such as \code{"v2026.11.1"}. \code{NULL} (the
 default) uses the version this package release is pinned to.
 \code{"latest"} asks the GitHub API for the newest release, which needs
 the internet even when that version is cached.}

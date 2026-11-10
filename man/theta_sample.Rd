@@ -9,10 +9,10 @@ A tibble with 1,038 rows (690 directed and 348 undirected
 dyad-years; 20 directed and 10 undirected dyads), sorted by \code{type},
 \code{dyad} and \code{year}. The first column, \code{type}, is \code{"directed"} or
 \code{"undirected"}; the other columns are those of \link{theta_trajectories},
-with the same values (data version \code{v2026.11}).
+with the same values (data version \code{v2026.11.1}).
 }
 \source{
-Data version \code{v2026.11} of the bilatr theta trajectories; see
+Data version \code{v2026.11.1} of the bilatr theta trajectories; see
 \link{theta_trajectories}.
 }
 \usage{

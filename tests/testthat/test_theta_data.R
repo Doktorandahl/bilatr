@@ -38,8 +38,16 @@ local_theta_release <- function(..., env = parent.frame()) {
     bilatr.data_cache_dir = cache,
     .local_envir = env
   )
-  # no fallback to the real Zenodo record (tests that want one mock their own)
-  local_mocked_bindings(.BILATR_DATA_ZENODO_URL = c(v2026.11 = NA_character_), .env = env)
+  # The fixture tag ("v2026.11" unless given) is arbitrary: pin the package
+  # default to it, so that `version = NULL` reads the fixture whatever the
+  # real default is. No fallback to a real Zenodo record (tests that want
+  # one mock their own).
+  fixture_version <- list(...)$version %||% "v2026.11"
+  local_mocked_bindings(
+    .BILATR_DATA_DEFAULT_VERSION = fixture_version,
+    .BILATR_DATA_ZENODO_URL = stats::setNames(NA_character_, fixture_version),
+    .env = env
+  )
   c(make_theta_release(root, ...), root = root, cache = cache)
 }
 
@@ -62,7 +70,8 @@ test_that("theta_sample has the documented shape", {
   expect_s3_class(theta_sample, "tbl_df")
   expect_identical(
     names(theta_sample),
-    c("type", "dyad", "year", "mean", "5%", "95%", "filtered_mean", "filtered_5%", "filtered_95%")
+    c("type", "dyad", "year", "mean", "median", "5%", "95%",
+      "filtered_mean", "filtered_median", "filtered_5%", "filtered_95%")
   )
   expect_identical(nrow(theta_sample), 1038L)
   expect_identical(as.vector(table(theta_sample$type)), c(690L, 348L))
@@ -203,6 +212,42 @@ test_that("version = 'latest' resolves to the newest published v* release", {
   x <- download_bilatr_theta("directed", version = "latest", quiet = TRUE)
   expect_identical(x$mean, fx$directed$mean + 1)
   expect_identical(.bilatr_data_resolve_version(NULL), .BILATR_DATA_DEFAULT_VERSION)
+})
+
+test_that("v2026.11.1 sorts after v2026.11 and is what 'latest' resolves to", {
+  json <- '[
+    {"tag_name": "v2026.11", "prerelease": false, "draft": false,
+     "published_at": "2026-11-04T13:50:33Z", "assets": []},
+    {"tag_name": "v2026.11.1", "prerelease": false, "draft": false,
+     "published_at": "2026-11-10T09:12:00Z", "assets": []}
+  ]'
+  fx <- local_theta_release(version = "v2026.11.1")
+  make_theta_release(fx$root, "v2026.11")
+  local_mocked_bindings(.bilatr_data_api_get = function() json)
+  expect_identical(.bilatr_data_releases()$version, c("v2026.11.1", "v2026.11"))
+  expect_identical(.bilatr_data_resolve_version("latest"), "v2026.11.1")
+
+  # the version breaks a tie in the publication date, and the cache is listed
+  # in the same (radix) order
+  same_day <- gsub("2026-11-04T13:50:33Z", "2026-11-10T09:12:00Z", json, fixed = TRUE)
+  local_mocked_bindings(.bilatr_data_api_get = function() same_day)
+  expect_identical(.bilatr_data_releases()$version, c("v2026.11.1", "v2026.11"))
+  download_bilatr_theta("directed", version = "v2026.11", quiet = TRUE)
+  download_bilatr_theta("directed", quiet = TRUE)
+  expect_identical(.bilatr_data_cached_versions(), c("v2026.11", "v2026.11.1"))
+  v <- bilatr_theta_versions()
+  expect_identical(v$version, c("v2026.11.1", "v2026.11"))
+  expect_identical(v$default, c(TRUE, FALSE))
+})
+
+test_that("the pinned data version has a version DOI and a Zenodo copy", {
+  # the real constants, not the fixture's
+  expect_identical(.BILATR_DATA_DEFAULT_VERSION, "v2026.11.1")
+  for (v in c("v2026.11", "v2026.11.1")) {
+    expect_match(.BILATR_DATA_VERSION_DOI[[v]], "^10\\.5281/zenodo\\.[0-9]+$")
+    expect_match(.BILATR_DATA_ZENODO_URL[[v]], paste0("bilatr-data-", v, ".zip"), fixed = TRUE)
+  }
+  expect_match(.BILATR_DATA_ZENODO_URL[["v2026.11.1"]], "/records/24109618/", fixed = TRUE)
 })
 
 test_that("version = 'latest' errors clearly when the API cannot be reached", {

@@ -126,10 +126,15 @@
   a <- as.vector(conc_mat)
   if (any(a <= 0)) {
     bad <- which(conc_mat <= 0, arr.ind = TRUE)[1, ]
-    stop(sprintf(
-      "`.rdirichlet_rows()` got a non-positive concentration (%.3g) at draw row %d, category column %d. conc = phi_d * p_dt is positive by construction, so this points to a bug upstream, not a data issue.",
-      conc_mat[bad["row"], bad["col"]], bad["row"], bad["col"]
-    ), call. = FALSE)
+    stop(
+      sprintf(
+        "`.rdirichlet_rows()` got a non-positive concentration (%.3g) at draw row %d, category column %d. conc = phi_d * p_dt is positive by construction, so this points to a bug upstream, not a data issue.",
+        conc_mat[bad["row"], bad["col"]],
+        bad["row"],
+        bad["col"]
+      ),
+      call. = FALSE
+    )
   }
   # Marsaglia-Tsang boost in log space: shape a+1 >= 1 never underflows, and
   # log(U)/a carries the small-shape behavior that a direct rgamma(a) loses
@@ -184,8 +189,15 @@
 #' @return A list of the same objects, each subset to the surviving
 #'   draws, plus `n_draws_dropped`.
 #' @noRd
-.drop_nonfinite_draws <- function(T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep,
-                                   sum_theta_bar_sq, sum_theta_sq, min_draws = 20L) {
+.drop_nonfinite_draws <- function(
+  T_obs_acc,
+  T_rep_acc,
+  cat_contrib_obs,
+  cat_contrib_rep,
+  sum_theta_bar_sq,
+  sum_theta_sq,
+  min_draws = 20L
+) {
   n_draws_used <- nrow(T_obs_acc)
   bad <- apply(T_obs_acc, 1, function(r) any(!is.finite(r))) |
     apply(T_rep_acc, 1, function(r) any(!is.finite(r))) |
@@ -195,32 +207,45 @@
 
   if (n_dropped == 0L) {
     return(list(
-      T_obs_acc = T_obs_acc, T_rep_acc = T_rep_acc,
-      cat_contrib_obs = cat_contrib_obs, cat_contrib_rep = cat_contrib_rep,
-      sum_theta_bar_sq = sum_theta_bar_sq, sum_theta_sq = sum_theta_sq,
+      T_obs_acc = T_obs_acc,
+      T_rep_acc = T_rep_acc,
+      cat_contrib_obs = cat_contrib_obs,
+      cat_contrib_rep = cat_contrib_rep,
+      sum_theta_bar_sq = sum_theta_bar_sq,
+      sum_theta_sq = sum_theta_sq,
       n_draws_dropped = 0L
     ))
   }
 
   n_remaining <- n_draws_used - n_dropped
   if (n_remaining < min_draws) {
-    stop(sprintf(
-      paste(
-        "%d of %d posterior draws produced non-finite compositional residuals,",
-        "leaving only %d usable draws (fewer than %d); aborting rather than",
-        "reporting an unreliable statistic. Check dyads$phi_min -- a phi_d",
-        "posterior near 1e-6 is the known cause."
+    stop(
+      sprintf(
+        paste(
+          "%d of %d posterior draws produced non-finite compositional residuals,",
+          "leaving only %d usable draws (fewer than %d); aborting rather than",
+          "reporting an unreliable statistic. Check dyads$phi_min -- a phi_d",
+          "posterior near 1e-6 is the known cause."
+        ),
+        n_dropped,
+        n_draws_used,
+        n_remaining,
+        min_draws
       ),
-      n_dropped, n_draws_used, n_remaining, min_draws
-    ), call. = FALSE)
+      call. = FALSE
+    )
   }
-  warning(sprintf(
-    paste(
-      "%d of %d posterior draws produced non-finite compositional residuals",
-      "and were dropped from the pooled statistics (see global$n_draws_dropped)."
+  warning(
+    sprintf(
+      paste(
+        "%d of %d posterior draws produced non-finite compositional residuals",
+        "and were dropped from the pooled statistics (see global$n_draws_dropped)."
+      ),
+      n_dropped,
+      n_draws_used
     ),
-    n_dropped, n_draws_used
-  ), call. = FALSE)
+    call. = FALSE
+  )
 
   good <- !bad
   list(
@@ -274,7 +299,9 @@
     if (length(sampled) < n_target) {
       pool <- setdiff(seq_len(D), sampled)
       extra_n <- min(n_target - length(sampled), length(pool))
-      if (extra_n > 0) sampled <- c(sampled, pool[sample.int(length(pool), extra_n)])
+      if (extra_n > 0) {
+        sampled <- c(sampled, pool[sample.int(length(pool), extra_n)])
+      }
     }
     sort(unique(sampled))
   })
@@ -365,8 +392,8 @@
 #'   itself by category (`sum_d perp_dk^2`, observed vs. replicate), to
 #'   show which categories drive the dispersion.
 #'
-#' **Scale and subsampling.** For a large panel (`D` ~ 16750, `T` ~ 35)
-#' a full sweep needs ~586k Dirichlet-multinomial simulations per draw --
+#' **Scale and subsampling.** For a large panel (`D` ~ 17,125, `T` ~ 35)
+#' a full sweep needs ~599k Dirichlet-multinomial simulations per draw --
 #' not feasible, and not necessary for a PPC. Dyads are subsampled
 #' (stratified by volume, `n_dyads`/`n_strata`, reproducible from `seed`;
 #' the volume gradient is scientifically interesting in its own right,
@@ -457,8 +484,17 @@ check_compositional_residuals <- function(
   event_classes = NULL,
   class_labels = NULL
 ) {
-  stan_data <- .stan_data_from_fit(fit, stan_data, "check_compositional_residuals()")
-  stan_model <- .resolve_stan_model_for_fit(fit, stan_data, stan_model, "check_compositional_residuals()")
+  stan_data <- .stan_data_from_fit(
+    fit,
+    stan_data,
+    "check_compositional_residuals()"
+  )
+  stan_model <- .resolve_stan_model_for_fit(
+    fit,
+    stan_data,
+    stan_model,
+    "check_compositional_residuals()"
+  )
   event_classes <- event_classes %||% attr(stan_data, "event_classes")
 
   dyad_ids <- attr(stan_data, "dyad_ids")
@@ -492,15 +528,27 @@ check_compositional_residuals <- function(
 
   # --- 1. dyad subsample (stratified by volume; free -- Y/is_obs are
   # already in memory as data, not draws) ---
-  n_d_all <- vapply(seq_len(D), function(d) {
-    Y_d <- Y[d, , ]
-    sum(Y_d[is_obs[d, ] == 1, , drop = FALSE])
-  }, numeric(1))
+  n_d_all <- vapply(
+    seq_len(D),
+    function(d) {
+      Y_d <- Y[d, , ]
+      sum(Y_d[is_obs[d, ] == 1, , drop = FALSE])
+    },
+    numeric(1)
+  )
   eligible <- which(n_d_all > 0 & rowSums(is_obs) > 0)
   if (length(eligible) == 0) {
-    stop("No dyads have any observed periods with events; nothing to check.", call. = FALSE)
+    stop(
+      "No dyads have any observed periods with events; nothing to check.",
+      call. = FALSE
+    )
   }
-  sampled_rel <- .stratified_dyad_sample(n_d_all[eligible], n_target = n_dyads, n_strata = n_strata, seed = seed)
+  sampled_rel <- .stratified_dyad_sample(
+    n_d_all[eligible],
+    n_target = n_dyads,
+    n_strata = n_strata,
+    seed = seed
+  )
   sampled_dyad_ids <- sort(eligible[sampled_rel])
 
   # --- 2. read alpha/mu_intercept (Tier 1, cheap), determine the draw
@@ -538,13 +586,18 @@ check_compositional_residuals <- function(
       gamma_draws <- .get_draws(fit, "gamma")
       gamma_mat_full <- posterior::as_draws_matrix(gamma_draws)
       gamma_mat <- .as_plain_matrix(gamma_mat_full[draw_idx, , drop = FALSE])
-      gamma_col <- function(c) gamma_mat[, paste0("gamma[", seq_len(A), ",", c, "]"), drop = FALSE]
+      gamma_col <- function(c) {
+        gamma_mat[, paste0("gamma[", seq_len(A), ",", c, "]"), drop = FALSE]
+      }
     }
 
     # --- 3. read phi for the sampled dyads only ---
     phi_vars <- paste0("phi[", sampled_dyad_ids, "]")
     phi_draws <- .get_draws(fit, phi_vars)
-    phi_mat_full <- posterior::as_draws_matrix(phi_draws)[, phi_vars, drop = FALSE]
+    phi_mat_full <- posterior::as_draws_matrix(phi_draws)[,
+      phi_vars,
+      drop = FALSE
+    ]
     phi_mat <- .as_plain_matrix(phi_mat_full[draw_idx, , drop = FALSE])
 
     # --- 4. read theta[d, t] for the sampled dyads' OBSERVED periods only
@@ -560,7 +613,11 @@ check_compositional_residuals <- function(
     }
     D_sample <- length(sampled_dyad_ids)
 
-    theta_vars <- unlist(purrr::map2(sampled_dyad_ids, obs_list, function(d, ts) paste0("theta[", d, ",", ts, "]")))
+    theta_vars <- unlist(purrr::map2(
+      sampled_dyad_ids,
+      obs_list,
+      function(d, ts) paste0("theta[", d, ",", ts, "]")
+    ))
     theta_draws <- .get_draws(fit, theta_vars)
     # Row i of every matrix read above corresponds to the same posterior
     # draw: posterior::as_draws_matrix() flattens chains/iterations in a
@@ -568,7 +625,10 @@ check_compositional_residuals <- function(
     # read from an in-memory CmdStanMCMC or from raw CSVs via the same
     # `fit` value -- so draw_idx (computed once, from the alpha/mu read)
     # is valid to reuse for phi and theta without re-deriving it.
-    theta_mat_full <- posterior::as_draws_matrix(theta_draws)[, theta_vars, drop = FALSE]
+    theta_mat_full <- posterior::as_draws_matrix(theta_draws)[,
+      theta_vars,
+      drop = FALSE
+    ]
     theta_mat <- .as_plain_matrix(theta_mat_full[draw_idx, , drop = FALSE])
 
     # --- 5. per-dyad loop: pbar_d, y_d, yrep_d, then eps-cheap
@@ -622,7 +682,11 @@ check_compositional_residuals <- function(
         ca <- stan_data$ctry_a[d]
         cb <- stan_data$ctry_b[d]
         wsend <- stan_data$w_send[d]
-        if (wsend == 1) gamma_col(ca) else wsend * gamma_col(ca) + (1 - wsend) * gamma_col(cb)
+        if (wsend == 1) {
+          gamma_col(ca)
+        } else {
+          wsend * gamma_col(ca) + (1 - wsend) * gamma_col(cb)
+        }
       } else {
         0
       }
@@ -669,9 +733,12 @@ check_compositional_residuals <- function(
 
       along_q <- stats::quantile(along_default, probs = probs)
       dyad_rows[[i]] <- tibble::tibble(
-        dyad_id = d, n_d = n_d, n_obs_t = k_t,
+        dyad_id = d,
+        n_d = n_d,
+        n_obs_t = k_t,
         along_mean = mean(along_default),
-        along_lower = unname(along_q[1]), along_upper = unname(along_q[length(along_q)]),
+        along_lower = unname(along_q[1]),
+        along_upper = unname(along_q[length(along_q)]),
         perp_norm2_mean = perp_norm2_mean,
         ppp_dyad = ppp_dyad,
         phi_min = min(phi_vec_d)
@@ -687,7 +754,12 @@ check_compositional_residuals <- function(
     # --- 6. drop any draws with non-finite accumulators, then summarize
     # (a backstop, not the expected path -- see .drop_nonfinite_draws()) ---
     dropped <- .drop_nonfinite_draws(
-      T_obs_acc, T_rep_acc, cat_contrib_obs, cat_contrib_rep, sum_theta_bar_sq, sum_theta_sq
+      T_obs_acc,
+      T_rep_acc,
+      cat_contrib_obs,
+      cat_contrib_rep,
+      sum_theta_bar_sq,
+      sum_theta_sq
     )
     T_obs_acc <- dropped$T_obs_acc
     T_rep_acc <- dropped$T_rep_acc
@@ -704,10 +776,20 @@ check_compositional_residuals <- function(
     T_rep_mean <- colMeans(T_rep_acc)
     pooled_ppp <- colMeans(T_rep_acc >= T_obs_acc)
     implied_beta_rms <- sqrt(pmax(0, (T_obs_mean - T_rep_mean) / D_sample) / A)
-    eps_sensitivity_tbl <- tibble::tibble(eps = eps_all, pooled_ppp = pooled_ppp, implied_beta_rms = implied_beta_rms)
+    eps_sensitivity_tbl <- tibble::tibble(
+      eps = eps_all,
+      pooled_ppp = pooled_ppp,
+      implied_beta_rms = implied_beta_rms
+    )
 
-    if (is.null(event_classes)) event_classes <- as.character(seq_len(A))
-    labels <- .resolve_class_labels(class_labels, event_classes, stan_data = stan_data)
+    if (is.null(event_classes)) {
+      event_classes <- as.character(seq_len(A))
+    }
+    labels <- .resolve_class_labels(
+      class_labels,
+      event_classes,
+      stan_data = stan_data
+    )
 
     cat_obs_mean <- rowMeans(cat_contrib_obs)
     cat_rep_mean <- rowMeans(cat_contrib_rep)
@@ -719,9 +801,11 @@ check_compositional_residuals <- function(
       event_class = event_classes,
       class_label = labels,
       contribution_obs = cat_obs_mean,
-      contribution_obs_lower = cat_obs_q[, 1], contribution_obs_upper = cat_obs_q[, ncol(cat_obs_q)],
+      contribution_obs_lower = cat_obs_q[, 1],
+      contribution_obs_upper = cat_obs_q[, ncol(cat_obs_q)],
       contribution_rep = cat_rep_mean,
-      contribution_rep_lower = cat_rep_q[, 1], contribution_rep_upper = cat_rep_q[, ncol(cat_rep_q)],
+      contribution_rep_lower = cat_rep_q[, 1],
+      contribution_rep_upper = cat_rep_q[, ncol(cat_rep_q)],
       contribution_ratio = contribution_obs / contribution_rep
     ) %>%
       dplyr::arrange(dplyr::desc(contribution_obs))
@@ -742,16 +826,27 @@ check_compositional_residuals <- function(
     )
 
     settings <- list(
-      seed = seed, n_dyads_requested = n_dyads, n_strata = n_strata,
-      n_draws_requested = n_draws, n_draws_used = n_draws_used,
+      seed = seed,
+      n_dyads_requested = n_dyads,
+      n_strata = n_strata,
+      n_draws_requested = n_draws,
+      n_draws_used = n_draws_used,
       n_draws_dropped = n_draws_dropped,
-      eps = eps, eps_sensitivity = eps_sensitivity, probs = probs,
-      stan_model = stan_model, D_sample = D_sample,
+      eps = eps,
+      eps_sensitivity = eps_sensitivity,
+      probs = probs,
+      stan_model = stan_model,
+      D_sample = D_sample,
       sampled_dyad_ids = sampled_dyad_ids
     )
 
     structure(
-      list(dyads = dyads, categories = categories, global = global, settings = settings),
+      list(
+        dyads = dyads,
+        categories = categories,
+        global = global,
+        settings = settings
+      ),
       class = "bilatr_residual_check"
     )
   })
@@ -774,42 +869,81 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
   cat("<bilatr_residual_check>\n\n")
   cat(sprintf(
     "dyads sampled: %d (seed = %d) | posterior draws used: %d\n\n",
-    x$settings$D_sample, x$settings$seed, x$settings$n_draws_used
+    x$settings$D_sample,
+    x$settings$seed,
+    x$settings$n_draws_used
   ))
-  cat(sprintf("pooled PPP: %.3f%s\n", g$pooled_ppp, if (extreme) " (extreme)" else ""))
+  cat(sprintf(
+    "pooled PPP: %.3f%s\n",
+    g$pooled_ppp,
+    if (extreme) " (extreme)" else ""
+  ))
   cat(sprintf(
     "the model already gives each dyad a constant offset along alpha of typical size\ntheta_between_rms = %.3f; the residuals imply each dyad also wants an offset\northogonal to alpha of typical size implied_beta_rms = %.3f.\n",
-    g$theta_between_rms, g$implied_beta_rms
+    g$theta_between_rms,
+    g$implied_beta_rms
   ))
   cat(sprintf(
     "beta_signal_ratio = implied_beta_rms / theta_between_rms = %.3f\n(near 0.05 is a curiosity; 0.3-0.5 is a real case for beta_d; theta_total_rms = %.3f for context)\n\n",
-    g$beta_signal_ratio, g$theta_total_rms
+    g$beta_signal_ratio,
+    g$theta_total_rms
   ))
   cat(sprintf(
     "minimum phi_d draw seen across sampled dyads: %.3g%s\n",
-    g$phi_min, if (g$phi_min < 1e-3) " (very small; that dyad's phi posterior is barely identified)" else ""
+    g$phi_min,
+    if (g$phi_min < 1e-3) {
+      " (very small; that dyad's phi posterior is barely identified)"
+    } else {
+      ""
+    }
   ))
   if (g$n_draws_dropped > 0) {
     cat(sprintf(
       "%d of %d posterior draws were dropped from the pooled statistics (non-finite compositional residuals)\n",
-      g$n_draws_dropped, x$settings$n_draws_used
+      g$n_draws_dropped,
+      x$settings$n_draws_used
     ))
   }
   cat("\n== eps sensitivity ==\n")
   print(g$eps_sensitivity)
-  cat("\n== categories (top contributors to the pooled statistic, obs vs. replicate) ==\n")
-  print(utils::head(dplyr::select(x$categories, class_label, contribution_obs, contribution_rep, contribution_ratio), n_categories), n = Inf)
+  cat(
+    "\n== categories (top contributors to the pooled statistic, obs vs. replicate) ==\n"
+  )
+  print(
+    utils::head(
+      dplyr::select(
+        x$categories,
+        class_label,
+        contribution_obs,
+        contribution_rep,
+        contribution_ratio
+      ),
+      n_categories
+    ),
+    n = Inf
+  )
   invisible(x)
 }
 
 .plot_residual_perp_vs_n <- function(x) {
   d <- dplyr::mutate(x$dyads, flagged = .data$ppp_dyad < 0.05)
-  ggplot2::ggplot(d, ggplot2::aes(x = .data$n_d, y = sqrt(.data$perp_norm2_mean), colour = .data$flagged)) +
+  ggplot2::ggplot(
+    d,
+    ggplot2::aes(
+      x = .data$n_d,
+      y = sqrt(.data$perp_norm2_mean),
+      colour = .data$flagged
+    )
+  ) +
     ggplot2::geom_point(alpha = 0.7, size = 1.6) +
     ggplot2::scale_x_log10() +
-    ggplot2::scale_colour_manual(name = "dyad PPP < 0.05", values = c(`FALSE` = "grey60", `TRUE` = "#440154")) +
+    ggplot2::scale_colour_manual(
+      name = "dyad PPP < 0.05",
+      values = c(`FALSE` = "grey60", `TRUE` = "#440154")
+    ) +
     ggplot2::labs(
-      x = "n_d (total observed events)", y = "perp_obs norm (posterior mean)",
+      x = "n_d (total observed events)",
+      y = "perp_obs norm (posterior mean)",
       title = "Per-dyad compositional residual magnitude vs. dyad volume"
     ) +
     ggplot2::theme_minimal()
@@ -819,10 +953,20 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
   n_bins <- 20
   expected <- nrow(x$dyads) / n_bins
   ggplot2::ggplot(x$dyads, ggplot2::aes(x = .data$ppp_dyad)) +
-    ggplot2::geom_histogram(bins = n_bins, boundary = 0, fill = "#31688E", colour = "white") +
-    ggplot2::geom_hline(yintercept = expected, linetype = "dashed", colour = "grey30") +
+    ggplot2::geom_histogram(
+      bins = n_bins,
+      boundary = 0,
+      fill = "#31688E",
+      colour = "white"
+    ) +
+    ggplot2::geom_hline(
+      yintercept = expected,
+      linetype = "dashed",
+      colour = "grey30"
+    ) +
     ggplot2::labs(
-      x = "per-dyad posterior predictive p-value", y = "count",
+      x = "per-dyad posterior predictive p-value",
+      y = "count",
       title = "Per-dyad PPP distribution against Uniform(0,1)"
     ) +
     ggplot2::theme_minimal()
@@ -830,15 +974,36 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
 
 .plot_residual_category_contrib <- function(x) {
   d <- x$categories %>%
-    dplyr::mutate(class_label = factor(.data$class_label, levels = rev(.data$class_label))) %>%
-    dplyr::select("class_label", Observed = "contribution_obs", Replicate = "contribution_rep") %>%
-    tidyr::pivot_longer(c("Observed", "Replicate"), names_to = "source", values_to = "contribution")
-  ggplot2::ggplot(d, ggplot2::aes(x = .data$class_label, y = .data$contribution, fill = .data$source)) +
-    ggplot2::geom_col(position = ggplot2::position_dodge(width = 0.7), width = 0.6) +
+    dplyr::mutate(
+      class_label = factor(.data$class_label, levels = rev(.data$class_label))
+    ) %>%
+    dplyr::select(
+      "class_label",
+      Observed = "contribution_obs",
+      Replicate = "contribution_rep"
+    ) %>%
+    tidyr::pivot_longer(
+      c("Observed", "Replicate"),
+      names_to = "source",
+      values_to = "contribution"
+    )
+  ggplot2::ggplot(
+    d,
+    ggplot2::aes(
+      x = .data$class_label,
+      y = .data$contribution,
+      fill = .data$source
+    )
+  ) +
+    ggplot2::geom_col(
+      position = ggplot2::position_dodge(width = 0.7),
+      width = 0.6
+    ) +
     ggplot2::scale_fill_viridis_d(name = NULL, begin = 0.15, end = 0.75) +
     ggplot2::coord_flip() +
     ggplot2::labs(
-      x = NULL, y = "mean contribution to pooled T (sum of squared perp)",
+      x = NULL,
+      y = "mean contribution to pooled T (sum of squared perp)",
       title = "Per-category contribution to the pooled statistic"
     ) +
     ggplot2::theme_minimal()
@@ -865,7 +1030,11 @@ print.bilatr_residual_check <- function(x, n_categories = 10, ...) {
 #'   plot(rc, which = "category")
 #' }
 #' @exportS3Method ggplot2::autoplot
-autoplot.bilatr_residual_check <- function(object, which = c("all", "perp_vs_n", "ppp_hist", "category"), ...) {
+autoplot.bilatr_residual_check <- function(
+  object,
+  which = c("all", "perp_vs_n", "ppp_hist", "category"),
+  ...
+) {
   rlang::check_installed("ggplot2", "for autoplot.bilatr_residual_check()")
   which <- match.arg(which)
   plots <- list(
@@ -879,12 +1048,18 @@ autoplot.bilatr_residual_check <- function(object, which = c("all", "perp_vs_n",
 #' @rdname autoplot.bilatr_residual_check
 #' @param x A `bilatr_residual_check` object.
 #' @export
-plot.bilatr_residual_check <- function(x, which = c("all", "perp_vs_n", "ppp_hist", "category"), ...) {
+plot.bilatr_residual_check <- function(
+  x,
+  which = c("all", "perp_vs_n", "ppp_hist", "category"),
+  ...
+) {
   rlang::check_installed("ggplot2", "for plot.bilatr_residual_check()")
   which <- match.arg(which)
   p <- ggplot2::autoplot(x, which = which)
   if (which == "all") {
-    for (nm in names(p)) print(p[[nm]])
+    for (nm in names(p)) {
+      print(p[[nm]])
+    }
   } else {
     print(p)
   }
@@ -912,19 +1087,45 @@ plot.bilatr_residual_check <- function(x, which = c("all", "perp_vs_n", "ppp_his
 #' @export
 write_residual_check <- function(x, dir) {
   stopifnot(inherits(x, "bilatr_residual_check"))
-  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+  if (!dir.exists(dir)) {
+    dir.create(dir, recursive = TRUE)
+  }
 
   readr::write_csv(x$dyads, file.path(dir, "residual_check_dyads.csv"))
-  readr::write_csv(x$categories, file.path(dir, "residual_check_categories.csv"))
-  readr::write_csv(x$global$eps_sensitivity, file.path(dir, "residual_check_eps_sensitivity.csv"))
-  global_scalars <- tibble::as_tibble(x$global[setdiff(names(x$global), "eps_sensitivity")])
+  readr::write_csv(
+    x$categories,
+    file.path(dir, "residual_check_categories.csv")
+  )
+  readr::write_csv(
+    x$global$eps_sensitivity,
+    file.path(dir, "residual_check_eps_sensitivity.csv")
+  )
+  global_scalars <- tibble::as_tibble(x$global[setdiff(
+    names(x$global),
+    "eps_sensitivity"
+  )])
   readr::write_csv(global_scalars, file.path(dir, "residual_check_global.csv"))
 
   rlang::check_installed("ggplot2", "for write_residual_check()'s plots")
   plots <- ggplot2::autoplot(x, which = "all")
-  ggplot2::ggsave(file.path(dir, "residual_check_perp_vs_n.png"), plots$perp_vs_n, width = 7, height = 5)
-  ggplot2::ggsave(file.path(dir, "residual_check_ppp_hist.png"), plots$ppp_hist, width = 7, height = 5)
-  ggplot2::ggsave(file.path(dir, "residual_check_category_contrib.png"), plots$category, width = 7, height = 5)
+  ggplot2::ggsave(
+    file.path(dir, "residual_check_perp_vs_n.png"),
+    plots$perp_vs_n,
+    width = 7,
+    height = 5
+  )
+  ggplot2::ggsave(
+    file.path(dir, "residual_check_ppp_hist.png"),
+    plots$ppp_hist,
+    width = 7,
+    height = 5
+  )
+  ggplot2::ggsave(
+    file.path(dir, "residual_check_category_contrib.png"),
+    plots$category,
+    width = 7,
+    height = 5
+  )
 
   invisible(x)
 }

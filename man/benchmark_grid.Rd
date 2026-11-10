@@ -58,8 +58,8 @@ When \code{chunk_size} is \code{NULL}, it is generated as a geometric sequence o
 \code{n_dyads / 6}).
 }
 \examples{
-# the grid of a batch-job sweep for a 16,750-dyad panel
-grid <- benchmark_grid(16750, threads_per_chain = c(8, 16, 32), replicates = 2)
+# the grid of a batch-job sweep for a 17,125-dyad panel
+grid <- benchmark_grid(17125, threads_per_chain = c(8, 16, 32), replicates = 2)
 grid
 unique(grid$chunk_size)
 

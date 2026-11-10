@@ -42,8 +42,8 @@
 #'   (one job array per thread count).
 #' @seealso [benchmark_bilatr()], [summarize_benchmark()]
 #' @examples
-#' # the grid of a batch-job sweep for a 16,750-dyad panel
-#' grid <- benchmark_grid(16750, threads_per_chain = c(8, 16, 32), replicates = 2)
+#' # the grid of a batch-job sweep for a 17,125-dyad panel
+#' grid <- benchmark_grid(17125, threads_per_chain = c(8, 16, 32), replicates = 2)
 #' grid
 #' unique(grid$chunk_size)
 #'

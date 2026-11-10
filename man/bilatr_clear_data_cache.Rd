@@ -7,7 +7,7 @@
 bilatr_clear_data_cache(version = NULL)
 }
 \arguments{
-\item{version}{A data version such as \code{"v2026.11"}, or \code{NULL} (the
+\item{version}{A data version such as \code{"v2026.11.1"}, or \code{NULL} (the
 default) for every cached version.}
 }
 \value{
@@ -19,9 +19,9 @@ Deletes the files \code{\link[=download_bilatr_theta]{download_bilatr_theta()}} 
 }
 \examples{
 # see what would be deleted, without deleting anything
-file.path(tools::R_user_dir("bilatr", "data"), "v2026.11")
+file.path(tools::R_user_dir("bilatr", "data"), "v2026.11.1")
 \dontshow{if (interactive()) withAutoprint(\{ # examplesIf}
-bilatr_clear_data_cache("v2026.11")
+bilatr_clear_data_cache("v2026.11.1")
 \dontshow{\}) # examplesIf}
 }
 \seealso{

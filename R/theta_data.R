@@ -18,13 +18,17 @@
 #' (ending in `/`) or a `.zip` archive of the repository at that tag (what
 #' Zenodo's GitHub integration stores). `NA` means not available yet.
 #' @noRd
-.BILATR_DATA_DEFAULT_VERSION <- "v2026.11"
+.BILATR_DATA_DEFAULT_VERSION <- "v2026.11.1"
 .BILATR_DATA_GITHUB_URL <- "https://github.com/doktorandahl/bilatr-data/releases/download/"
 .BILATR_DATA_API_URL <- "https://api.github.com/repos/doktorandahl/bilatr-data/releases?per_page=100"
 .BILATR_DATA_CONCEPT_DOI <- "10.5281/zenodo.23951818" # all versions
-.BILATR_DATA_VERSION_DOI <- c(v2026.11 = "10.5281/zenodo.23951819")
+.BILATR_DATA_VERSION_DOI <- c(
+  v2026.11 = "10.5281/zenodo.23951819", # superseded by v2026.11.1
+  v2026.11.1 = "10.5281/zenodo.24109618"
+)
 .BILATR_DATA_ZENODO_URL <- c(
-  v2026.11 = "https://zenodo.org/records/23951819/files/Doktorandahl/bilatr-data-v2026.11.zip"
+  v2026.11 = "https://zenodo.org/records/23951819/files/Doktorandahl/bilatr-data-v2026.11.zip",
+  v2026.11.1 = "https://zenodo.org/records/24109618/files/Doktorandahl/bilatr-data-v2026.11.1.zip"
 )
 
 #' Download (once) the estimated theta trajectories
@@ -58,7 +62,7 @@
 #'
 #' @param type `"directed"` (one series per sender-receiver pair) or
 #'   `"undirected"` (one series per unordered pair).
-#' @param version The data version, such as `"v2026.11"`. `NULL` (the
+#' @param version The data version, such as `"v2026.11.1"`. `NULL` (the
 #'   default) uses the version this package release is pinned to.
 #'   `"latest"` asks the GitHub API for the newest release, which needs
 #'   the internet even when that version is cached.
@@ -140,7 +144,7 @@ bilatr_theta_versions <- function() {
 #' Deletes the files [download_bilatr_theta()] cached under
 #' `tools::R_user_dir("bilatr", "data")`.
 #'
-#' @param version A data version such as `"v2026.11"`, or `NULL` (the
+#' @param version A data version such as `"v2026.11.1"`, or `NULL` (the
 #'   default) for every cached version.
 #' @return The deleted version directories, invisibly.
 #' @seealso [download_bilatr_theta()], [bilatr_clear_model_cache()] for compiled
@@ -148,9 +152,9 @@ bilatr_theta_versions <- function() {
 #' @export
 #' @examples
 #' # see what would be deleted, without deleting anything
-#' file.path(tools::R_user_dir("bilatr", "data"), "v2026.11")
+#' file.path(tools::R_user_dir("bilatr", "data"), "v2026.11.1")
 #' @examplesIf interactive()
-#' bilatr_clear_data_cache("v2026.11")
+#' bilatr_clear_data_cache("v2026.11.1")
 bilatr_clear_data_cache <- function(version = NULL) {
   root <- .bilatr_data_cache_dir()
   if (is.null(version)) {

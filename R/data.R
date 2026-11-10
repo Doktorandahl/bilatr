@@ -251,31 +251,36 @@
 #' before the first event is the random-walk prior smoothed backwards
 #' from that event and carries no information from the dyad's own data,
 #' and a year outside membership has no events by construction (see
-#' [aggregate_events()], "Actor periods"). The membership rule applies from
-#' the next data update (`v2027.01`); `v2026.11` used a membership test
-#' without years (see "Known gaps"), so it still has, for example,
-#' Slovakia's dyad-years for 1991-1992.
-#' After the first event every year through 2025 is kept, including
-#' years without events (where \eqn{\theta} is interpolated or, at the
-#' end of a series, extrapolated by the random walk), so each dyad's
-#' series has no gaps and ends in 2025. All numeric columns are rounded
-#' to 3 significant digits.
+#' [aggregate_events()], "Actor periods"). So dyads with Czechoslovakia
+#' end in 1992, and dyads with Czechia or Slovakia start in 1993 at the
+#' earliest. After the first event every year is kept, including years
+#' without events (where \eqn{\theta} is interpolated or, at the end of a
+#' series, extrapolated by the random walk), so each dyad's series has no
+#' gaps and ends in 2025, or in 1992 for dyads with Czechoslovakia. All
+#' numeric columns are rounded to 4 decimal places.
 #'
 #' @format Tibbles with one row per dyad-year, sorted by `dyad` then
-#'   `year`. In data version `v2026.11`, the directed table has 355,821
-#'   rows (16,750 directed dyads) and the undirected table 195,106 rows
-#'   (9,139 undirected dyads). Both cover the same 189 countries (see
+#'   `year`. In data version `v2026.11.1`, the directed table has 365,014
+#'   rows (17,125 directed dyads) and the undirected table 200,061 rows
+#'   (9,342 undirected dyads); 130,848 and 76,821 of these dyad-years have
+#'   at least one observed event. Both cover the same 192 countries (see
 #'   "Known gaps"). Columns:
 #' \describe{
 #'   \item{dyad}{Character. Two three-letter country codes joined by `_`.
 #'     The codes are GDELT's `Actor1CountryCode`/`Actor2CountryCode`
-#'     values, which are CAMEO country codes; every code in these tables
-#'     is also the country's ISO 3166-1 alpha-3 code. Directed:
-#'     `"SENDER_RECEIVER"`, Actor1 then Actor2, so `"SWE_NOR"` is Sweden
-#'     toward Norway. Undirected: the two codes in alphabetical (C-locale)
-#'     order, so `"NOR_SWE"` only.}
+#'     values (CAMEO country codes), harmonized to ISO 3166 alpha-3 (see
+#'     [gdelt_countries]): for example `ROU` for Romania (CAMEO `ROM`),
+#'     `TLS` for Timor-Leste (`TMP`), and `TWN` and `SSD`. `SRB` is
+#'     Serbia, Correlates of War state 345, in every year, including the
+#'     Federal Republic of Yugoslavia and Serbia and Montenegro. `CSK`,
+#'     the former ISO code, is Czechoslovakia, in 1991-1992 only; `CZE`
+#'     and `SVK` occur from 1993. Directed: `"SENDER_RECEIVER"`, Actor1
+#'     then Actor2, so `"SWE_NOR"` is Sweden toward Norway. Undirected:
+#'     the two codes in alphabetical (C-locale) order, so `"NOR_SWE"`
+#'     only.}
 #'   \item{year}{Integer, 1991-2025.}
-#'   \item{mean}{Numeric. Posterior mean of the smoothed \eqn{\theta}.}
+#'   \item{mean, median}{Numeric. Posterior mean and median of the
+#'     smoothed \eqn{\theta}.}
 #'   \item{\code{5\%}, \code{95\%}}{Numeric. 5th and 95th percentiles of
 #'     the smoothed \eqn{\theta} posterior (a 90% credible interval).}
 #'   \item{filtered_mean}{Numeric. Posterior mean of the forward-filtered
@@ -283,6 +288,8 @@
 #'     Fisher-scoring linear-Bayes filter is run forward from 1991
 #'     conditional on that draw's hyperparameters, and the draw-wise
 #'     filtered state means are averaged.}
+#'   \item{filtered_median}{Numeric. Median, across posterior draws, of the
+#'     draw-wise filtered state mean.}
 #'   \item{\code{filtered_5\%}, \code{filtered_95\%}}{Numeric. 5th and
 #'     95th percentiles, across posterior draws, of the draw-wise filtered
 #'     state mean. These reflect hyperparameter uncertainty only, not the
@@ -297,25 +304,29 @@
 #'
 #' @details
 #' **Events.** GDELT 1.0 events (the historical backfiles and the daily
-#' updates) dated 1991-01-01 through 2025-12-31, accessed 2026-01-31. An
-#' event is kept when both actors carry `GOV`, `MIL` or `SPY` in any of
-#' their `Type1Code`/`Type2Code`/`Type3Code` fields and the two actors'
-#' country codes differ. This is
+#' updates) dated 1991-01-01 through 2025-12-31, accessed 2026-01-31,
+#' read with
 #' `read_gdelt(actor_types = c("GOV", "MIL", "SPY"), actor_type_match =
-#' "both", cross_border = TRUE)`, the defaults. All events are used, root
-#' events or not, except that events with CAMEO codes 010-015, 017, 024x,
-#' 025x, 040 and 041 (`BilatrClass` 0 in the original coding: neutral and
-#' low-intensity statements) are excluded, which is why two
-#' `ModifiedRootCode` classes do not occur. Events were further restricted
-#' to those where both actors' country codes map to a Correlates of War
-#' state system member (see "Known gaps"); [filter_gdelt_states()] applies
-#' this restriction, by the year of each event, and the next data update
-#' (`v2027.01`) is built with it (`read_gdelt(states_only = TRUE)`).
+#' "both", cross_border = TRUE, recover_country_codes = TRUE, states_only =
+#' TRUE)` (the replication package's `00b_build_events.R`). An event is
+#' kept when both actors carry `GOV`, `MIL` or `SPY` in any of their
+#' `Type1Code`/`Type2Code`/`Type3Code` fields and the two actors' country
+#' codes differ; an empty actor country code is first filled from the
+#' actor code's prefix (`recover_country_codes`). `states_only` then keeps
+#' only events in which both countries are members of the Correlates of
+#' War state system (v2024) in the year of the event, and rewrites their
+#' codes to ISO3 (see [filter_gdelt_states()]), which removes GDELT's
+#' regional and other non-state codes. All events are used, root events or
+#' not, except that an explicit filter on the event code drops events with
+#' CAMEO codes 010-015, 017, 024x, 025x, 040 and 041 (a Goldstein score
+#' between -1 and 1; `BilatrClass` 0 in the original coding: neutral and
+#' low-intensity statements), which is why two `ModifiedRootCode` classes
+#' do not occur, and events with non-CAMEO codes.
 #'
 #' **Model.** The `stable_gamma` model, at yearly resolution, with events
 #' grouped by `ModifiedRootCode` (16 of its 18 classes occur in the data,
 #' so \eqn{A = 16}), reference category 5 ("Consult: meet, discuss, or
-#' visit"), `min_n_events = 1`, and 4 chains of 1,000 warmup and 1,000
+#' visit"), `min_n_events = 1`, and 8 chains of 1,000 warmup and 1,000
 #' sampling iterations each. The Stan program and the data preparation
 #' used are the ones in this version of bilatr.
 #'
@@ -327,39 +338,51 @@
 #' The data are published as versioned releases of
 #' <https://github.com/doktorandahl/bilatr-data> under the CC BY 4.0
 #' license, archived on Zenodo. Each bilatr release is pinned to one data
-#' version (`v2026.11` for this one), so the same code returns the same
+#' version (`v2026.11.1` for this one), so the same code returns the same
 #' data; `download_bilatr_theta(version = "latest")` asks for the newest
 #' release, and [bilatr_theta_versions()] lists them. [bilatr_clear_data_cache()]
 #' deletes the cache.
 #'
 #' Without bilatr, the same files can be read directly, e.g.
-#' `readRDS(url(".../releases/download/v2026.11/theta_directed.rds"))`, or
+#' `readRDS(url(".../releases/download/v2026.11.1/theta_directed.rds"))`, or
 #' `read.csv()` on `theta_directed.csv.gz`; see the data repository's
 #' README.
 #'
 #' Please cite the data release by the DOI of the version you use, for
-#' these data (`v2026.11`) \doi{10.5281/zenodo.23951819}; the DOI
+#' these data (`v2026.11.1`) \doi{10.5281/zenodo.24109618}; the DOI
 #' \doi{10.5281/zenodo.23951818} refers to all versions of the data
 #' release. Please also cite the GDELT references below. Cite the bilatr
 #' package (`citation("bilatr")`) for the method and the software; the
 #' entry for the data release is there too.
 #'
-#' @section Known gaps:
-#' * **Correlates of War restriction.** Events were further restricted to
-#'   those where both actors' country codes map to a Correlates of War
-#'   state system member, so GDELT's regional and other non-state codes do
-#'   not occur. The restriction was applied when the event table was
-#'   built; [read_gdelt()] cannot reproduce it on its own.
-#' * **Six missing states.** Serbia, Romania, Bosnia and Herzegovina,
-#'   Montenegro, Slovenia and Timor-Leste (`SRB`, `ROU`, `BIH`, `MNE`,
-#'   `SVN`, `TLS`) are absent from both tables, although they are
-#'   Correlates of War system members. Their CAMEO country codes were not
-#'   matched in the country-code crosswalk used to build the event table.
-#'   So their dyads are missing, and their neighbors' other dyads include
-#'   no events with them.
+#' The earlier data version `v2026.11` (\doi{10.5281/zenodo.23951819}) is
+#' superseded. It lacked six states because of a country-code crosswalk
+#' error, and is still available with
+#' `download_bilatr_theta(version = "v2026.11")` for reproducing earlier
+#' work only.
 #'
-#' This will be corrected in the next data update (`v2027.01`), expected in
-#' January 2027.
+#' @section Known gaps:
+#' * **Four absent states.** Slovenia, Bosnia and Herzegovina, Kosovo and
+#'   Montenegro are Correlates of War states but are absent from both
+#'   tables: GDELT 1.0 has no country code for them, so once the actor
+#'   filter is applied it has no events with their government actors as
+#'   source or target. Their absence reflects the coverage of the data
+#'   source, not an absence of interaction, and the tables say nothing
+#'   about their bilateral relations.
+#' * **Missing and incomplete days.** GDELT provides no daily event files
+#'   for 24 days, most of them 14 June-1 July 2025, and for a further 13
+#'   days in 1991-1995 the files contain events, but none that pass the
+#'   filters. Because events are aggregated to dyad-years, these gaps
+#'   reduce the number of events in the affected years but do not create
+#'   missing dyad-years. The model conditions on the number of events and
+#'   measures relations from their composition, so a gap reduces the
+#'   precision of the estimates for the affected years rather than
+#'   shifting their level, provided the missing days are not
+#'   systematically different from the rest of the year. The 2025 gap is
+#'   the exception: it coincides with the war between Israel and Iran in
+#'   June 2025, so the 2025 estimates for the dyads involved in that
+#'   conflict rest on a composition of events from which the war itself is
+#'   largely missing.
 #'
 #' @source GDELT 1.0 event data, The GDELT Project,
 #'   <https://gdeltproject.org/>, accessed 2026-01-31.
@@ -403,8 +426,8 @@ NULL
 #'   dyad-years; 20 directed and 10 undirected dyads), sorted by `type`,
 #'   `dyad` and `year`. The first column, `type`, is `"directed"` or
 #'   `"undirected"`; the other columns are those of [theta_trajectories],
-#'   with the same values (data version `v2026.11`).
-#' @source Data version `v2026.11` of the bilatr theta trajectories; see
+#'   with the same values (data version `v2026.11.1`).
+#' @source Data version `v2026.11.1` of the bilatr theta trajectories; see
 #'   [theta_trajectories].
 #' @seealso [theta_trajectories], [download_bilatr_theta()].
 #' @examples

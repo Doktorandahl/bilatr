@@ -94,9 +94,9 @@
 #' @section Size:
 #' The Stan data's `Y` is a dense `D x T x A` integer array (dyads x
 #' periods x classes), about `D * T * A * 4` bytes, and the dyad-period
-#' table itself has `D * T` rows. Finer resolutions multiply `T`: 16,750
-#' dyads over 35 years with 16 classes is about 37 MB at yearly
-#' resolution, 450 MB monthly, and about 13.7 GB daily. Daily resolution
+#' table itself has `D * T` rows. Finer resolutions multiply `T`: 17,125
+#' dyads over 35 years with 16 classes is about 38 MB at yearly
+#' resolution, 460 MB monthly, and about 14.0 GB daily. Daily resolution
 #' is only practical for few dyads or short windows.
 #'
 #' @param data A data frame of event-level records; see

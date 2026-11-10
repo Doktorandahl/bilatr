@@ -403,8 +403,9 @@ one's front.
 ## A worked example from a production panel
 
 As an example of what a larger sweep can show: for the yearly GDELT
-panel behind the published theta trajectories (`?theta_trajectories`),
-16,750 directed dyads over 1991-2025, with events grouped into the four
+panel behind the first published theta trajectories (data version
+`v2026.11`; see `?theta_trajectories`), 16,750 directed dyads over
+1991-2025, with events grouped into the four
 QuadClass action classes (*A* = 4) and the `stable` model, a sweep
 of this kind on a many-core compute node recommended
 `threads_per_chain = 16` with `chunk_size = 1163`. That is about 14
