@@ -140,7 +140,8 @@ test_that("bilatr_clear_model_cache() deletes the per-version directory, or all 
   expect_false(dir.exists(this_version))
   expect_true(dir.exists(other_version))
 
-  expect_identical(bilatr_clear_model_cache(all = TRUE), dirname(this_version))
+  # file.path(), not dirname(): on Windows, dirname() turns the backslashes of tempdir() into slashes
+  expect_identical(bilatr_clear_model_cache(all = TRUE), file.path(cache_root, "bilatr", "models"))
   expect_false(dir.exists(dirname(this_version)))
 })
 
