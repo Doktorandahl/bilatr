@@ -10,3 +10,17 @@
 ^Claude outputs$
 ^logs$
 ^\.claude$
+^vignettes/.*\.Rmd\.orig$
+^vignettes/precompile\.R$
+^cran-comments\.md$
+^CRAN-SUBMISSION$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.DS_Store$
+(^|/)\.DS_Store$
+^\.Rhistory$
+(^|/)\.Rhistory$
+^\.git$
+^\.gitignore$
+^Rplots\.pdf$

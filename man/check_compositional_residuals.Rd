@@ -179,8 +179,8 @@ itself by category (\verb{sum_d perp_dk^2}, observed vs. replicate), to
 show which categories drive the dispersion.
 }
 
-\strong{Scale and subsampling.} For a large panel (\code{D} ~ 16750, \code{T} ~ 35)
-a full sweep needs ~586k Dirichlet-multinomial simulations per draw --
+\strong{Scale and subsampling.} For a large panel (\code{D} ~ 17,125, \code{T} ~ 35)
+a full sweep needs ~599k Dirichlet-multinomial simulations per draw --
 not feasible, and not necessary for a PPC. Dyads are subsampled
 (stratified by volume, \code{n_dyads}/\code{n_strata}, reproducible from \code{seed};
 the volume gradient is scientifically interesting in its own right,
