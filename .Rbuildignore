@@ -24,3 +24,4 @@
 ^\.git$
 ^\.gitignore$
 ^Rplots\.pdf$
+^\.github$
