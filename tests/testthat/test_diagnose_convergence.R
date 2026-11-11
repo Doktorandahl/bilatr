@@ -424,6 +424,7 @@ test_that(".dot_name_to_bracket() converts CmdStan raw CSV names to posterior fo
 })
 
 test_that(".compute_chunk_size() shrinks with more file_mb headroom lost, and shrinks further, not just once, as n_cores increases", {
+  local_fixed_baseline_mb()
   base_size <- .compute_chunk_size(
     n_draws = 1000, n_chains = 4, file_mb = 0, max_memory_mb = 1000, n_cores = 1
   )
@@ -455,6 +456,7 @@ test_that(".compute_chunk_size() shrinks with more file_mb headroom lost, and sh
 })
 
 test_that(".compute_chunk_size() errors clearly when max_memory_mb can't even cover the file-sized-plus-baseline term", {
+  local_fixed_baseline_mb()
   expect_error(
     .compute_chunk_size(
       n_draws = 1e6, n_chains = 4, file_mb = 14000, max_memory_mb = 100, n_cores = 1
@@ -477,6 +479,7 @@ test_that(".compute_chunk_size() errors clearly when max_memory_mb can't even co
 })
 
 test_that(".estimate_diagnostics_memory_mb() and .compute_chunk_size() invert each other", {
+  local_fixed_baseline_mb()
   n_draws <- 500
   n_chains <- 4
   file_mb <- 10
@@ -490,6 +493,7 @@ test_that(".estimate_diagnostics_memory_mb() and .compute_chunk_size() invert ea
 })
 
 test_that(".bilatr_worker_tradeoff() returns one row per worker_levels entry with the documented columns", {
+  local_fixed_baseline_mb()
   out <- .bilatr_worker_tradeoff(
     n_vars = 100000, n_draws = 1000, n_chains = 1, file_mb = 14000,
     max_memory_mb = 24 * 8192, worker_levels = c(1, 2, 4, 8),
@@ -507,6 +511,7 @@ test_that(".bilatr_worker_tradeoff() returns one row per worker_levels entry wit
 })
 
 test_that(".bilatr_worker_tradeoff() reports NA (infeasible), not an error, when a n_workers level can't fit the budget", {
+  local_fixed_baseline_mb()
   out <- .bilatr_worker_tradeoff(
     n_vars = 100, n_draws = 1e6, n_chains = 4, file_mb = 14000,
     max_memory_mb = 100, worker_levels = c(1, 24),
@@ -518,6 +523,7 @@ test_that(".bilatr_worker_tradeoff() reports NA (infeasible), not an error, when
 })
 
 test_that(".bilatr_worker_tradeoff()'s wall time falls with more chunks-per-second but core-seconds rises with n_workers, in the shape the review's own arithmetic predicted", {
+  local_fixed_baseline_mb()
   # Same qualitative shape as the review's per-chain production case: at
   # some point along worker_levels, wall time should be lower than at
   # n_workers = 1 (more chunks, but summarizing parallelized), while
@@ -557,6 +563,7 @@ test_that(".bilatr_chunk_overhead_multiplier() matches its documented derivation
 # --- CSV-path integration: chunked reading against a real CmdStan run ----
 
 test_that("diagnose_convergence() from CSV files matches the in-memory path exactly, chunked and unchunked", {
+  local_fixed_baseline_mb()
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -623,6 +630,7 @@ test_that("diagnose_convergence() with a CmdStanMCMC fit reads only the requeste
 })
 
 test_that("diagnose_convergence() from CSV files: parallel and sequential chunk processing agree numerically", {
+  local_fixed_baseline_mb()
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()
@@ -693,6 +701,7 @@ test_that("diagnose_convergence() gives log_lik its own tier3_other row when com
 })
 
 test_that("diagnose_convergence() from CSV files messages about the max_memory_mb default only when it's left unset", {
+  local_fixed_baseline_mb()
   skip_if_no_cmdstan()
   skip_on_cran()
   skip_on_ci()

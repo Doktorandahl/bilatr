@@ -212,6 +212,7 @@ example_with_inactive <- function() {
 }
 
 test_that("extract_theta(active_only = TRUE) drops inactive dyad-periods (CSV path)", {
+  local_fixed_baseline_mb()
   ex <- example_with_inactive()
   all_rows <- suppressMessages(extract_theta(ex$csv, ex$stan_data, active_only = FALSE))
   kept <- suppressMessages(extract_theta(ex$csv, ex$stan_data))
@@ -231,6 +232,7 @@ test_that("extract_theta(active_only = TRUE) drops inactive dyad-periods (CSV pa
 })
 
 test_that("diagnose_and_extract_bilatr() drops inactive periods and Tier 3 leaves them out", {
+  local_fixed_baseline_mb()
   ex <- example_with_inactive()
   res <- suppressMessages(diagnose_and_extract_bilatr(ex$csv, stan_data = ex$stan_data, max_memory_mb = 4096))
   res_all <- suppressMessages(diagnose_and_extract_bilatr(ex$csv, stan_data = ex$stan_data,
@@ -250,6 +252,7 @@ test_that("diagnose_and_extract_bilatr() drops inactive periods and Tier 3 leave
 })
 
 test_that("diagnose_convergence() restricts Tier 3 when the Stan data next to the CSVs marks inactive periods", {
+  local_fixed_baseline_mb()
   ex <- example_with_inactive()
   dir <- withr::local_tempdir()
   file.copy(ex$csv, dir)

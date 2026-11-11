@@ -53,6 +53,7 @@ test_that("read_bilatr_draws() reads the example fits", {
 })
 
 test_that("extract_*() run on the example fits", {
+  local_fixed_baseline_mb()
   csv <- bilatr_example_fit()
   theta <- suppressMessages(extract_theta(csv, max_memory_mb = 4096))
   expect_equal(nrow(theta), 36L)
@@ -79,6 +80,7 @@ test_that("extract_*() run on the example fits", {
 })
 
 test_that("diagnose_convergence() and diagnose_and_extract_bilatr() run on both fits", {
+  local_fixed_baseline_mb()
   for (model in c("stable", "stable_gamma")) {
     csv <- bilatr_example_fit(model)
     diag <- suppressMessages(diagnose_convergence(csv, max_memory_mb = 4096))

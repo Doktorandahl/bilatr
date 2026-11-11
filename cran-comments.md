@@ -2,6 +2,10 @@
 
 This is a new submission.
 
+## Resubmission
+
+The pre-test on r-devel-linux-x86_64-debian-gcc failed two tests whose memory budget depended on the test process’s own resident memory on Linux. These tests now fix that baseline; the package code is unchanged.
+
 ## Test environments
 
 * local: macOS 26.5 (aarch64), R 4.5.2, with and without 'cmdstanr' and

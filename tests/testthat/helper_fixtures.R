@@ -323,3 +323,13 @@ make_csv_diagnostics_fixture <- function(stan_model = "stable", init = NULL, ext
 
   list(draws = function(variables) posterior::subset_draws(draws, variable = variables))
 }
+
+# Pins the memory model's measured baseline for one test. On Linux,
+# .bilatr_estimate_chunk_baseline_mb() reads the test process's own VmRSS,
+# which on CRAN's check machines can reach several GB after the earlier
+# tests (~3.4 GB on r-devel-linux-x86_64-debian-gcc), so a fixed
+# max_memory_mb budget would then depend on the machine and on test order.
+# Elsewhere it uses gc(), which is why only Linux was affected.
+local_fixed_baseline_mb <- function(mb = .BILATR_CHUNK_BASELINE_MB, env = parent.frame()) {
+  local_mocked_bindings(.bilatr_estimate_chunk_baseline_mb = function() mb, .env = env)
+}
